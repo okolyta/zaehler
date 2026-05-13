@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Zählerstand-Manager</title>
+<link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Zählerstand-Manager","short_name":"Zähler","start_url":".","display":"standalone","background_color":"%230f172a","theme_color":"%230f172a","icons":[{"src":"data:image/svg%2Bxml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 192 192%22><rect width=%22192%22 height=%22192%22 rx=%2240%22 fill=%22%230ea5e9%22/><text x=%2296%22 y=%22130%22 font-size=%22110%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22>⚡</text></svg>","sizes":"192x192","type":"image/svg+xml"}]}'>
+<style>
+:root{
+  --bg:#0f172a; --bg2:#1e293b; --card:#1e293b; --card2:#293548;
+  --text:#e2e8f0; --muted:#94a3b8; --acc:#0ea5e9; --acc2:#06b6d4;
+  --ok:#10b981; --warn:#f59e0b; --err:#ef4444; --border:#334155;
+}
+[data-theme="light"]{
+  --bg:#f1f5f9; --bg2:#ffffff; --card:#ffffff; --card2:#f8fafc;
+  --text:#0f172a; --muted:#64748b; --border:#e2e8f0;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;
+  padding-bottom:80px;min-height:100vh}
+header{background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:white;padding:14px 16px;position:sticky;top:0;z-index:50;
+  box-shadow:0 2px 12px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px}
+header .right{display:flex;gap:8px;align-items:center}
+.btn{background:var(--acc);color:white;border:none;padding:10px 16px;
+  border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+.btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn.ok{background:var(--ok)} .btn.warn{background:var(--warn)} .btn.err{background:var(--err)}
+.btn.sm{padding:6px 10px;font-size:12px}
+.btn.icon{padding:8px;width:36px;height:36px;justify-content:center;background:rgba(255,255,255,.15)}
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);
+  position:sticky;top:54px;z-index:40;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:14px 18px;cursor:pointer;color:var(--muted);font-weight:500;
+  border-bottom:3px solid transparent;white-space:nowrap;font-size:14px;flex-shrink:0}
+.tab.active{color:var(--acc);border-color:var(--acc)}
+.container{padding:16px;max-width:900px;margin:0 auto}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;
+  border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.card h2{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3{font-size:14px;margin-bottom:8px;color:var(--muted);font-weight:500}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.field input,.field select,.field textarea{
+  width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--card2);color:var(--text);font-size:15px;font-family:inherit}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(14,165,233,.2)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row > *{flex:1;min-width:140px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.chip{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;
+  background:var(--card2);color:var(--muted);font-weight:500}
+.chip.ok{background:rgba(16,185,129,.15);color:var(--ok)}
+.chip.warn{background:rgba(245,158,11,.15);color:var(--warn)}
+.chip.err{background:rgba(239,68,68,.15);color:var(--err)}
+.chip.acc{background:rgba(14,165,233,.15);color:var(--acc)}
+.meter-card{background:var(--card);border-radius:14px;padding:14px;
+  border:1px solid var(--border);position:relative;overflow:hidden}
+.meter-card.gas{border-left:4px solid #f59e0b}
+.meter-card.strom{border-left:4px solid #eab308}
+.meter-card.wasser{border-left:4px solid #06b6d4}
+.meter-card.warmwasser{border-left:4px solid #ef4444}
+.meter-card.heizung{border-left:4px solid #f97316}
+.meter-card .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.meter-card .title{font-size:15px;font-weight:600}
+.meter-card .num{font-size:12px;color:var(--muted);font-family:monospace}
+.meter-card .reading{font-size:24px;font-weight:700;color:var(--acc);margin:6px 0}
+.meter-card .unit{font-size:14px;color:var(--muted);margin-left:4px}
+.meter-card .stats{display:flex;gap:10px;font-size:12px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.meter-card .stats span{display:flex;align-items:center;gap:3px}
+.actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;
+  display:none;align-items:center;justify-content:center;padding:16px}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border-radius:16px;padding:18px;
+  max-width:500px;width:100%;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:18px;margin-bottom:14px}
+.modal .footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.fab{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));color:white;
+  border:none;font-size:28px;cursor:pointer;box-shadow:0 4px 20px rgba(14,165,233,.5);
+  z-index:30;display:flex;align-items:center;justify-content:center}
+.fab:active{transform:scale(.95)}
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty .ico{font-size:48px;margin-bottom:10px;opacity:.5}
+.history-item{display:flex;justify-content:space-between;padding:10px;
+  border-bottom:1px solid var(--border);font-size:14px;align-items:center;gap:8px}
+.history-item:last-child{border-bottom:none}
+.history-item .date{color:var(--muted);font-size:12px}
+.history-item .val{font-weight:600;color:var(--acc)}
+.history-item .del{background:none;border:none;color:var(--err);cursor:pointer;padding:4px 8px;font-size:13px}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+  background:var(--card);color:var(--text);padding:12px 20px;border-radius:10px;
+  border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,.3);
+  z-index:200;opacity:0;transition:all .3s;font-size:14px;max-width:90vw}
+.toast.show{opacity:1;bottom:120px}
+.toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--err)}
+.appointment{display:flex;gap:12px;padding:12px;border-radius:10px;
+  background:var(--card2);margin-bottom:8px;align-items:flex-start}
+.appointment .ico{font-size:24px}
+.appointment .info{flex:1}
+.appointment .title{font-weight:600;font-size:14px}
+.appointment .when{color:var(--muted);font-size:12px;margin-top:2px}
+.appointment.due{background:rgba(245,158,11,.1);border:1px solid var(--warn)}
+.appointment.over{background:rgba(239,68,68,.1);border:1px solid var(--err)}
+.stat-box{background:var(--card2);padding:12px;border-radius:10px;text-align:center}
+.stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
+.stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden;margin:6px 0}
+.bar > div{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .5s}
+.tag-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag-select .tag{padding:6px 12px;border-radius:18px;background:var(--card2);
+  border:1px solid var(--border);font-size:13px;cursor:pointer}
+.tag-select .tag.active{background:var(--acc);color:white;border-color:var(--acc)}
+.sync-status{font-size:11px;display:flex;align-items:center;gap:4px;color:var(--muted)}
+.sync-status.ok{color:var(--ok)} .sync-status.err{color:var(--err)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+img.preview{max-width:100%;border-radius:8px;margin-top:8px}
+canvas.chart{width:100%;height:200px}
+@media(max-width:600px){
+  .meter-card .reading{font-size:20px}
+  .tab{padding:12px 14px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Zählerstand-Manager</h1>
+  <div class="right">
+    <span id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">lokal</span></span>
+    <button class="btn icon" onclick="toggleTheme()" title="Theme">🌓</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="dashboard">📊 Dashboard</div>
+  <div class="tab" data-tab="properties">🏠 Grundstücke</div>
+  <div class="tab" data-tab="readings">📝 Eintragen</div>
+  <div class="tab" data-tab="appointments">📅 Termine</div>
+  <div class="tab" data-tab="stats">📈 Statistik</div>
+  <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
+</div>
+
+<div class="container">
+
+  <!-- DASHBOARD -->
+  <div class="page" id="page-dashboard">
+    <div id="dashContent"></div>
+  </div>
+
+  <!-- PROPERTIES -->
+  <div class="page" id="page-properties" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>🏠 Grundstücke & Zähler</h2>
+      <button class="btn" onclick="openPropertyModal()">+ Grundstück</button>
+    </div>
+    <div id="propList"></div>
+  </div>
+
+  <!-- READINGS -->
+  <div class="page" id="page-readings" style="display:none">
+    <h2 style="margin-bottom:12px">📝 Zählerstand erfassen</h2>
+    <div class="card">
+      <div class="field">
+        <label>Grundstück</label>
+        <select id="readPropSel" onchange="updateReadMeterSel()"></select>
+      </div>
+      <div class="field">
+        <label>Zähler</label>
+        <select id="readMeterSel" onchange="showLastReading()"></select>
+      </div>
+      <div id="lastReadInfo"></div>
+      <div class="row">
+        <div class="field">
+          <label>Datum</label>
+          <input type="date" id="readDate">
+        </div>
+        <div class="field">
+          <label>Zählerstand</label>
+          <input type="number" id="readValue" step="0.001" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Foto des Zählers (optional)</label>
+        <input type="file" accept="image/*" capture="environment" id="readPhoto" onchange="previewPhoto()">
+        <img id="photoPreview" class="preview" style="display:none">
+      </div>
+      <div class="field">
+        <label>Notiz (optional)</label>
+        <textarea id="readNote" rows="2" placeholder="z. B. Ablesung durch Nachbar"></textarea>
+      </div>
+      <button class="btn ok" style="width:100%;justify-content:center;padding:14px;font-size:16px" onclick="saveReading()">✓ Speichern</button>
+    </div>
+  </div>
+
+  <!-- APPOINTMENTS -->
+  <div class="page" id="page-appointments" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>📅 Termine & Erinnerungen</h2>
+      <button class="btn" onclick="openAppointmentModal()">+ Termin</button>
+    </div>
+    <div id="apptList"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="page" id="page-stats" style="display:none">
+    <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
+    <div id="statsContent"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings" style="display:none">
+    <h2 style="margin-bottom:12px">⚙️ Einstellungen</h2>
+
+    <div class="card">
+      <h2>☁️ Google Sync</h2>
+      <div class="field">
+        <label>Google OAuth Client-ID</label>
+        <input type="text" id="gClientId" placeholder="xxxxx.apps.googleusercontent.com">
+      </div>
+      <div class="row">
+        <button class="btn" onclick="saveClientId()">Speichern</button>
+        <button class="btn ok" onclick="gSignIn()">🔐 Anmelden</button>
+        <button class="btn ghost" onclick="gSignOut()">Abmelden</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">
+        Daten werden in deinem Google Drive im Ordner "Zaehler-App" gespeichert. Termine im Google Kalender.
+      </p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="syncNow()">⬆️⬇️ Jetzt synchronisieren</button>
+        <button class="btn ghost" onclick="restoreFromDrive()">↩️ Aus Drive wiederherstellen</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💾 Lokales Backup</h2>
+      <div class="row">
+        <button class="btn" onclick="exportJSON()">⬇️ JSON Export</button>
+        <button class="btn ghost" onclick="document.getElementById('importFile').click()">⬆️ JSON Import</button>
+        <input type="file" id="importFile" style="display:none" accept=".json" onchange="importJSON(event)">
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">
+        Automatisches lokales Backup ist <strong>immer aktiv</strong> (alle 5 Min). Letzte Sicherung: <span id="lastBackup">–</span>
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>🔔 Erinnerungen</h2>
+      <div class="field">
+        <label>Tage Vorlauf für Ablese-Erinnerung</label>
+        <input type="number" id="setLeadDays" value="7">
+      </div>
+      <button class="btn" onclick="saveSettings()">Speichern</button>
+    </div>
+
+    <div class="card">
+      <h2>ℹ️ Über</h2>
+      <p style="font-size:13px;color:var(--muted)">Version 1.0 · Personal Edition</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
+      <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
+    </div>
+  </div>
+
+</div>
+
+<button class="fab" onclick="quickAdd()" title="Schnell-Eintrag">+</button>
+
+<!-- Property Modal -->
+<div class="modal-bg" id="propModal">
+  <div class="modal">
+    <h2 id="propModalTitle">Grundstück</h2>
+    <div class="field"><label>Name</label><input type="text" id="propName" placeholder="z. B. Hauptwohnsitz"></div>
+    <div class="field"><label>Adresse</label><input type="text" id="propAddr" placeholder="Straße, PLZ Ort"></div>
+    <div class="field"><label>Notiz</label><textarea id="propNote" rows="2"></textarea></div>
+    <hr style="margin:14px 0;border-color:var(--border)">
+    <h3>Zähler</h3>
+    <div id="meterEditList" style="margin-bottom:8px"></div>
+    <button class="btn sm ghost" onclick="addMeterRow()">+ Zähler hinzufügen</button>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('propModal')">Abbrechen</button>
+      <button class="btn err sm" id="propDelBtn" onclick="deleteProperty()" style="display:none">Löschen</button>
+      <button class="btn ok" onclick="saveProperty()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Appointment Modal -->
+<div class="modal-bg" id="apptModal">
+  <div class="modal">
+    <h2 id="apptModalTitle">Termin</h2>
+    <div class="field"><label>Titel</label><input type="text" id="apptTitle" placeholder="z. B. Schornsteinfeger"></div>
+    <div class="field"><label>Kategorie</label>
+      <select id="apptCat">
+        <option value="schornstein">🔥 Schornsteinfeger</option>
+        <option value="heizung">🔧 Heizungswartung</option>
+        <option value="ablesung">📝 Zählerablesung</option>
+        <option value="rauchmelder">🚨 Rauchmelder-Check</option>
+        <option value="legionellen">💧 Legionellenprüfung</option>
+        <option value="elektro">⚡ Elektro-Check (E-Check)</option>
+        <option value="versicherung">📄 Versicherung</option>
+        <option value="grundsteuer">💰 Grundsteuer</option>
+        <option value="sonstiges">📌 Sonstiges</option>
+      </select>
+    </div>
+    <div class="field"><label>Grundstück</label><select id="apptProp"></select></div>
+    <div class="row">
+      <div class="field"><label>Datum</label><input type="date" id="apptDate"></div>
+      <div class="field"><label>Uhrzeit (optional)</label><input type="time" id="apptTime"></div>
+    </div>
+    <div class="field"><label>Wiederholung</label>
+      <select id="apptRepeat">
+        <option value="none">Einmalig</option>
+        <option value="monthly">Monatlich</option>
+        <option value="quarterly">Vierteljährlich</option>
+        <option value="yearly">Jährlich</option>
+        <option value="2years">Alle 2 Jahre</option>
+        <option value="3years">Alle 3 Jahre</option>
+      </select>
+    </div>
+    <div class="field"><label>Notiz</label><textarea id="apptNote" rows="2"></textarea></div>
+    <div class="field">
+      <label><input type="checkbox" id="apptCal"> ➕ In Google Kalender eintragen</label>
+    </div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('apptModal')">Abbrechen</button>
+      <button class="btn err sm" id="apptDelBtn" onclick="deleteAppointment()" style="display:none">Löschen</button>
+      <button class="btn ok" onclick="saveAppointment()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal-bg" id="histModal">
+  <div class="modal">
+    <h2 id="histTitle">Verlauf</h2>
+    <div id="histContent"></div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('histModal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   ZÄHLERSTAND-MANAGER · personal edition
+   ========================================================= */
+
+const STORE_KEY = 'zaehler_v1';
+const SETTINGS_KEY = 'zaehler_settings_v1';
+const BACKUP_KEY = 'zaehler_backup_v1';
+
+const METER_TYPES = {
+  strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#eab308'},
+  gas:        {label:'Gas',           unit:'m³',   icon:'🔥', color:'#f59e0b'},
+  wasser:     {label:'Wasser (kalt)', unit:'m³',   icon:'💧', color:'#06b6d4'},
+  warmwasser: {label:'Warmwasser',    unit:'m³',   icon:'🚿', color:'#ef4444'},
+  heizung:    {label:'Heizung',       unit:'kWh',  icon:'🌡️', color:'#f97316'},
+  oel:        {label:'Öl',            unit:'L',    icon:'🛢️', color:'#854d0e'},
+  pellets:    {label:'Pellets',       unit:'kg',   icon:'🪵', color:'#92400e'},
+  solar:      {label:'Solar/PV',      unit:'kWh',  icon:'☀️', color:'#facc15'},
+};
+
+// ---------- State ----------
+let state = {
+  properties: [],   // [{id,name,address,note,meters:[{id,type,number,location,note}]}]
+  readings: [],     // [{id,propId,meterId,date,value,note,photo}]
+  appointments: [], // [{id,title,cat,propId,date,time,repeat,note,calId}]
+};
+let settings = { leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0 };
+let editingProp = null, editingAppt = null;
+
+// ---------- Persistence ----------
+function load(){
+  try { state = JSON.parse(localStorage.getItem(STORE_KEY)) || state; } catch(e){}
+  try { settings = {...settings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')}; } catch(e){}
+  if(!state.properties) state.properties=[];
+  if(!state.readings) state.readings=[];
+  if(!state.appointments) state.appointments=[];
+  document.documentElement.dataset.theme = settings.theme;
+}
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  scheduleBackup();
+}
+function scheduleBackup(){
+  // Local rolling backup (keeps last 5)
+  try{
+    const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
+    backups.push({ts:Date.now(), data:state});
+    while(backups.length > 5) backups.shift();
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
+  }catch(e){ console.warn('Backup fail',e); }
+}
+
+// ---------- Utils ----------
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const fmt = (n,d=2) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
+const today = () => new Date().toISOString().slice(0,10);
+function dateAdd(date, days){ const d=new Date(date); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
+function toast(msg, type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+type;
+  setTimeout(()=>t.className='toast '+type, 3000);
+}
+
+// ---------- Navigation ----------
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.style.display='none');
+  t.classList.add('active');
+  document.getElementById('page-'+t.dataset.tab).style.display='block';
+  render(t.dataset.tab);
+});
+
+function toggleTheme(){
+  settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = settings.theme;
+  save();
+}
+
+// ---------- Properties ----------
+function openPropertyModal(prop){
+  editingProp = prop ? {...prop, meters:prop.meters.map(m=>({...m}))} : {id:uid(), name:'', address:'', note:'', meters:[]};
+  document.getElementById('propModalTitle').textContent = prop ? 'Grundstück bearbeiten' : 'Neues Grundstück';
+  document.getElementById('propName').value = editingProp.name;
+  document.getElementById('propAddr').value = editingProp.address || '';
+  document.getElementById('propNote').value = editingProp.note || '';
+  document.getElementById('propDelBtn').style.display = prop ? 'inline-flex' : 'none';
+  renderMeterEditList();
+  document.getElementById('propModal').classList.add('show');
+}
+function renderMeterEditList(){
+  const c = document.getElementById('meterEditList');
+  c.innerHTML = editingProp.meters.map((m,i)=>`
+    <div class="card" style="padding:10px;margin-bottom:6px;background:var(--card2)">
+      <div class="row" style="gap:6px">
+        <select onchange="editingProp.meters[${i}].type=this.value">
+          ${Object.entries(METER_TYPES).map(([k,v])=>`<option value="${k}" ${m.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
+        </select>
+        <input placeholder="Zählernummer" value="${m.number||''}" onchange="editingProp.meters[${i}].number=this.value">
+      </div>
+      <div class="row" style="gap:6px;margin-top:6px">
+        <input placeholder="Standort (z. B. Keller)" value="${m.location||''}" onchange="editingProp.meters[${i}].location=this.value">
+        <button class="btn err sm" style="flex:0 0 auto" onclick="removeMeterRow(${i})">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+function addMeterRow(){ editingProp.meters.push({id:uid(),type:'strom',number:'',location:''}); renderMeterEditList(); }
+function removeMeterRow(i){ editingProp.meters.splice(i,1); renderMeterEditList(); }
+function saveProperty(){
+  editingProp.name = document.getElementById('propName').value.trim();
+  editingProp.address = document.getElementById('propAddr').value.trim();
+  editingProp.note = document.getElementById('propNote').value.trim();
+  if(!editingProp.name){ toast('Name fehlt','err'); return; }
+  const idx = state.properties.findIndex(p=>p.id===editingProp.id);
+  if(idx>=0) state.properties[idx]=editingProp; else state.properties.push(editingProp);
+  save(); closeModal('propModal'); render();
+  toast('Gespeichert ✓','ok');
+}
+function deleteProperty(){
+  if(!confirm('Grundstück inkl. aller Zählerstände löschen?')) return;
+  state.properties = state.properties.filter(p=>p.id!==editingProp.id);
+  state.readings = state.readings.filter(r=>r.propId!==editingProp.id);
+  save(); closeModal('propModal'); render();
+}
+
+function renderProperties(){
+  const c = document.getElementById('propList');
+  if(!state.properties.length){
+    c.innerHTML = `<div class="empty"><div class="ico">🏠</div><p>Noch keine Grundstücke.</p><p style="margin-top:10px"><button class="btn" onclick="openPropertyModal()">+ Erstes Grundstück anlegen</button></p></div>`;
+    return;
+  }
+  c.innerHTML = state.properties.map(p => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2>🏠 ${escapeHtml(p.name)}</h2>
+          ${p.address?`<div style="color:var(--muted);font-size:13px">📍 ${escapeHtml(p.address)}</div>`:''}
+        </div>
+        <button class="btn sm ghost" onclick='openPropertyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️ Bearbeiten</button>
+      </div>
+      ${p.note?`<div style="color:var(--muted);font-size:13px;margin-top:6px">${escapeHtml(p.note)}</div>`:''}
+      <div class="grid" style="margin-top:12px">
+        ${p.meters.map(m => renderMeterCard(p,m)).join('') || '<div class="empty" style="grid-column:1/-1;padding:20px"><div class="ico" style="font-size:32px">⚡</div>Keine Zähler</div>'}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMeterCard(p, m){
+  const type = METER_TYPES[m.type] || METER_TYPES.strom;
+  const readings = state.readings.filter(r=>r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const last = readings[readings.length-1];
+  const yearAgo = findYearAgo(readings, last);
+  const consume = (last && yearAgo) ? (last.value - yearAgo.value) : null;
+  const prediction = predictNextReading(readings);
+  const lastDays = last ? daysBetween(last.date, today()) : null;
+
+  return `
+    <div class="meter-card ${m.type}">
+      <div class="head">
+        <div>
+          <div class="title">${type.icon} ${type.label}</div>
+          <div class="num">Nr: ${escapeHtml(m.number||'–')}${m.location?' · '+escapeHtml(m.location):''}</div>
+        </div>
+      </div>
+      <div class="reading">${last?fmt(last.value,3):'—'}<span class="unit">${type.unit}</span></div>
+      <div class="stats">
+        ${last?`<span>📅 ${formatDate(last.date)} (vor ${lastDays}T)</span>`:'<span>Noch keine Ablesung</span>'}
+        ${consume!==null?`<span class="chip ${consume>=0?'acc':'ok'}">Δ ${fmt(consume,2)} ${type.unit}/Jahr</span>`:''}
+      </div>
+      ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong> (${prediction.confidence})</div>`:''}
+      <div class="actions">
+        <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
+        <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${readings.length})</button>
+      </div>
+    </div>`;
+}
+
+function findYearAgo(readings, current){
+  if(!current || readings.length<2) return null;
+  const target = new Date(current.date); target.setFullYear(target.getFullYear()-1);
+  let best=null, bestDiff=Infinity;
+  for(const r of readings){
+    if(r.id===current.id) continue;
+    const d = Math.abs(new Date(r.date)-target);
+    if(d<bestDiff && d < 90*86400000){ best=r; bestDiff=d; }
+  }
+  return best;
+}
+
+function predictNextReading(readings){
+  if(readings.length<2) return null;
+  // Median interval between readings (only consider intervals > 30 days for relevant ablesungen)
+  const intervals = [];
+  for(let i=1;i<readings.length;i++){
+    const d = daysBetween(readings[i-1].date, readings[i].date);
+    if(d>=20) intervals.push(d);
+  }
+  if(!intervals.length) return null;
+  intervals.sort((a,b)=>a-b);
+  const median = intervals[Math.floor(intervals.length/2)];
+  const last = readings[readings.length-1];
+  const next = dateAdd(last.date, median);
+  const conf = intervals.length>=3 ? 'sehr sicher' : intervals.length===2 ? 'geschätzt' : 'grob geschätzt';
+  return { date: next, days: median, confidence: conf };
+}
+
+// ---------- Readings ----------
+function updateReadPropSel(){
+  const sel = document.getElementById('readPropSel');
+  sel.innerHTML = state.properties.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  updateReadMeterSel();
+}
+function updateReadMeterSel(){
+  const propId = document.getElementById('readPropSel').value;
+  const p = state.properties.find(x=>x.id===propId);
+  const sel = document.getElementById('readMeterSel');
+  if(!p){ sel.innerHTML=''; return; }
+  sel.innerHTML = p.meters.map(m=>{
+    const t = METER_TYPES[m.type]||METER_TYPES.strom;
+    return `<option value="${m.id}">${t.icon} ${t.label} (Nr ${escapeHtml(m.number||'–')})</option>`;
+  }).join('');
+  showLastReading();
+}
+function showLastReading(){
+  const propId = document.getElementById('readPropSel').value;
+  const meterId = document.getElementById('readMeterSel').value;
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  const c = document.getElementById('lastReadInfo');
+  if(!readings.length){ c.innerHTML = '<div class="chip warn" style="margin-bottom:10px">Erster Eintrag für diesen Zähler</div>'; return; }
+  const last = readings[0];
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  c.innerHTML = `<div class="card" style="background:var(--card2);padding:10px;margin-bottom:10px">
+    <div style="font-size:12px;color:var(--muted)">Letzter Stand am ${formatDate(last.date)}</div>
+    <div style="font-size:18px;font-weight:600;color:var(--acc)">${fmt(last.value,3)} ${t.unit}</div>
+  </div>`;
+}
+function previewPhoto(){
+  const f = document.getElementById('readPhoto').files[0];
+  if(!f) return;
+  const img = document.getElementById('photoPreview');
+  // Compress to max 800px
+  const reader = new FileReader();
+  reader.onload = e => {
+    const tmp = new Image();
+    tmp.onload = () => {
+      const canvas = document.createElement('canvas');
+      const max=800;
+      let w=tmp.width, h=tmp.height;
+      if(w>max){ h=h*max/w; w=max; }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(tmp,0,0,w,h);
+      img.src = canvas.toDataURL('image/jpeg',0.7);
+      img.style.display='block';
+      img.dataset.compressed = img.src;
+    };
+    tmp.src = e.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+function saveReading(){
+  const propId = document.getElementById('readPropSel').value;
+  const meterId = document.getElementById('readMeterSel').value;
+  const date = document.getElementById('readDate').value;
+  const value = parseFloat(document.getElementById('readValue').value);
+  if(!propId||!meterId){ toast('Zähler wählen','err'); return; }
+  if(!date){ toast('Datum fehlt','err'); return; }
+  if(isNaN(value)){ toast('Zählerstand ungültig','err'); return; }
+  // Sanity check
+  const existing = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  if(existing.length && existing[0].date < date && value < existing[0].value){
+    if(!confirm(`Achtung: Neuer Stand (${value}) ist kleiner als letzter (${existing[0].value}). Trotzdem speichern?`)) return;
+  }
+  const photo = document.getElementById('photoPreview').dataset.compressed || null;
+  const note = document.getElementById('readNote').value.trim();
+  state.readings.push({id:uid(), propId, meterId, date, value, note, photo});
+  save();
+  toast('Zählerstand gespeichert ✓','ok');
+  document.getElementById('readValue').value='';
+  document.getElementById('readNote').value='';
+  document.getElementById('readPhoto').value='';
+  document.getElementById('photoPreview').style.display='none';
+  document.getElementById('photoPreview').dataset.compressed='';
+  showLastReading();
+  // Suggest creating ablesung appointment if next reading predicted
+  maybeCreateReadingReminder(propId, meterId);
+}
+
+function maybeCreateReadingReminder(propId, meterId){
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>a.date.localeCompare(b.date));
+  const pred = predictNextReading(readings);
+  if(!pred) return;
+  // Avoid duplicate
+  const exists = state.appointments.some(a => a.cat==='ablesung' && a.propId===propId && a.meterId===meterId && a.date===pred.date);
+  if(exists) return;
+  if(confirm(`📅 Erinnerung für nächste Ablesung am ${formatDate(pred.date)} anlegen?`)){
+    state.appointments.push({
+      id:uid(), title:'Zählerablesung', cat:'ablesung', propId, meterId,
+      date: pred.date, time:'', repeat:'none', note:'Automatisch vorgeschlagen', calId:''
+    });
+    save(); toast('Termin angelegt','ok');
+  }
+}
+
+function quickReadFor(propId, meterId){
+  document.querySelector('.tab[data-tab="readings"]').click();
+  setTimeout(()=>{
+    document.getElementById('readPropSel').value = propId;
+    updateReadMeterSel();
+    document.getElementById('readMeterSel').value = meterId;
+    showLastReading();
+    document.getElementById('readDate').value = today();
+    document.getElementById('readValue').focus();
+  },50);
+}
+function quickAdd(){ document.querySelector('.tab[data-tab="readings"]').click(); }
+
+function showHistory(propId, meterId){
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('histTitle').textContent = `${t.icon} ${t.label} – ${p?.name}`;
+  const c = document.getElementById('histContent');
+  if(!readings.length){ c.innerHTML='<div class="empty">Keine Einträge</div>'; }
+  else{
+    c.innerHTML = readings.map((r,i) => {
+      const next = readings[i+1];
+      const diff = next ? (r.value-next.value) : null;
+      const days = next ? daysBetween(next.date, r.date) : null;
+      return `<div class="history-item">
+        <div>
+          <div class="date">${formatDate(r.date)}</div>
+          ${diff!==null?`<div style="font-size:11px;color:var(--muted)">+${fmt(diff,2)} ${t.unit} in ${days}T</div>`:''}
+          ${r.note?`<div style="font-size:11px;color:var(--muted)">📝 ${escapeHtml(r.note)}</div>`:''}
+          ${r.photo?`<img src="${r.photo}" class="preview" style="max-width:120px;margin-top:4px">`:''}
+        </div>
+        <div style="text-align:right">
+          <div class="val">${fmt(r.value,3)}</div>
+          <div style="font-size:11px;color:var(--muted)">${t.unit}</div>
+          <button class="del" onclick="deleteReading('${r.id}')">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('histModal').classList.add('show');
+}
+function deleteReading(id){
+  if(!confirm('Eintrag löschen?')) return;
+  state.readings = state.readings.filter(r=>r.id!==id);
+  save();
+  closeModal('histModal');
+  render();
+}
+
+// ---------- Appointments ----------
+function openAppointmentModal(appt){
+  editingAppt = appt ? {...appt} : {id:uid(),title:'',cat:'schornstein',propId:state.properties[0]?.id||'',date:today(),time:'',repeat:'yearly',note:'',calId:''};
+  document.getElementById('apptModalTitle').textContent = appt ? 'Termin bearbeiten' : 'Neuer Termin';
+  document.getElementById('apptTitle').value = editingAppt.title;
+  document.getElementById('apptCat').value = editingAppt.cat;
+  document.getElementById('apptDate').value = editingAppt.date;
+  document.getElementById('apptTime').value = editingAppt.time||'';
+  document.getElementById('apptRepeat').value = editingAppt.repeat;
+  document.getElementById('apptNote').value = editingAppt.note||'';
+  document.getElementById('apptCal').checked = !!editingAppt.calId;
+  const propSel = document.getElementById('apptProp');
+  propSel.innerHTML = '<option value="">— Alle —</option>'+state.properties.map(p=>`<option value="${p.id}" ${editingAppt.propId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('apptDelBtn').style.display = appt ? 'inline-flex':'none';
+  document.getElementById('apptModal').classList.add('show');
+}
+function saveAppointment(){
+  editingAppt.title = document.getElementById('apptTitle').value.trim();
+  editingAppt.cat = document.getElementById('apptCat').value;
+  editingAppt.date = document.getElementById('apptDate').value;
+  editingAppt.time = document.getElementById('apptTime').value;
+  editingAppt.repeat = document.getElementById('apptRepeat').value;
+  editingAppt.note = document.getElementById('apptNote').value.trim();
+  editingAppt.propId = document.getElementById('apptProp').value;
+  const wantCal = document.getElementById('apptCal').checked;
+  if(!editingAppt.title){ toast('Titel fehlt','err'); return; }
+  const idx = state.appointments.findIndex(a=>a.id===editingAppt.id);
+  if(idx>=0) state.appointments[idx]=editingAppt; else state.appointments.push(editingAppt);
+  if(wantCal && gIsSignedIn()) createCalendarEvent(editingAppt);
+  save(); closeModal('apptModal'); render();
+  toast('Termin gespeichert ✓','ok');
+}
+function deleteAppointment(){
+  if(!confirm('Termin löschen?')) return;
+  state.appointments = state.appointments.filter(a=>a.id!==editingAppt.id);
+  save(); closeModal('apptModal'); render();
+}
+
+const APPT_ICONS = {schornstein:'🔥',heizung:'🔧',ablesung:'📝',rauchmelder:'🚨',legionellen:'💧',elektro:'⚡',versicherung:'📄',grundsteuer:'💰',sonstiges:'📌'};
+
+function renderAppointments(){
+  const c = document.getElementById('apptList');
+  const all = [...state.appointments].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!all.length){
+    c.innerHTML = `<div class="empty"><div class="ico">📅</div>
+      <p>Keine Termine.</p>
+      <p style="margin-top:10px;font-size:13px">Vorschläge: Schornsteinfeger (jährlich), Heizungswartung (jährlich), Rauchmelder-Check (jährlich), Legionellenprüfung (3J), E-Check (4J).</p>
+      <p style="margin-top:10px"><button class="btn" onclick="openAppointmentModal()">+ Termin anlegen</button></p>
+    </div>`;
+    return;
+  }
+  c.innerHTML = all.map(a => {
+    const d = daysBetween(today(), a.date);
+    let cls = '', status = '';
+    if(d<0){ cls='over'; status='⚠️ überfällig'; }
+    else if(d<=settings.leadDays){ cls='due'; status=`🔔 in ${d} Tagen`; }
+    else status = `in ${d} Tagen`;
+    const prop = state.properties.find(p=>p.id===a.propId);
+    return `<div class="appointment ${cls}">
+      <div class="ico">${APPT_ICONS[a.cat]||'📌'}</div>
+      <div class="info">
+        <div class="title">${escapeHtml(a.title)}</div>
+        <div class="when">${formatDate(a.date)}${a.time?' · '+a.time:''} · ${status}${prop?' · '+escapeHtml(prop.name):''}</div>
+        ${a.note?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${escapeHtml(a.note)}</div>`:''}
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">${repeatLabel(a.repeat)}${a.calId?' · ✓ Kalender':''}</div>
+        <div class="actions">
+          <button class="btn sm" onclick='openAppointmentModal(${JSON.stringify(a).replace(/'/g,"&#39;")})'>✏️</button>
+          ${d<=0?`<button class="btn sm ok" onclick="completeAppointment('${a.id}')">✓ Erledigt</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function repeatLabel(r){
+  return {none:'einmalig',monthly:'monatlich',quarterly:'vierteljährlich',yearly:'jährlich','2years':'alle 2 Jahre','3years':'alle 3 Jahre'}[r]||r;
+}
+function completeAppointment(id){
+  const a = state.appointments.find(x=>x.id===id);
+  if(!a) return;
+  if(a.repeat==='none'){
+    if(confirm('Termin abschließen und entfernen?')) {
+      state.appointments = state.appointments.filter(x=>x.id!==id);
+    }
+  } else {
+    const map = {monthly:30,quarterly:91,yearly:365,'2years':730,'3years':1095};
+    a.date = dateAdd(a.date, map[a.repeat]);
+    a.calId='';
+    toast(`Nächster Termin: ${formatDate(a.date)}`,'ok');
+  }
+  save(); render();
+}
+
+// ---------- Dashboard ----------
+function renderDashboard(){
+  const c = document.getElementById('dashContent');
+  const totalReadings = state.readings.length;
+  const totalMeters = state.properties.reduce((s,p)=>s+p.meters.length,0);
+  const upcoming = state.appointments.filter(a=>{
+    const d = daysBetween(today(), a.date);
+    return d>=0 && d<=settings.leadDays;
+  });
+  const overdue = state.appointments.filter(a=>daysBetween(today(), a.date)<0);
+  // Find meters needing reading
+  const needsReading = [];
+  state.properties.forEach(p=>p.meters.forEach(m=>{
+    const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const pred = predictNextReading(rs);
+    if(pred){
+      const d = daysBetween(today(), pred.date);
+      if(d <= settings.leadDays) needsReading.push({p,m,pred,days:d});
+    } else if(rs.length===1){
+      const d = daysBetween(rs[0].date, today());
+      if(d > 365) needsReading.push({p,m,pred:null,days:-999});
+    }
+  }));
+
+  c.innerHTML = `
+    <div class="card">
+      <h2>👋 Hallo!</h2>
+      <p style="color:var(--muted);font-size:14px">Heute ist ${formatDate(today())}.</p>
+      <div class="row" style="margin-top:14px">
+        <div class="stat-box"><div class="val">${state.properties.length}</div><div class="lbl">Grundstücke</div></div>
+        <div class="stat-box"><div class="val">${totalMeters}</div><div class="lbl">Zähler</div></div>
+        <div class="stat-box"><div class="val">${totalReadings}</div><div class="lbl">Einträge</div></div>
+        <div class="stat-box"><div class="val">${state.appointments.length}</div><div class="lbl">Termine</div></div>
+      </div>
+    </div>
+
+    ${overdue.length?`<div class="card" style="border-color:var(--err)">
+      <h2 style="color:var(--err)">⚠️ Überfällig (${overdue.length})</h2>
+      ${overdue.map(a=>`<div class="appointment over"><div class="ico">${APPT_ICONS[a.cat]||'📌'}</div><div class="info"><div class="title">${escapeHtml(a.title)}</div><div class="when">${formatDate(a.date)}</div></div></div>`).join('')}
+    </div>`:''}
+
+    ${upcoming.length?`<div class="card">
+      <h2>🔔 Anstehende Termine</h2>
+      ${upcoming.map(a=>`<div class="appointment due"><div class="ico">${APPT_ICONS[a.cat]||'📌'}</div><div class="info"><div class="title">${escapeHtml(a.title)}</div><div class="when">${formatDate(a.date)} · in ${daysBetween(today(),a.date)} Tagen</div></div></div>`).join('')}
+    </div>`:''}
+
+    ${needsReading.length?`<div class="card">
+      <h2>📝 Ablesungen fällig</h2>
+      ${needsReading.map(n=>{
+        const t=METER_TYPES[n.m.type]||METER_TYPES.strom;
+        return `<div class="appointment due"><div class="ico">${t.icon}</div><div class="info">
+          <div class="title">${t.label} – ${escapeHtml(n.p.name)}</div>
+          <div class="when">${n.pred?'voraussichtlich '+formatDate(n.pred.date):'lange keine Ablesung'}</div>
+          <div class="actions"><button class="btn sm" onclick="quickReadFor('${n.p.id}','${n.m.id}')">+ Eintragen</button></div>
+        </div></div>`;
+      }).join('')}
+    </div>`:''}
+
+    <div class="card">
+      <h2>🚀 Schnellaktionen</h2>
+      <div class="row">
+        <button class="btn" onclick="quickAdd()">📝 Zählerstand</button>
+        <button class="btn ghost" onclick="openAppointmentModal()">📅 Termin</button>
+        <button class="btn ghost" onclick="syncNow()">☁️ Sync</button>
+        <button class="btn ghost" onclick="exportJSON()">⬇️ Export</button>
+      </div>
+    </div>
+
+    ${!state.properties.length?`<div class="card" style="background:rgba(14,165,233,.1);border-color:var(--acc)">
+      <h2>🎉 Willkommen!</h2>
+      <p style="font-size:14px;line-height:1.6">Lege als Erstes ein <strong>Grundstück</strong> an und füge dort deine <strong>Zähler</strong> hinzu (Strom, Gas, Wasser, ...). Dann kannst du Zählerstände erfassen.</p>
+      <button class="btn ok" style="margin-top:10px" onclick="document.querySelector('[data-tab=properties]').click()">🏠 Loslegen</button>
+    </div>`:''}
+  `;
+}
+
+// ---------- Stats ----------
+function renderStats(){
+  const c = document.getElementById('statsContent');
+  if(!state.readings.length){ c.innerHTML='<div class="empty"><div class="ico">📈</div>Noch keine Daten</div>'; return; }
+  let html='';
+  state.properties.forEach(p => {
+    let propHtml = `<div class="card"><h2>🏠 ${escapeHtml(p.name)}</h2>`;
+    p.meters.forEach(m => {
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(rs.length<2) return;
+      // Yearly consumption
+      const totalDays = daysBetween(rs[0].date, rs[rs.length-1].date);
+      const totalVal = rs[rs.length-1].value - rs[0].value;
+      const perYear = totalDays>0 ? totalVal*365/totalDays : 0;
+      const perMonth = perYear/12;
+      const perDay = totalDays>0 ? totalVal/totalDays : 0;
+      propHtml += `<div style="margin-top:10px">
+        <h3>${t.icon} ${t.label}</h3>
+        <div class="row">
+          <div class="stat-box"><div class="val">${fmt(perDay,2)}</div><div class="lbl">${t.unit}/Tag</div></div>
+          <div class="stat-box"><div class="val">${fmt(perMonth,1)}</div><div class="lbl">${t.unit}/Monat</div></div>
+          <div class="stat-box"><div class="val">${fmt(perYear,0)}</div><div class="lbl">${t.unit}/Jahr</div></div>
+        </div>
+        <canvas class="chart" id="chart_${p.id}_${m.id}"></canvas>
+      </div>`;
+    });
+    propHtml += '</div>';
+    if(p.meters.some(m=>state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).length>=2)) html += propHtml;
+  });
+  c.innerHTML = html || '<div class="empty"><div class="ico">📈</div>Mindestens 2 Einträge pro Zähler nötig</div>';
+  // Draw charts
+  setTimeout(()=>{
+    state.properties.forEach(p=>p.meters.forEach(m=>{
+      const cv = document.getElementById(`chart_${p.id}_${m.id}`);
+      if(cv) drawChart(cv, state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date)), METER_TYPES[m.type]);
+    }));
+  },50);
+}
+
+function drawChart(canvas, readings, type){
+  const dpr = window.devicePixelRatio||1;
+  const W = canvas.offsetWidth, H = 200;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  const pad = {l:50,r:10,t:10,b:30};
+  const vals = readings.map(r=>r.value);
+  const dates = readings.map(r=>new Date(r.date).getTime());
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const minD = Math.min(...dates), maxD = Math.max(...dates);
+  const rangeV = maxV-minV || 1, rangeD = maxD-minD || 1;
+  // Grid
+  ctx.strokeStyle = getCss('--border'); ctx.lineWidth=1;
+  ctx.font='11px sans-serif'; ctx.fillStyle=getCss('--muted');
+  for(let i=0;i<=4;i++){
+    const y = pad.t + (H-pad.t-pad.b)*i/4;
+    const v = maxV - rangeV*i/4;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillText(fmt(v,0), 5, y+3);
+  }
+  // Line
+  ctx.strokeStyle = type.color; ctx.lineWidth=2;
+  ctx.beginPath();
+  readings.forEach((r,i)=>{
+    const x = pad.l + (W-pad.l-pad.r)*(new Date(r.date).getTime()-minD)/rangeD;
+    const y = pad.t + (H-pad.t-pad.b)*(1-(r.value-minV)/rangeV);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // Points
+  ctx.fillStyle = type.color;
+  readings.forEach(r=>{
+    const x = pad.l + (W-pad.l-pad.r)*(new Date(r.date).getTime()-minD)/rangeD;
+    const y = pad.t + (H-pad.t-pad.b)*(1-(r.value-minV)/rangeV);
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+  });
+  // Date labels
+  ctx.fillStyle=getCss('--muted');
+  if(readings.length){
+    ctx.fillText(formatDateShort(readings[0].date), pad.l, H-10);
+    const lastTxt = formatDateShort(readings[readings.length-1].date);
+    ctx.fillText(lastTxt, W-pad.r-ctx.measureText(lastTxt).width, H-10);
+  }
+}
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ---------- Render dispatcher ----------
+function render(tab){
+  if(!tab){
+    const a = document.querySelector('.tab.active');
+    tab = a?a.dataset.tab:'dashboard';
+  }
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='properties') renderProperties();
+  else if(tab==='readings') updateReadPropSel();
+  else if(tab==='appointments') renderAppointments();
+  else if(tab==='stats') renderStats();
+  else if(tab==='settings') renderSettingsExtras();
+  // Always also refresh other dashboard data summary
+  document.getElementById('dataSize') && (document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length));
+}
+function renderSettingsExtras(){
+  document.getElementById('gClientId').value = settings.gClientId||'';
+  document.getElementById('setLeadDays').value = settings.leadDays||7;
+  document.getElementById('lastBackup').textContent = settings.lastSync ? new Date(settings.lastSync).toLocaleString('de-DE') : 'lokal-only';
+  document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length);
+}
+
+function humanSize(n){
+  if(n<1024) return n+' B';
+  if(n<1048576) return (n/1024).toFixed(1)+' kB';
+  return (n/1048576).toFixed(2)+' MB';
+}
+function saveClientId(){ settings.gClientId = document.getElementById('gClientId').value.trim(); save(); toast('Client-ID gespeichert','ok'); gInit(); }
+function saveSettings(){ settings.leadDays = parseInt(document.getElementById('setLeadDays').value)||7; save(); toast('Einstellungen gespeichert','ok'); }
+
+// ---------- Helpers ----------
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function escapeHtml(s){ return (s+'').replace(/[<>&"']/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
+function formatDate(d){ if(!d) return '–'; return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function formatDateShort(d){ return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}); }
+
+// ---------- Export / Import ----------
+function exportJSON(){
+  const data = JSON.stringify({state, settings, exportedAt:new Date().toISOString()},null,2);
+  const blob = new Blob([data],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `zaehler-backup-${today()}.json`;
+  a.click();
+  toast('Export gestartet','ok');
+}
+function importJSON(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const obj = JSON.parse(e.target.result);
+      if(!obj.state || !obj.state.properties) throw new Error('Format ungültig');
+      if(!confirm(`Import: ${obj.state.properties.length} Grundstücke, ${obj.state.readings.length} Einträge. Bestehende Daten werden überschrieben. Fortfahren?`)) return;
+      state = obj.state;
+      if(obj.settings) settings = {...settings, ...obj.settings};
+      save(); render(); toast('Import erfolgreich','ok');
+    }catch(err){ toast('Import-Fehler: '+err.message,'err'); }
+  };
+  r.readAsText(f);
+}
+function resetAll(){
+  localStorage.clear();
+  location.reload();
+}
+
+// ---------- Google Sync ----------
+let gTokenClient=null, gToken=null, gReady=false;
+
+function gInit(){
+  if(!settings.gClientId){ updateSyncStatus('lokal'); return; }
+  if(typeof google==='undefined' || !google.accounts){
+    // load scripts
+    loadScript('https://accounts.google.com/gsi/client', ()=> {
+      loadScript('https://apis.google.com/js/api.js', ()=>{
+        gapi.load('client', async ()=>{
+          await gapi.client.init({});
+          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+          gReady=true;
+          gTokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: settings.gClientId,
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
+            callback: (t) => {
+              gToken = t;
+              gapi.client.setToken({access_token:t.access_token});
+              updateSyncStatus('verbunden');
+              toast('Mit Google verbunden ✓','ok');
+              // Auto-sync after login
+              setTimeout(syncNow, 800);
+            }
+          });
+          updateSyncStatus('bereit');
+        });
+      });
+    });
+  }
+}
+function loadScript(src, cb){
+  if(document.querySelector(`script[src="${src}"]`)){ cb(); return; }
+  const s=document.createElement('script'); s.src=src; s.onload=cb; document.head.appendChild(s);
+}
+function gSignIn(){
+  if(!settings.gClientId){ toast('Bitte erst Client-ID eintragen','err'); return; }
+  if(!gTokenClient){ gInit(); setTimeout(gSignIn,1500); return; }
+  gTokenClient.requestAccessToken();
+}
+function gSignOut(){
+  if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  gToken=null; updateSyncStatus('lokal'); toast('Abgemeldet','ok');
+}
+function gIsSignedIn(){ return !!gToken && gReady; }
+function updateSyncStatus(s){
+  const txt = document.getElementById('syncText'), el = document.getElementById('syncStatus');
+  txt.textContent = s;
+  el.className = 'sync-status ' + (s==='verbunden'?'ok':s==='fehler'?'err':'');
+}
+
+const DRIVE_FILE_NAME = 'zaehler-data.json';
+let driveFileId = null;
+
+async function findDriveFile(){
+  const res = await gapi.client.drive.files.list({q:`name='${DRIVE_FILE_NAME}' and trashed=false`, fields:'files(id,name,modifiedTime)'});
+  return res.result.files[0] || null;
+}
+async function syncNow(){
+  if(!gIsSignedIn()){ toast('Bitte zuerst mit Google anmelden','err'); return; }
+  try{
+    updateSyncStatus('synchronisiere…');
+    const file = await findDriveFile();
+    if(file){
+      // Compare timestamps: load remote, merge by id
+      const remote = await gapi.client.drive.files.get({fileId:file.id, alt:'media'});
+      const rdata = typeof remote.body==='string' ? JSON.parse(remote.body) : remote.body;
+      if(rdata && rdata.state){
+        state = mergeState(state, rdata.state);
+        save();
+      }
+      driveFileId = file.id;
+      await uploadDrive();
+    } else {
+      await uploadDrive(true);
+    }
+    settings.lastSync = Date.now(); save();
+    updateSyncStatus('verbunden');
+    toast('Sync erfolgreich ✓','ok');
+    render();
+  }catch(e){
+    console.error(e); updateSyncStatus('fehler'); toast('Sync-Fehler: '+(e.result?.error?.message||e.message),'err');
+  }
+}
+function mergeState(local, remote){
+  // Merge by IDs (last writer wins on conflict, prefer larger lists)
+  function mergeArr(a,b){
+    const map = {};
+    [...a, ...b].forEach(x => map[x.id] = x);
+    return Object.values(map);
+  }
+  return {
+    properties: mergeArr(local.properties||[], remote.properties||[]),
+    readings: mergeArr(local.readings||[], remote.readings||[]),
+    appointments: mergeArr(local.appointments||[], remote.appointments||[]),
+  };
+}
+async function uploadDrive(isNew){
+  const content = JSON.stringify({state, settings, savedAt:new Date().toISOString()},null,2);
+  const boundary = '-------314159265358979323846';
+  const meta = { name: DRIVE_FILE_NAME, mimeType:'application/json' };
+  const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+  if(isNew || !driveFileId){
+    await gapi.client.request({path:'/upload/drive/v3/files', method:'POST', params:{uploadType:'multipart'},
+      headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
+  } else {
+    await gapi.client.request({path:'/upload/drive/v3/files/'+driveFileId, method:'PATCH', params:{uploadType:'multipart'},
+      headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
+  }
+}
+async function restoreFromDrive(){
+  if(!gIsSignedIn()){ toast('Bitte anmelden','err'); return; }
+  try{
+    const f = await findDriveFile();
+    if(!f){ toast('Keine Cloud-Datei gefunden','err'); return; }
+    const r = await gapi.client.drive.files.get({fileId:f.id, alt:'media'});
+    const data = typeof r.body==='string'?JSON.parse(r.body):r.body;
+    if(!confirm(`Wiederherstellen vom ${new Date(data.savedAt).toLocaleString('de-DE')}? Lokale Daten werden überschrieben.`)) return;
+    state = data.state; if(data.settings) settings = {...settings, ...data.settings};
+    save(); render(); toast('Wiederhergestellt ✓','ok');
+  }catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function createCalendarEvent(appt){
+  try{
+    const start = appt.time ? `${appt.date}T${appt.time}:00` : appt.date;
+    const end = appt.time ? `${appt.date}T${addMinutes(appt.time,60)}:00` : appt.date;
+    const ev = {
+      summary: `${APPT_ICONS[appt.cat]||'📌'} ${appt.title}`,
+      description: appt.note||'',
+      start: appt.time ? {dateTime:start, timeZone:'Europe/Berlin'} : {date:appt.date},
+      end:   appt.time ? {dateTime:end, timeZone:'Europe/Berlin'} : {date:appt.date},
+      reminders: {useDefault:false, overrides:[{method:'popup',minutes: settings.leadDays*24*60}]}
+    };
+    if(appt.repeat && appt.repeat!=='none'){
+      const map = {monthly:'MONTHLY',quarterly:'MONTHLY;INTERVAL=3',yearly:'YEARLY','2years':'YEARLY;INTERVAL=2','3years':'YEARLY;INTERVAL=3'};
+      ev.recurrence = ['RRULE:FREQ='+map[appt.repeat]];
+    }
+    const r = await gapi.client.calendar.events.insert({calendarId:'primary', resource:ev});
+    appt.calId = r.result.id;
+    save();
+    toast('Im Kalender eingetragen ✓','ok');
+  }catch(e){ console.error(e); toast('Kalender-Fehler: '+e.message,'err'); }
+}
+function addMinutes(t, mins){
+  const [h,m] = t.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m+mins);
+  return d.toTimeString().slice(0,5);
+}
+
+// ---------- Init ----------
+document.getElementById('readDate').value = today();
+load();
+gInit();
+render();
+
+// Auto-sync every 10 min if signed in
+setInterval(()=>{ if(gIsSignedIn()) syncNow(); }, 10*60*1000);
+
+// Service Worker (offline) — inline registration
+if('serviceWorker' in navigator){
+  const swCode = `
+    const C='zaehler-v1';
+    self.addEventListener('install',e=>{self.skipWaiting()});
+    self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});
+    self.addEventListener('fetch',e=>{
+      e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
+    });
+  `;
+  const blob = new Blob([swCode],{type:'text/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+
+// Close modals on background click
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => {
+  if(e.target===m) m.classList.remove('show');
+}));
+
+// Prevent accidental data loss
+window.addEventListener('beforeunload', save);
+</script>
+</body>
+</html>
