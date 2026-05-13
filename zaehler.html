@@ -1051,6 +1051,7 @@ function gInit(){
           gTokenClient = google.accounts.oauth2.initTokenClient({
             client_id: settings.gClientId,
             scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
+            prompt: 'select_account',
             callback: (t) => {
               gToken = t;
               gapi.client.setToken({access_token:t.access_token});
