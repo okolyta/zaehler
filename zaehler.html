@@ -144,6 +144,7 @@ canvas.chart{width:100%;height:200px}
   <h1>⚡ Zählerstand-Manager</h1>
   <div class="right">
     <span id="syncStatus" class="sync-status"><span id="syncText">○ lokal</span></span>
+    <button class="btn icon" onclick="refreshApp()" title="App neu laden">🔄</button>
     <button class="btn icon" onclick="toggleTheme()" title="Theme">🌓</button>
   </div>
 </header>
@@ -442,7 +443,20 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.getElementById('page-'+t.dataset.tab).style.display='block';
   render(t.dataset.tab);
 });
-
+async function refreshApp(){
+  toast('Lade frisch…','ok');
+  try{
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const r of regs) await r.unregister();
+    }
+    if('caches' in window){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  }catch(e){}
+  setTimeout(()=>location.reload(), 500);
+}
 function toggleTheme(){
   settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = settings.theme;
