@@ -735,7 +735,7 @@ const CONFIG = {
   DRIVE_ROOT_FOLDER: 'Zaehler-App',
   PHOTO_FOLDER: 'Fotos',
   DATA_FILE: 'zaehler-data.json',
-  APP_VERSION: '3.0.0'
+  APP_VERSION: '3.1.0'
 };
 
 // ---------- STATE ----------
@@ -850,15 +850,35 @@ function initGoogleAuth() {
       scope: CONFIG.DRIVE_SCOPES,
       callback: async (resp) => {
         if (resp.error) {
-          console.error('OAuth-Fehler:', resp);
+          console.warn('OAuth Antwort:', resp.error);
+          if (resp.error === 'interaction_required' ||
+              resp.error === 'login_required' ||
+              resp.error === 'consent_required' ||
+              resp.error === 'access_denied') {
+            setConnStatus('', 'Anmeldung nötig');
+            STATE._silentAuth = false;
+            return;
+          }
           setConnStatus('error', 'Fehler');
           toast('Anmeldung fehlgeschlagen', 'error');
+          STATE._silentAuth = false;
           return;
         }
         STATE.accessToken = resp.access_token;
+        const expiresIn = resp.expires_in || 3600;
+        const expiresAt = Date.now() + (expiresIn * 1000);
+        localStorage.setItem('zaehler-session', JSON.stringify({
+          token: resp.access_token,
+          expiresAt,
+          hadConsent: true
+        }));
         setConnStatus('connected', 'Verbunden');
-        toast('Erfolgreich verbunden ✅', 'success');
-        logActivity('auth', 'Mit Google verbunden', '🔐');
+        const wasSilent = STATE._silentAuth;
+        STATE._silentAuth = false;
+        if (!wasSilent) {
+          toast('Erfolgreich verbunden ✅', 'success');
+          logActivity('auth', 'Mit Google verbunden', '🔐');
+        }
         await fetchUserInfo();
         await ensureDriveStructure();
         await syncFromDrive();
@@ -866,9 +886,36 @@ function initGoogleAuth() {
     });
     setConnStatus('', 'Bereit');
     console.log('Google Auth bereit');
+    tryRestoreSession();
   } catch (e) {
     console.error('initGoogleAuth:', e);
     setConnStatus('error', 'Fehler');
+  }
+}
+
+async function tryRestoreSession() {
+  const raw = localStorage.getItem('zaehler-session');
+  if (!raw) return;
+  try {
+    const session = JSON.parse(raw);
+    if (session.token && session.expiresAt && Date.now() < session.expiresAt - 60000) {
+      STATE.accessToken = session.token;
+      setConnStatus('connected', 'Verbunden');
+      console.log('✓ Session aus Cache wiederhergestellt');
+      await fetchUserInfo();
+      await ensureDriveStructure();
+      await syncFromDrive();
+      return;
+    }
+    if (session.hadConsent && tokenClient) {
+      console.log('Token abgelaufen → Silent Re-Auth...');
+      setConnStatus('', 'Wird aktualisiert...');
+      STATE._silentAuth = true;
+      tokenClient.requestAccessToken({ prompt: 'none' });
+    }
+  } catch (e) {
+    console.warn('Session-Restore fehlgeschlagen:', e);
+    localStorage.removeItem('zaehler-session');
   }
 }
 
@@ -914,7 +961,17 @@ function gSignIn() {
 
 function gSwitchAccount() {
   if (!tokenClient) return;
+  localStorage.removeItem('zaehler-session');
   tokenClient.requestAccessToken({ prompt: 'select_account' });
+}
+
+function gSignOut() {
+  STATE.accessToken = null;
+  STATE.user = null;
+  localStorage.removeItem('zaehler-session');
+  setConnStatus('', 'Offline');
+  $('#userChip').classList.add('hidden');
+  toast('Abgemeldet', 'success');
 }
 
 // ---------- GOOGLE DRIVE API ----------
@@ -959,15 +1016,24 @@ async function findOrCreateFolder(name, parentId = null) {
   return created.id;
 }
 
-async function ensureDriveStructure() {
+async function ensureDriveStructure(retry = 0) {
+  if (!STATE.accessToken) {
+    console.warn('Drive: kein Token');
+    return;
+  }
   try {
     const rootId = await findOrCreateFolder(CONFIG.DRIVE_ROOT_FOLDER);
     STATE.driveRootId = rootId;
     await findOrCreateFolder(CONFIG.PHOTO_FOLDER, rootId);
-    console.log('Drive-Struktur OK:', rootId);
+    console.log('✓ Drive-Struktur OK:', rootId);
   } catch (e) {
-    console.error('ensureDriveStructure:', e);
-    toast('Drive-Struktur konnte nicht erstellt werden', 'error');
+    console.error('ensureDriveStructure (Versuch ' + (retry + 1) + '):', e);
+    if (retry < 2) {
+      await new Promise(r => setTimeout(r, 800));
+      return ensureDriveStructure(retry + 1);
+    }
+    toast('Drive-Verbindung fehlgeschlagen – bitte erneut anmelden', 'error');
+    setConnStatus('error', 'Drive-Fehler');
   }
 }
 
