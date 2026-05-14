@@ -735,7 +735,7 @@ const CONFIG = {
   DRIVE_ROOT_FOLDER: 'Zaehler-App',
   PHOTO_FOLDER: 'Fotos',
   DATA_FILE: 'zaehler-data.json',
-  APP_VERSION: '3.1.0'
+  APP_VERSION: '3.1.1'
 };
 
 // ---------- STATE ----------
@@ -893,19 +893,34 @@ function initGoogleAuth() {
   }
 }
 
+async function validateToken(token) {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + encodeURIComponent(token));
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function tryRestoreSession() {
   const raw = localStorage.getItem('zaehler-session');
   if (!raw) return;
   try {
     const session = JSON.parse(raw);
     if (session.token && session.expiresAt && Date.now() < session.expiresAt - 60000) {
-      STATE.accessToken = session.token;
-      setConnStatus('connected', 'Verbunden');
-      console.log('✓ Session aus Cache wiederhergestellt');
-      await fetchUserInfo();
-      await ensureDriveStructure();
-      await syncFromDrive();
-      return;
+      setConnStatus('', 'Prüfe Session...');
+      const isValid = await validateToken(session.token);
+      if (isValid) {
+        STATE.accessToken = session.token;
+        setConnStatus('connected', 'Verbunden');
+        console.log('✓ Session validiert & wiederhergestellt');
+        await fetchUserInfo();
+        await ensureDriveStructure();
+        await syncFromDrive();
+        return;
+      }
+      console.warn('Token ist ungültig, lösche Cache');
+      localStorage.removeItem('zaehler-session');
     }
     if (session.hadConsent && tokenClient) {
       console.log('Token abgelaufen → Silent Re-Auth...');
