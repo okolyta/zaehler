@@ -10,10 +10,8 @@
 <link rel="apple-touch-icon" href="android-chrome-192x192.png">
 <style>
 /* ========================================================
-   THEME VARIABLES — 3 Styles × 2 Modes
+   THEMES
    ======================================================== */
-
-/* APPLE — DARK (default) */
 :root,
 :root[data-style="apple"][data-mode="dark"]{
   --bg:#000000; --bg2:#1c1c1e; --card:#1c1c1e; --card2:#2c2c2e;
@@ -29,8 +27,6 @@
   --radius:14px; --shadow:0 1px 3px rgba(0,0,0,.08);
   --header-bg:linear-gradient(135deg,#007aff,#5ac8fa);
 }
-
-/* GLASS — DARK */
 :root[data-style="glass"][data-mode="dark"]{
   --bg:#0a0a1f; --bg2:#1a1a3e; --card:rgba(255,255,255,.06); --card2:rgba(255,255,255,.04);
   --text:#f0f0ff; --muted:#a0a0c0; --acc:#a78bfa; --acc2:#f472b6;
@@ -46,8 +42,6 @@
   --radius:20px; --shadow:0 8px 32px rgba(124,58,237,.15);
   --header-bg:linear-gradient(135deg,#7c3aed,#db2777);
 }
-
-/* LINEAR — DARK */
 :root[data-style="linear"][data-mode="dark"]{
   --bg:#08090a; --bg2:#0f1011; --card:#101113; --card2:#161719;
   --text:#ededed; --muted:#7a7d83; --acc:#5e6ad2; --acc2:#7c89e8;
@@ -62,15 +56,10 @@
   --radius:8px; --shadow:0 1px 2px rgba(0,0,0,.04);
   --header-bg:linear-gradient(135deg,#5e6ad2,#7c89e8);
 }
-
-/* ========================================================
-   STYLE-SPECIFIC OVERRIDES (Glass gets backdrop-blur etc.)
-   ======================================================== */
 :root[data-style="glass"] body{background:var(--bg);background-attachment:fixed}
 :root[data-style="glass"] .card,
 :root[data-style="glass"] .meter-card{backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%)}
 :root[data-style="glass"] header{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
-
 :root[data-style="linear"]{font-family:"Inter",ui-sans-serif,system-ui,sans-serif}
 :root[data-style="linear"] .card,
 :root[data-style="linear"] .meter-card{border-width:1px}
@@ -79,66 +68,48 @@
 :root[data-style="linear"] h2,
 :root[data-style="linear"] h3{letter-spacing:-.02em}
 
-/* ========================================================
-   RESET & BASE
-   ======================================================== */
+/* RESET */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow-x:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
   background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;
   padding-bottom:80px;min-height:100vh;transition:background .3s,color .3s}
 
-/* ========================================================
-   HEADER
-   ======================================================== */
+/* HEADER */
 header{background:var(--header-bg);color:white;padding:14px 16px;
   position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,.2);
   display:flex;align-items:center;justify-content:space-between;gap:8px}
 header h1{font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px}
 header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 
-/* ========================================================
-   BUTTONS
-   ======================================================== */
+/* BUTTONS */
 .btn{background:var(--acc);color:white;border:none;padding:10px 16px;
   border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;
-  display:inline-flex;align-items:center;gap:6px;transition:all .15s;
-  font-family:inherit}
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;font-family:inherit}
 .btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
 .btn:active{transform:translateY(0)}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
 .btn.ok{background:var(--ok)} .btn.warn{background:var(--warn)} .btn.err{background:var(--err)}
 .btn.sm{padding:6px 10px;font-size:12px}
 .btn.icon{padding:8px;width:36px;height:36px;justify-content:center;background:rgba(255,255,255,.15)}
-.btn.kbd-hint{position:relative}
-.btn.kbd-hint::after{content:attr(data-kbd);position:absolute;bottom:-2px;right:-2px;
-  font-size:9px;background:var(--card2);color:var(--muted);padding:1px 4px;
-  border-radius:4px;border:1px solid var(--border);font-family:monospace}
 
-/* ========================================================
-   TABS
-   ======================================================== */
+/* TABS */
 .tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);
   position:sticky;top:54px;z-index:40;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{padding:14px 18px;cursor:pointer;color:var(--muted);font-weight:500;
-  border-bottom:3px solid transparent;white-space:nowrap;font-size:14px;flex-shrink:0;
-  transition:color .2s}
+  border-bottom:3px solid transparent;white-space:nowrap;font-size:14px;flex-shrink:0;transition:color .2s}
 .tab.active{color:var(--acc);border-color:var(--acc)}
 .tab:hover{color:var(--text)}
 
-/* ========================================================
-   LAYOUT & CARDS
-   ======================================================== */
+/* LAYOUT */
 .container{padding:16px;max-width:900px;margin:0 auto}
 .card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;
   border:1px solid var(--border);box-shadow:var(--shadow);transition:transform .15s}
 .card h2{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .card h3{font-size:14px;margin-bottom:8px;color:var(--muted);font-weight:500}
 
-/* ========================================================
-   FORM ELEMENTS
-   ======================================================== */
+/* FORM */
 .field{margin-bottom:12px}
 .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:500}
 .field input,.field select,.field textarea{
@@ -151,7 +122,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .row > *{flex:1;min-width:140px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 
-/* Quick add input row */
+/* QUICK ADD */
 .quick-row{display:flex;gap:8px;align-items:center;padding:10px;
   background:var(--card2);border-radius:10px;margin-bottom:8px}
 .quick-row .qr-icon{font-size:22px;flex-shrink:0;width:30px;text-align:center}
@@ -163,7 +134,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .quick-row .qr-actions{display:flex;gap:4px;align-items:center}
 .quick-row label{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer}
 
-/* Chips */
+/* CHIPS */
 .chip{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;
   background:var(--card2);color:var(--muted);font-weight:500}
 .chip.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
@@ -171,9 +142,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .chip.err{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
 .chip.acc{background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
 
-/* ========================================================
-   METER CARDS
-   ======================================================== */
+/* METER CARDS */
 .meter-card{background:var(--card);border-radius:var(--radius);padding:14px;
   border:1px solid var(--border);position:relative;overflow:hidden;box-shadow:var(--shadow)}
 .meter-card.gas{border-left:4px solid #ff9f0a}
@@ -193,21 +162,27 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .read-badge.main{color:var(--warn)}
 .read-badge.sub{color:var(--muted)}
 
-/* Expected comparison box */
+/* EXPECT BOX */
 .expect-box{margin-top:8px;padding:8px;background:var(--card2);border-radius:8px}
 .expect-box .head-line{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;gap:6px}
 .expect-box .bar-bg{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden}
 .expect-box .bar-fg{height:100%;transition:width .5s;border-radius:3px}
 .expect-box .ist-line{font-size:11px;color:var(--muted);margin-top:4px}
 
-/* Anomaly warning */
+/* COST BOX */
+.cost-box{margin-top:8px;padding:10px;background:linear-gradient(135deg,color-mix(in srgb,var(--ok) 8%,transparent),color-mix(in srgb,var(--acc) 8%,transparent));
+  border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);border-radius:8px}
+.cost-box .total{font-size:18px;font-weight:700;color:var(--ok);display:flex;justify-content:space-between;align-items:center}
+.cost-box .total .label{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cost-box .breakdown{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.cost-box .compare{font-size:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
+
+/* ANOMALY */
 .anomaly{background:color-mix(in srgb,var(--warn) 15%,transparent);
   border:1px solid var(--warn);padding:8px 10px;border-radius:8px;margin-top:8px;font-size:12px}
 .anomaly.severe{background:color-mix(in srgb,var(--err) 15%,transparent);border-color:var(--err)}
 
-/* ========================================================
-   MODALS
-   ======================================================== */
+/* MODALS */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;
   display:none;align-items:center;justify-content:center;padding:16px}
 .modal-bg.show{display:flex}
@@ -215,31 +190,41 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
   max-width:520px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border)}
 .modal h2{font-size:18px;margin-bottom:14px}
 .modal .footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
-
-/* Modal tabs */
 .modal-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border)}
 .modal-tab{padding:8px 14px;cursor:pointer;color:var(--muted);font-size:14px;
   border-bottom:2px solid transparent;font-weight:500}
 .modal-tab.active{color:var(--acc);border-color:var(--acc)}
 
-/* ========================================================
-   FAB
-   ======================================================== */
+/* FIXED COSTS */
+.fc-row{padding:10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
+.fc-row .row{gap:6px}
+.fc-row select,.fc-row input{padding:8px;font-size:13px}
+
+/* COST DASHBOARD */
+.cost-dash{margin-top:8px}
+.cost-dash .prop-row{padding:10px;background:var(--card2);border-radius:10px;margin-bottom:8px}
+.cost-dash .prop-row .head-line{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.cost-dash .prop-row .prop-name{font-weight:600;font-size:14px}
+.cost-dash .prop-row .prop-total{font-size:18px;font-weight:700;color:var(--ok)}
+.cost-dash .prop-row .prop-breakdown{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.cost-dash .grand-total{padding:14px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:white;border-radius:10px;text-align:center;margin-top:8px}
+.cost-dash .grand-total .val{font-size:28px;font-weight:700;line-height:1}
+.cost-dash .grand-total .lbl{font-size:11px;opacity:.9;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.cost-dash .grand-total .sub{font-size:12px;opacity:.85;margin-top:6px}
+
+/* FAB */
 .fab{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;
   background:var(--header-bg);color:white;border:none;font-size:28px;cursor:pointer;
   box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:30;
   display:flex;align-items:center;justify-content:center}
 .fab:active{transform:scale(.95)}
 
-/* ========================================================
-   EMPTY STATE
-   ======================================================== */
+/* EMPTY */
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
 .empty .ico{font-size:48px;margin-bottom:10px;opacity:.5}
 
-/* ========================================================
-   HISTORY
-   ======================================================== */
+/* HISTORY */
 .history-item{display:flex;justify-content:space-between;padding:10px;
   border-bottom:1px solid var(--border);font-size:14px;align-items:center;gap:8px}
 .history-item:last-child{border-bottom:none}
@@ -247,7 +232,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .history-item .val{font-weight:600;color:var(--acc)}
 .history-item .del{background:none;border:none;color:var(--err);cursor:pointer;padding:4px 8px;font-size:13px}
 
-/* Photo gallery */
+/* PHOTO */
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 .photo-grid .pitem{position:relative;cursor:pointer;border-radius:8px;overflow:hidden;
   border:1px solid var(--border);background:var(--card2);transition:transform .2s}
@@ -257,15 +242,13 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
   background:linear-gradient(to top,rgba(0,0,0,.7),transparent);
   color:white;padding:14px 6px 4px;font-size:10px}
 
-/* Lightbox */
+/* LIGHTBOX */
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;
   display:none;align-items:center;justify-content:center;padding:20px;cursor:pointer}
 .lightbox.show{display:flex}
 .lightbox img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,.5)}
 
-/* ========================================================
-   TOAST
-   ======================================================== */
+/* TOAST */
 .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
   background:var(--card);color:var(--text);padding:12px 20px;border-radius:10px;
   border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,.3);
@@ -276,9 +259,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .toast .undo-btn{background:var(--acc);color:white;border:none;padding:4px 10px;
   border-radius:6px;font-size:12px;cursor:pointer;font-weight:600}
 
-/* ========================================================
-   APPOINTMENTS
-   ======================================================== */
+/* APPOINTMENTS */
 .appointment{display:flex;gap:12px;padding:12px;border-radius:10px;
   background:var(--card2);margin-bottom:8px;align-items:flex-start}
 .appointment .ico{font-size:24px}
@@ -288,16 +269,12 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .appointment.due{background:color-mix(in srgb,var(--warn) 12%,transparent);border:1px solid var(--warn)}
 .appointment.over{background:color-mix(in srgb,var(--err) 12%,transparent);border:1px solid var(--err)}
 
-/* ========================================================
-   STATS
-   ======================================================== */
+/* STATS */
 .stat-box{background:var(--card2);padding:12px;border-radius:10px;text-align:center}
 .stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
 .stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 
-/* ========================================================
-   SYNC STATUS
-   ======================================================== */
+/* SYNC STATUS */
 .sync-status{font-size:13px;display:flex;align-items:center;gap:6px;color:#fff;font-weight:700;
   padding:7px 12px;border-radius:18px;background:rgba(0,0,0,.35);
   border:2px solid rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px;
@@ -309,33 +286,21 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 @keyframes pulseErr{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 @keyframes pulseWarn{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 
-/* ========================================================
-   REMINDERS TAGS
-   ======================================================== */
+/* TAGS */
 .tag-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .tag{padding:6px 12px;border-radius:18px;background:var(--card2);
   border:1px solid var(--border);font-size:13px;cursor:pointer;user-select:none;transition:all .15s}
 .tag:hover{transform:translateY(-1px)}
 .tag.active{background:var(--acc);color:white;border-color:var(--acc)}
 
-/* ========================================================
-   IMAGES & MISC
-   ======================================================== */
 img.preview{max-width:100%;border-radius:8px;margin-top:8px}
 canvas.chart{width:100%;height:200px}
-
-/* Footer kbd hint */
 .kbd-footer{text-align:center;padding:16px;color:var(--muted);font-size:12px;cursor:pointer}
 .kbd-footer:hover{color:var(--text)}
-
-/* Shortcut help table */
 .kbd-table{width:100%;border-collapse:collapse}
 .kbd-table td{padding:8px;border-bottom:1px solid var(--border);font-size:14px}
 .kbd-table td:first-child{font-family:monospace;color:var(--acc);width:120px}
 
-/* ========================================================
-   RESPONSIVE
-   ======================================================== */
 @media(max-width:600px){
   .meter-card .reading{font-size:20px}
   .tab{padding:12px 14px}
@@ -367,12 +332,8 @@ canvas.chart{width:100%;height:200px}
 
 <div class="container">
 
-  <!-- DASHBOARD -->
-  <div class="page" id="page-dashboard">
-    <div id="dashContent"></div>
-  </div>
+  <div class="page" id="page-dashboard"><div id="dashContent"></div></div>
 
-  <!-- PROPERTIES -->
   <div class="page" id="page-properties" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h2>🏠 Grundstücke & Zähler</h2>
@@ -381,7 +342,6 @@ canvas.chart{width:100%;height:200px}
     <div id="propList"></div>
   </div>
 
-  <!-- READINGS -->
   <div class="page" id="page-readings" style="display:none">
     <h2 style="margin-bottom:12px">📝 Zählerstand erfassen</h2>
     <div class="card">
@@ -395,14 +355,8 @@ canvas.chart{width:100%;height:200px}
       </div>
       <div id="lastReadInfo"></div>
       <div class="row">
-        <div class="field">
-          <label>Datum</label>
-          <input type="date" id="readDate">
-        </div>
-        <div class="field">
-          <label>Zählerstand</label>
-          <input type="number" id="readValue" step="0.001" inputmode="decimal" placeholder="0">
-        </div>
+        <div class="field"><label>Datum</label><input type="date" id="readDate"></div>
+        <div class="field"><label>Zählerstand</label><input type="number" id="readValue" step="0.001" inputmode="decimal" placeholder="0"></div>
       </div>
       <div class="field">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -423,7 +377,6 @@ canvas.chart{width:100%;height:200px}
     </div>
   </div>
 
-  <!-- APPOINTMENTS -->
   <div class="page" id="page-appointments" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h2>📅 Termine & Erinnerungen</h2>
@@ -432,13 +385,11 @@ canvas.chart{width:100%;height:200px}
     <div id="apptList"></div>
   </div>
 
-  <!-- STATS -->
   <div class="page" id="page-stats" style="display:none">
     <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
     <div id="statsContent"></div>
   </div>
 
-  <!-- SETTINGS -->
   <div class="page" id="page-settings" style="display:none">
     <h2 style="margin-bottom:12px">⚙️ Einstellungen</h2>
 
@@ -489,28 +440,31 @@ canvas.chart{width:100%;height:200px}
     </div>
 
     <div class="card">
-      <h2>💾 Lokales Backup</h2>
+      <h2>💾 Backup & Export</h2>
       <div class="row">
-        <button class="btn" onclick="exportJSON()">⬇️ JSON Export</button>
+        <button class="btn" onclick="exportJSON()">⬇️ JSON Backup</button>
         <button class="btn ghost" onclick="document.getElementById('importFile').click()">⬆️ JSON Import</button>
         <input type="file" id="importFile" style="display:none" accept=".json" onchange="importJSON(event)">
       </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ok" onclick="exportCSV()">📊 CSV Export (Excel)</button>
+      </div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px">
+        📊 CSV: Alle Zählerstände + Verbrauch + Kosten als Tabelle.<br>
+        💾 JSON: Komplettes Backup zum Wiederherstellen.<br>
         Letzter Sync: <span id="lastBackup">–</span>
       </p>
     </div>
 
     <div class="card">
       <h2>ℹ️ Über</h2>
-      <p style="font-size:13px;color:var(--muted)">Version 2.0 · Foundation Edition</p>
+      <p style="font-size:13px;color:var(--muted)">Version 2.1 · Kosten-Tracker Edition</p>
       <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
       <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
   </div>
 
-  <!-- Keyboard hint footer -->
   <div class="kbd-footer" onclick="openShortcutHelp()">⌨️ Drücke <strong>?</strong> für Tastatur-Shortcuts</div>
-
 </div>
 
 <button class="fab" onclick="quickAdd()" title="Schnell-Eintrag">+</button>
@@ -522,10 +476,17 @@ canvas.chart{width:100%;height:200px}
     <div class="field"><label>Name</label><input type="text" id="propName" placeholder="z. B. Hauptwohnsitz"></div>
     <div class="field"><label>Adresse</label><input type="text" id="propAddr" placeholder="Straße, PLZ Ort"></div>
     <div class="field"><label>Notiz</label><textarea id="propNote" rows="2"></textarea></div>
+    
     <hr style="margin:14px 0;border-color:var(--border)">
-    <h3>Zähler</h3>
+    <h3>⚡ Zähler</h3>
     <div id="meterEditList" style="margin-bottom:8px"></div>
     <button class="btn sm ghost" onclick="addMeterRow()">+ Zähler hinzufügen</button>
+    
+    <hr style="margin:14px 0;border-color:var(--border)">
+    <h3>💸 Sonstige Fixkosten <span style="font-weight:400;font-size:12px;color:var(--muted)">(Müll, Versicherung, Grundsteuer...)</span></h3>
+    <div id="fixedCostList" style="margin-bottom:8px"></div>
+    <button class="btn sm ghost" onclick="addFixedCost()">+ Fixkosten hinzufügen</button>
+    
     <div class="footer">
       <button class="btn ghost" onclick="closeModal('propModal')">Abbrechen</button>
       <button class="btn err sm" id="propDelBtn" onclick="deleteProperty()" style="display:none">Löschen</button>
@@ -567,17 +528,17 @@ canvas.chart{width:100%;height:200px}
         <option value="3years">Alle 3 Jahre</option>
       </select>
     </div>
-    <div class="field"><label>📝 Notiz (intern)</label><textarea id="apptNote" rows="2" placeholder="Für dich selbst"></textarea></div>
+    <div class="field"><label>📝 Notiz (intern)</label><textarea id="apptNote" rows="2"></textarea></div>
     <div class="field">
       <label><input type="checkbox" id="apptCal" onchange="toggleCalFields()" style="width:auto"> ➕ In Google Kalender eintragen</label>
     </div>
     <div id="calFields" style="display:none">
       <div class="field">
-        <label>📨 Kalender-Beschreibung (was im Termin steht)</label>
+        <label>📨 Kalender-Beschreibung</label>
         <textarea id="apptCalText" rows="2" placeholder="Wenn leer: wird die Notiz verwendet"></textarea>
       </div>
       <div class="field">
-        <label>🔔 Erinnerungen (mehrere möglich, max 5)</label>
+        <label>🔔 Erinnerungen (max 5)</label>
         <div class="tag-list" id="reminderTags"></div>
         <div class="row" style="margin-top:6px">
           <input type="number" id="customReminder" placeholder="Custom (Tage)" min="0" max="365" style="max-width:140px">
@@ -614,7 +575,7 @@ canvas.chart{width:100%;height:200px}
   </div>
 </div>
 
-<!-- SHORTCUT HELP MODAL -->
+<!-- KEYBOARD HELP -->
 <div class="modal-bg" id="kbdModal">
   <div class="modal">
     <h2>⌨️ Tastatur-Shortcuts</h2>
@@ -626,30 +587,22 @@ canvas.chart{width:100%;height:200px}
       <tr><td>Esc</td><td>Modal schließen</td></tr>
       <tr><td>?</td><td>Diese Hilfe</td></tr>
     </table>
-    <p style="font-size:12px;color:var(--muted);margin-top:14px">💡 Auf dem Handy: Schnelle Aktionen über das ➕ unten rechts oder direkt im Dashboard.</p>
-    <div class="footer">
-      <button class="btn ok" onclick="closeModal('kbdModal')">Verstanden</button>
-    </div>
+    <div class="footer"><button class="btn ok" onclick="closeModal('kbdModal')">Verstanden</button></div>
   </div>
 </div>
 
-<!-- LIGHTBOX -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightboxImg" src="">
-</div>
-
-<!-- TOAST -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" src=""></div>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ========================================================
-   ZÄHLERSTAND-MANAGER · Foundation Edition v2.0
+   ZÄHLERSTAND-MANAGER · Kosten-Tracker Edition v2.1
    ======================================================== */
 
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.1';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -662,13 +615,28 @@ const METER_TYPES = {
   solar:      {label:'Solar/PV',      unit:'kWh',  icon:'☀️', color:'#facc15'},
 };
 
+const COST_CATEGORIES = {
+  muell: {label:'Müllabfuhr', icon:'🗑️'},
+  grundsteuer: {label:'Grundsteuer', icon:'💰'},
+  versicherung: {label:'Versicherung', icon:'🛡️'},
+  schornstein: {label:'Schornsteinfeger', icon:'🔥'},
+  hausgeld: {label:'Hausgeld', icon:'🏠'},
+  wartung: {label:'Wartung', icon:'🔧'},
+  internet: {label:'Internet/TV', icon:'📡'},
+  gez: {label:'Rundfunk (GEZ)', icon:'📺'},
+  sonstiges: {label:'Sonstiges', icon:'📌'}
+};
+
+const INTERVALS = {
+  monthly: {label:'Monatlich', factor:12},
+  quarterly: {label:'Vierteljährlich', factor:4},
+  semi: {label:'Halbjährlich', factor:2},
+  yearly: {label:'Jährlich', factor:1}
+};
+
 const REMINDER_PRESETS = [
-  {days:0, label:'Am Tag'},
-  {days:1, label:'1 Tag'},
-  {days:3, label:'3 Tage'},
-  {days:7, label:'1 Woche'},
-  {days:14, label:'2 Wochen'},
-  {days:30, label:'1 Monat'}
+  {days:0, label:'Am Tag'}, {days:1, label:'1 Tag'}, {days:3, label:'3 Tage'},
+  {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
 let state = { properties: [], readings: [], appointments: [] };
@@ -677,15 +645,10 @@ let settings = {
   themeStyle: 'apple', themeMode: 'dark'
 };
 let editingProp = null, editingAppt = null;
-let currentReminders = [7]; // Working set during appointment editing
-let histCurrentContext = null; // {propId, meterId}
+let currentReminders = [7];
+let histCurrentContext = null;
 let histCurrentTab = 'history';
-
-// Undo system
-const undoStack = [];
 let undoTimer = null;
-
-// Auto-Sync
 let autoSyncTimer = null;
 let pendingChanges = false;
 
@@ -696,11 +659,19 @@ function load(){
   if(!state.properties) state.properties=[];
   if(!state.readings) state.readings=[];
   if(!state.appointments) state.appointments=[];
-  // Defensive defaults for new fields (data safety)
+  // Defensive defaults — alte Daten kompatibel halten
   state.readings.forEach(r => { if(r.isMain === undefined) r.isMain = true; });
   state.appointments.forEach(a => {
     if(!a.reminders) a.reminders = [settings.leadDays || 7];
     if(a.calendarText === undefined) a.calendarText = '';
+  });
+  state.properties.forEach(p => {
+    if(!p.fixedCosts) p.fixedCosts = [];
+    p.meters.forEach(m => {
+      if(m.pricePerUnit === undefined) m.pricePerUnit = 0;
+      if(m.baseFeeMonthly === undefined) m.baseFeeMonthly = 0;
+      if(m.meterRentYearly === undefined) m.meterRentYearly = 0;
+    });
   });
   applyTheme();
 }
@@ -747,7 +718,7 @@ async function autoSync(){
   }
 }
 
-/* ----- Theme Management ----- */
+/* ----- Theme ----- */
 function applyTheme(){
   const root = document.documentElement;
   root.dataset.style = settings.themeStyle || 'apple';
@@ -756,7 +727,6 @@ function applyTheme(){
     mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   }
   root.dataset.mode = mode;
-  // Sync select boxes
   const ss = document.getElementById('themeStyleSel');
   const ms = document.getElementById('themeModeSel');
   if(ss) ss.value = settings.themeStyle;
@@ -765,14 +735,13 @@ function applyTheme(){
 function setThemeStyle(s){ settings.themeStyle = s; save(); applyTheme(); }
 function setThemeMode(m){ settings.themeMode = m; save(); applyTheme(); }
 function toggleMode(){
-  const cur = settings.themeMode === 'light' ? 'dark' : 'light';
-  setThemeMode(cur);
+  setThemeMode(settings.themeMode === 'light' ? 'dark' : 'light');
 }
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
   if(settings.themeMode === 'auto') applyTheme();
 });
 
-/* ----- Refresh / Cache Clear ----- */
+/* ----- Refresh ----- */
 async function refreshApp(){
   toast('Lade frisch…','ok');
   try{
@@ -791,20 +760,17 @@ async function refreshApp(){
 /* ----- Utils ----- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const fmt = (n,d=2) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
+const fmtEur = (n) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
 const today = () => new Date().toISOString().slice(0,10);
 function dateAdd(date, days){ const d=new Date(date); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
-
 function toast(msg, type='', undoAction=null){
   const t = document.getElementById('toast');
   t.innerHTML = '';
-  const span = document.createElement('span');
-  span.textContent = msg;
-  t.appendChild(span);
+  const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
   if(undoAction){
     const btn = document.createElement('button');
-    btn.className = 'undo-btn';
-    btn.textContent = '↩ RÜCKGÄNGIG';
+    btn.className = 'undo-btn'; btn.textContent = '↩ RÜCKGÄNGIG';
     btn.onclick = () => { undoAction(); t.className = 'toast'; };
     t.appendChild(btn);
   }
@@ -821,6 +787,50 @@ function humanSize(n){
   return (n/1048576).toFixed(2)+' MB';
 }
 
+/* ----- Cost calculation core ----- */
+function calcMeterCostsYearly(meter, readings){
+  const hasPrice = meter.pricePerUnit || meter.baseFeeMonthly || meter.meterRentYearly;
+  if(!hasPrice) return null;
+  let yearlyCons = 0, hasData = false;
+  if(readings.length >= 2){
+    const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+    const diff = readings[readings.length-1].value - readings[0].value;
+    if(days > 0){ yearlyCons = diff * 365 / days; hasData = true; }
+  }
+  if(!hasData && meter.expectedYearly) yearlyCons = meter.expectedYearly;
+  const arbeit = yearlyCons * (meter.pricePerUnit || 0);
+  const grund = (meter.baseFeeMonthly || 0) * 12;
+  const zaehler = meter.meterRentYearly || 0;
+  return {
+    arbeit, grund, zaehler,
+    total: arbeit + grund + zaehler,
+    consumption: yearlyCons,
+    hasData,
+    isEstimate: !hasData
+  };
+}
+function calcFixedCostsYearly(fixedCosts){
+  if(!fixedCosts || !fixedCosts.length) return 0;
+  return fixedCosts.reduce((sum, fc) => {
+    const factor = INTERVALS[fc.interval]?.factor || 1;
+    return sum + (parseFloat(fc.amount) || 0) * factor;
+  }, 0);
+}
+function calcPropertyTotalYearly(property){
+  const breakdown = {meters:{}, meterSum:0, fixed:0, total:0};
+  property.meters.forEach(m => {
+    const readings = state.readings.filter(r=>r.propId===property.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const c = calcMeterCostsYearly(m, readings);
+    if(c){
+      breakdown.meters[m.id] = c;
+      breakdown.meterSum += c.total;
+    }
+  });
+  breakdown.fixed = calcFixedCostsYearly(property.fixedCosts);
+  breakdown.total = breakdown.meterSum + breakdown.fixed;
+  return breakdown;
+}
+
 /* ----- Navigation ----- */
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
 function switchTab(tab){
@@ -831,15 +841,19 @@ function switchTab(tab){
   render(tab);
 }
 
-/* ----- Properties ----- */
+/* ----- Property Modal ----- */
 function openPropertyModal(prop){
-  editingProp = prop ? {...prop, meters:prop.meters.map(m=>({...m}))} : {id:uid(), name:'', address:'', note:'', meters:[]};
+  editingProp = prop ? 
+    {...prop, meters:prop.meters.map(m=>({...m})), fixedCosts:(prop.fixedCosts||[]).map(c=>({...c}))} : 
+    {id:uid(), name:'', address:'', note:'', meters:[], fixedCosts:[]};
+  if(!editingProp.fixedCosts) editingProp.fixedCosts = [];
   document.getElementById('propModalTitle').textContent = prop ? 'Grundstück bearbeiten' : 'Neues Grundstück';
   document.getElementById('propName').value = editingProp.name;
   document.getElementById('propAddr').value = editingProp.address || '';
   document.getElementById('propNote').value = editingProp.note || '';
   document.getElementById('propDelBtn').style.display = prop ? 'inline-flex' : 'none';
   renderMeterEditList();
+  renderFixedCostList();
   document.getElementById('propModal').classList.add('show');
 }
 function renderMeterEditList(){
@@ -861,16 +875,70 @@ function renderMeterEditList(){
         <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">📊 Erwarteter Jahresverbrauch in ${t.unit} (optional)</label>
         <input type="number" step="0.01" inputmode="decimal" placeholder="z. B. 1500" value="${m.expectedYearly||''}" onchange="editingProp.meters[${i}].expectedYearly=parseFloat(this.value)||0">
       </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">💰 KOSTEN (alle optional)</div>
+        <div class="row" style="gap:6px">
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Arbeitspreis €/${t.unit}</label>
+            <input type="number" step="0.0001" inputmode="decimal" placeholder="0,32" value="${m.pricePerUnit||''}" onchange="editingProp.meters[${i}].pricePerUnit=parseFloat(this.value)||0">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Grundgebühr €/Monat</label>
+            <input type="number" step="0.01" inputmode="decimal" placeholder="8,50" value="${m.baseFeeMonthly||''}" onchange="editingProp.meters[${i}].baseFeeMonthly=parseFloat(this.value)||0">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Zählermiete €/Jahr</label>
+            <input type="number" step="0.01" inputmode="decimal" placeholder="0" value="${m.meterRentYearly||''}" onchange="editingProp.meters[${i}].meterRentYearly=parseFloat(this.value)||0">
+          </div>
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
-function addMeterRow(){ editingProp.meters.push({id:uid(),type:'strom',number:'',location:'',expectedYearly:0}); renderMeterEditList(); }
+function addMeterRow(){
+  editingProp.meters.push({id:uid(),type:'strom',number:'',location:'',expectedYearly:0,pricePerUnit:0,baseFeeMonthly:0,meterRentYearly:0});
+  renderMeterEditList();
+}
 function removeMeterRow(i){ editingProp.meters.splice(i,1); renderMeterEditList(); }
+
+/* Fixed Costs */
+function renderFixedCostList(){
+  const c = document.getElementById('fixedCostList');
+  if(!editingProp.fixedCosts.length){
+    c.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0">Noch keine Fixkosten hinterlegt.</div>';
+    return;
+  }
+  c.innerHTML = editingProp.fixedCosts.map((fc,i) => {
+    return `<div class="fc-row">
+      <div class="row">
+        <select onchange="editingProp.fixedCosts[${i}].category=this.value">
+          ${Object.entries(COST_CATEGORIES).map(([k,v])=>`<option value="${k}" ${fc.category===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
+        </select>
+        <input placeholder="Bezeichnung" value="${escapeHtml(fc.label||'')}" onchange="editingProp.fixedCosts[${i}].label=this.value">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input type="number" step="0.01" inputmode="decimal" placeholder="Betrag €" value="${fc.amount||''}" onchange="editingProp.fixedCosts[${i}].amount=parseFloat(this.value)||0">
+        <select onchange="editingProp.fixedCosts[${i}].interval=this.value">
+          ${Object.entries(INTERVALS).map(([k,v])=>`<option value="${k}" ${fc.interval===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+        <button class="btn err sm" style="flex:0 0 auto" onclick="removeFixedCost(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function addFixedCost(){
+  editingProp.fixedCosts.push({id:uid(),category:'sonstiges',label:'',amount:0,interval:'yearly'});
+  renderFixedCostList();
+}
+function removeFixedCost(i){ editingProp.fixedCosts.splice(i,1); renderFixedCostList(); }
+
 function saveProperty(){
   editingProp.name = document.getElementById('propName').value.trim();
   editingProp.address = document.getElementById('propAddr').value.trim();
   editingProp.note = document.getElementById('propNote').value.trim();
   if(!editingProp.name){ toast('Name fehlt','err'); return; }
+  // Clean up empty fixed costs
+  editingProp.fixedCosts = editingProp.fixedCosts.filter(fc => fc.label || fc.amount);
   const idx = state.properties.findIndex(p=>p.id===editingProp.id);
   if(idx>=0) state.properties[idx]=editingProp; else state.properties.push(editingProp);
   save(); closeModal('propModal'); render();
@@ -907,6 +975,7 @@ function renderProperties(){
         <button class="btn sm ghost" onclick='openPropertyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️</button>
       </div>
       ${p.note?`<div style="color:var(--muted);font-size:13px;margin-top:6px">${escapeHtml(p.note)}</div>`:''}
+      ${(p.fixedCosts && p.fixedCosts.length) ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">💸 ${p.fixedCosts.length} Fixkosten · ${fmtEur(calcFixedCostsYearly(p.fixedCosts))}/Jahr</div>` : ''}
       <div class="grid" style="margin-top:12px">
         ${p.meters.map(m => renderMeterCard(p,m)).join('') || '<div class="empty" style="grid-column:1/-1;padding:20px"><div class="ico" style="font-size:32px">⚡</div>Keine Zähler</div>'}
       </div>
@@ -952,7 +1021,35 @@ function renderMeterCard(p, m){
     }
   }
 
-  // Anomaly check
+  // Cost box
+  let costBox = '';
+  const costs = calcMeterCostsYearly(m, all);
+  if(costs){
+    const parts = [];
+    if(costs.arbeit > 0) parts.push(`Arbeit ${fmtEur(costs.arbeit)}`);
+    if(costs.grund > 0) parts.push(`Grund ${fmtEur(costs.grund)}`);
+    if(costs.zaehler > 0) parts.push(`Miete ${fmtEur(costs.zaehler)}`);
+    
+    // Vorjahresvergleich in EUR
+    let compareLine = '';
+    if(consume !== null && m.pricePerUnit){
+      const prevYearCons = currentYearly - consume; // Vorjahresverbrauch ungefähr
+      const diff = consume * m.pricePerUnit;
+      const sign = diff >= 0 ? '+' : '';
+      const col = diff >= 0 ? 'var(--err)' : 'var(--ok)';
+      compareLine = `<div class="compare"><span style="color:${col};font-weight:600">${sign}${fmtEur(Math.abs(diff))} ggü. Vorjahr</span></div>`;
+    }
+    
+    costBox = `<div class="cost-box">
+      <div class="total">
+        <span class="label">💰 Jahreskosten ${costs.isEstimate?'(geschätzt)':'ca.'}</span>
+        <span>${fmtEur(costs.total)}</span>
+      </div>
+      ${parts.length ? `<div class="breakdown">${parts.join(' · ')}</div>` : ''}
+      ${compareLine}
+    </div>`;
+  }
+
   let anomaly = '';
   if(all.length >= 3){
     const anom = detectAnomaly(all);
@@ -977,6 +1074,7 @@ function renderMeterCard(p, m){
       ${consume!==null?`<span class="chip ${consume>=0?'acc':'ok'}">Δ ${fmt(consume,2)} ${type.unit}/Jahr</span>`:''}
     </div>
     ${expectComp}
+    ${costBox}
     ${anomaly}
     ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong></div>`:''}
     <div class="actions">
@@ -986,7 +1084,6 @@ function renderMeterCard(p, m){
   </div>`;
 }
 
-/* ----- Smart calculations ----- */
 function findYearAgo(readings, current){
   if(!current || readings.length<2) return null;
   const target = new Date(current.date); target.setFullYear(target.getFullYear()-1);
@@ -1013,25 +1110,20 @@ function predictNextReading(readings){
 }
 function detectAnomaly(readings){
   if(readings.length < 3) return null;
-  // Calculate average daily consumption over earlier periods
   const recentN = Math.min(3, readings.length - 1);
   const recent = readings.slice(-recentN-1);
   const baseline = readings.slice(0, -recentN);
   if(baseline.length < 2) return null;
-  
   const baseDays = daysBetween(baseline[0].date, baseline[baseline.length-1].date);
   const baseDiff = baseline[baseline.length-1].value - baseline[0].value;
   if(baseDays === 0) return null;
   const basePerDay = baseDiff / baseDays;
-  
   const recDays = daysBetween(recent[0].date, recent[recent.length-1].date);
   const recDiff = recent[recent.length-1].value - recent[0].value;
   if(recDays === 0) return null;
   const recPerDay = recDiff / recDays;
-  
   if(basePerDay <= 0) return null;
   const ratio = recPerDay / basePerDay;
-  
   if(ratio > 1.5){
     const pct = Math.round((ratio - 1) * 100);
     return {
@@ -1140,7 +1232,6 @@ function maybeCreateReadingReminder(propId, meterId){
     save(); toast('Termin angelegt','ok');
   }
 }
-
 function quickReadFor(propId, meterId){
   switchTab('readings');
   setTimeout(()=>{
@@ -1154,7 +1245,6 @@ function quickReadFor(propId, meterId){
 }
 function quickAdd(){ switchTab('readings'); setTimeout(()=>document.getElementById('readValue').focus(),100); }
 
-/* ----- Quick-add from Dashboard ----- */
 function dashQuickSave(propId, meterId){
   const inp = document.getElementById(`qr_${propId}_${meterId}`);
   const mainCb = document.getElementById(`qrm_${propId}_${meterId}`);
@@ -1168,16 +1258,14 @@ function dashQuickSave(propId, meterId){
   state.readings.push({id:uid(), propId, meterId, date:today(), value, note:'', photo:null, isMain});
   save();
   toast(`${isMain?'⭐':'📝'} ${fmt(value,3)} gespeichert`,'ok');
-  // Focus next input
   inp.value = '';
   const all = document.querySelectorAll('.quick-row input[type="number"]');
   let idx = -1; all.forEach((e,i)=>{ if(e===inp) idx=i; });
   if(idx >= 0 && all[idx+1]) all[idx+1].focus();
-  // Re-render dashboard to show new values
   if(document.querySelector('.tab.active')?.dataset.tab === 'dashboard') renderDashboard();
 }
 
-/* ----- History Modal ----- */
+/* ----- History ----- */
 function showHistory(propId, meterId){
   histCurrentContext = {propId, meterId};
   histCurrentTab = 'history';
@@ -1210,7 +1298,6 @@ function renderHistContent(){
   let readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
   if(onlyMain) readings = readings.filter(r=>r.isMain);
   const c = document.getElementById('histContent');
-  
   if(histCurrentTab === 'photos'){
     const withPhotos = readings.filter(r=>r.photo);
     if(!withPhotos.length){
@@ -1225,20 +1312,19 @@ function renderHistContent(){
     `).join('')}</div>`;
     return;
   }
-  
-  // History tab
   if(!readings.length){ c.innerHTML='<div class="empty">Keine Einträge</div>'; return; }
   c.innerHTML = readings.map((r,i) => {
     const next = readings[i+1];
     const diff = next ? (r.value-next.value) : null;
     const days = next ? daysBetween(next.date, r.date) : null;
     const badge = r.isMain ? '<span class="read-badge main">⭐</span>' : '<span class="read-badge sub">📝</span>';
+    const costInfo = (diff && m.pricePerUnit) ? ` · ≈ ${fmtEur(diff * m.pricePerUnit)}` : '';
     return `<div class="history-item">
       <div>
         <div class="date">${badge} ${formatDate(r.date)}</div>
-        ${diff!==null?`<div style="font-size:11px;color:var(--muted)">+${fmt(diff,2)} ${t.unit} in ${days}T</div>`:''}
+        ${diff!==null?`<div style="font-size:11px;color:var(--muted)">+${fmt(diff,2)} ${t.unit} in ${days}T${costInfo}</div>`:''}
         ${r.note?`<div style="font-size:11px;color:var(--muted)">📝 ${escapeHtml(r.note)}</div>`:''}
-        ${r.photo?`<img src="${r.photo}" class="preview" style="max-width:120px;margin-top:4px;cursor:pointer" onclick="openLightboxImg('${r.id}')">`:''}
+        ${r.photo?`<img src="${r.photo}" class="preview" style="max-width:120px;margin-top:4px;cursor:pointer" onclick="openLightbox('${r.id}')">`:''}
       </div>
       <div style="text-align:right">
         <div class="val">${fmt(r.value,3)}</div>
@@ -1270,7 +1356,6 @@ function openLightbox(readingId){
   document.getElementById('lightboxImg').src = r.photo;
   document.getElementById('lightbox').classList.add('show');
 }
-function openLightboxImg(readingId){ openLightbox(readingId); }
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('show'); }
 
 /* ----- Appointments ----- */
@@ -1303,7 +1388,6 @@ function toggleCalFields(){
 }
 function renderReminderTags(){
   const c = document.getElementById('reminderTags');
-  // Combine preset + custom
   const allDays = [...new Set([...REMINDER_PRESETS.map(p=>p.days), ...currentReminders])].sort((a,b)=>a-b);
   c.innerHTML = allDays.map(d => {
     const preset = REMINDER_PRESETS.find(p=>p.days===d);
@@ -1314,15 +1398,10 @@ function renderReminderTags(){
 }
 function toggleReminder(d){
   const idx = currentReminders.indexOf(d);
-  if(idx >= 0){
-    currentReminders.splice(idx, 1);
-  } else {
-    if(currentReminders.length >= 5){
-      toast('Maximal 5 Erinnerungen pro Termin','err');
-      return;
-    }
-    currentReminders.push(d);
-    currentReminders.sort((a,b)=>a-b);
+  if(idx >= 0){ currentReminders.splice(idx, 1); }
+  else {
+    if(currentReminders.length >= 5){ toast('Maximal 5 Erinnerungen','err'); return; }
+    currentReminders.push(d); currentReminders.sort((a,b)=>a-b);
   }
   renderReminderTags();
 }
@@ -1331,8 +1410,7 @@ function addCustomReminder(){
   if(isNaN(v) || v < 0 || v > 365){ toast('Wert 0-365 Tage','err'); return; }
   if(currentReminders.length >= 5){ toast('Maximal 5 Erinnerungen','err'); return; }
   if(!currentReminders.includes(v)){
-    currentReminders.push(v);
-    currentReminders.sort((a,b)=>a-b);
+    currentReminders.push(v); currentReminders.sort((a,b)=>a-b);
     renderReminderTags();
     document.getElementById('customReminder').value='';
   }
@@ -1374,7 +1452,7 @@ function renderAppointments(){
   if(!all.length){
     c.innerHTML = `<div class="empty"><div class="ico">📅</div>
       <p>Keine Termine.</p>
-      <p style="margin-top:10px;font-size:13px">Vorschläge: Schornsteinfeger, Heizungswartung, Rauchmelder-Check, Legionellenprüfung, E-Check, Versicherungs-Termine…</p>
+      <p style="margin-top:10px;font-size:13px">Vorschläge: Schornsteinfeger, Heizungswartung, Rauchmelder-Check, Legionellenprüfung, E-Check...</p>
       <p style="margin-top:10px"><button class="btn" onclick="openAppointmentModal()">+ Termin anlegen</button></p>
     </div>`;
     return;
@@ -1456,6 +1534,54 @@ function renderDashboard(){
     }));
   }
 
+  // COST OVERVIEW
+  let costOverview = '';
+  if(state.properties.length){
+    let grandTotal = 0;
+    let anyCosts = false;
+    const propRows = state.properties.map(p => {
+      const bd = calcPropertyTotalYearly(p);
+      if(bd.total === 0) return '';
+      anyCosts = true;
+      grandTotal += bd.total;
+      const parts = [];
+      p.meters.forEach(m => {
+        const c = bd.meters[m.id];
+        if(c && c.total > 0){
+          const t = METER_TYPES[m.type]||METER_TYPES.strom;
+          parts.push(`${t.icon} ${fmtEur(c.total)}`);
+        }
+      });
+      if(bd.fixed > 0) parts.push(`📌 Fixkosten ${fmtEur(bd.fixed)}`);
+      return `<div class="prop-row">
+        <div class="head-line">
+          <div class="prop-name">🏠 ${escapeHtml(p.name)}</div>
+          <div class="prop-total">${fmtEur(bd.total)}</div>
+        </div>
+        <div class="prop-breakdown">${parts.join(' · ')}</div>
+      </div>`;
+    }).join('');
+    
+    if(anyCosts){
+      const monthly = grandTotal / 12;
+      costOverview = `<div class="card">
+        <h2>💰 Kostenübersicht (Jahr)</h2>
+        <div class="cost-dash">
+          ${propRows}
+          ${state.properties.length > 1 ? `<div class="grand-total">
+            <div class="val">${fmtEur(grandTotal)}</div>
+            <div class="lbl">Beide Grundstücke / Jahr</div>
+            <div class="sub">≈ ${fmtEur(monthly)} pro Monat</div>
+          </div>` : `<div class="grand-total">
+            <div class="val">${fmtEur(monthly)}</div>
+            <div class="lbl">Pro Monat</div>
+          </div>`}
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px">💡 Hinweis: Auto-Hochrechnung aus deinen Eingaben. Vollständig nur, wenn alle Preise & Fixkosten gepflegt sind.</p>
+      </div>`;
+    }
+  }
+
   c.innerHTML = `
     <div class="card">
       <h2>👋 Hallo!</h2>
@@ -1468,9 +1594,11 @@ function renderDashboard(){
       </div>
     </div>
 
+    ${costOverview}
+
     ${quickAddCards ? `<div class="card">
       <h2>⚡ Schnell-Eintrag</h2>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Wert eintippen → ⭐ für Hauptablesung → ✓. Enter springt zum nächsten Feld.</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Wert → ⭐ für Hauptablesung → ✓. Enter springt zum nächsten Feld.</p>
       ${quickAddCards}
     </div>`:''}
 
@@ -1486,7 +1614,7 @@ function renderDashboard(){
 
     ${!state.properties.length?`<div class="card" style="background:color-mix(in srgb,var(--acc) 10%,transparent);border-color:var(--acc)">
       <h2>🎉 Willkommen!</h2>
-      <p style="font-size:14px;line-height:1.6">Lege als Erstes ein <strong>Grundstück</strong> an und füge dort deine <strong>Zähler</strong> hinzu. Dann kannst du Zählerstände erfassen.</p>
+      <p style="font-size:14px;line-height:1.6">Lege als Erstes ein <strong>Grundstück</strong> an mit deinen <strong>Zählern</strong> und ggf. <strong>Fixkosten</strong>. Dann kannst du Zählerstände erfassen und siehst sofort deine Gesamtkosten.</p>
       <button class="btn ok" style="margin-top:10px" onclick="switchTab('properties')">🏠 Loslegen</button>
     </div>`:''}
   `;
@@ -1516,6 +1644,11 @@ function renderStats(){
         const col = pct <= 90 ? 'var(--ok)' : pct <= 110 ? 'var(--warn)' : 'var(--err)';
         expectInfo = `<div style="margin-top:6px;font-size:13px"><span style="color:${col};font-weight:600">${fmt(pct,0)}% des Solls</span> (Soll: ${fmt(m.expectedYearly,0)} ${t.unit}/J)</div>`;
       }
+      let costInfo = '';
+      const costs = calcMeterCostsYearly(m, rs);
+      if(costs){
+        costInfo = `<div style="margin-top:6px;font-size:13px">💰 <strong>${fmtEur(costs.total)}/Jahr</strong> · ≈ ${fmtEur(costs.total/12)}/Monat</div>`;
+      }
       propHtml += `<div style="margin-top:10px">
         <h3>${t.icon} ${t.label}</h3>
         <div class="row">
@@ -1524,6 +1657,7 @@ function renderStats(){
           <div class="stat-box"><div class="val">${fmt(perYear,0)}</div><div class="lbl">${t.unit}/Jahr</div></div>
         </div>
         ${expectInfo}
+        ${costInfo}
         <canvas class="chart" id="chart_${p.id}_${m.id}"></canvas>
       </div>`;
     });
@@ -1543,8 +1677,7 @@ function drawChart(canvas, readings, type){
   const W = canvas.offsetWidth, H = 200;
   canvas.width = W*dpr; canvas.height = H*dpr;
   const ctx = canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,W,H);
+  ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
   const pad = {l:50,r:10,t:10,b:30};
   const vals = readings.map(r=>r.value);
   const dates = readings.map(r=>new Date(r.date).getTime());
@@ -1584,10 +1717,7 @@ function getCss(v){ return getComputedStyle(document.documentElement).getPropert
 
 /* ----- Render dispatcher ----- */
 function render(tab){
-  if(!tab){
-    const a = document.querySelector('.tab.active');
-    tab = a?a.dataset.tab:'dashboard';
-  }
+  if(!tab){ const a = document.querySelector('.tab.active'); tab = a?a.dataset.tab:'dashboard'; }
   if(tab==='dashboard') renderDashboard();
   else if(tab==='properties') renderProperties();
   else if(tab==='readings') updateReadPropSel();
@@ -1616,7 +1746,42 @@ function exportJSON(){
   a.href = URL.createObjectURL(blob);
   a.download = `zaehler-backup-${today()}.json`;
   a.click();
-  toast('Export gestartet','ok');
+  toast('JSON Export gestartet','ok');
+}
+function exportCSV(){
+  const rows = [[
+    'Datum','Grundstück','Zähler-Art','Standort','Zählernummer',
+    'Stand','Einheit','Verbrauch seit Vorigem','Tage','Verbrauch/Tag',
+    'Kosten geschätzt €','Hauptablesung','Notiz'
+  ]];
+  state.properties.forEach(p => {
+    p.meters.forEach(m => {
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const readings = state.readings.filter(r=>r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      readings.forEach((r,i) => {
+        const prev = i>0 ? readings[i-1] : null;
+        const diff = prev ? (r.value - prev.value).toFixed(3) : '';
+        const days = prev ? daysBetween(prev.date, r.date) : '';
+        const perDay = (prev && days>0) ? ((r.value-prev.value)/days).toFixed(3) : '';
+        const cost = (prev && m.pricePerUnit) ? ((r.value-prev.value) * m.pricePerUnit).toFixed(2) : '';
+        rows.push([
+          r.date, p.name, t.label, m.location||'', m.number||'',
+          r.value, t.unit, diff, days, perDay, cost,
+          r.isMain ? 'Ja':'Nein', r.note||''
+        ]);
+      });
+    });
+  });
+  // BOM + Semicolon for Excel DE
+  const csv = '\uFEFF' + rows.map(row => 
+    row.map(cell => `"${(cell+'').replace(/"/g,'""')}"`).join(';')
+  ).join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `zaehler-export-${today()}.csv`;
+  a.click();
+  toast('CSV Export gestartet','ok');
 }
 function importJSON(ev){
   const f = ev.target.files[0]; if(!f) return;
@@ -1655,13 +1820,8 @@ function gInit(){
             client_id: settings.gClientId,
             scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
             callback: (t) => {
-              if(t.error){
-                // Silent refresh failed — user needs to click Sign In
-                updateSyncStatus('bereit');
-                return;
-              }
+              if(t.error){ updateSyncStatus('bereit'); return; }
               gToken = t;
-              // Save token with expiry for next app start
               const expiresIn = (t.expires_in || 3600) * 1000;
               try {
                 localStorage.setItem('zaehler_gtoken', JSON.stringify({
@@ -1676,19 +1836,16 @@ function gInit(){
               setTimeout(syncNow, 800);
             }
           });
-          // Try to restore previous session
           tryRestoreToken();
         });
       });
     });
   }
 }
-
 function tryRestoreToken(){
   try {
     const saved = JSON.parse(localStorage.getItem('zaehler_gtoken') || 'null');
     if(saved && saved.access_token && saved.expires_at && saved.expires_at > Date.now() + 60000){
-      // Token still valid (with 1 min buffer)
       gToken = saved;
       gapi.client.setToken({access_token: saved.access_token});
       updateSyncStatus('verbunden');
@@ -1696,17 +1853,12 @@ function tryRestoreToken(){
       return;
     }
   } catch(e){}
-  // Token expired or missing — try silent refresh (no popup)
   if(gTokenClient){
     try {
       updateSyncStatus('synchronisiere…');
       gTokenClient.requestAccessToken({prompt: ''});
-    } catch(e){
-      updateSyncStatus('bereit');
-    }
-  } else {
-    updateSyncStatus('bereit');
-  }
+    } catch(e){ updateSyncStatus('bereit'); }
+  } else { updateSyncStatus('bereit'); }
 }
 function loadScript(src, cb){
   if(document.querySelector(`script[src="${src}"]`)){ cb(); return; }
@@ -1728,7 +1880,6 @@ function gSignOut(){
   gToken=null; updateSyncStatus('lokal'); toast('Abgemeldet','ok');
 }
 function gIsSignedIn(){ return !!gToken && gReady; }
-
 function updateSyncStatus(s){
   const txt = document.getElementById('syncText'), el = document.getElementById('syncStatus');
   if(!txt||!el) return;
@@ -1737,7 +1888,6 @@ function updateSyncStatus(s){
   const cls = (s==='verbunden')?'ok':(s==='fehler')?'err':(s==='ungespeichert'||s==='synchronisiere…')?'warn':'';
   el.className = 'sync-status ' + cls;
 }
-
 async function findDriveFile(){
   const res = await gapi.client.drive.files.list({q:`name='${DRIVE_FILE_NAME}' and trashed=false`, fields:'files(id,name,modifiedTime)'});
   return res.result.files[0] || null;
@@ -1752,19 +1902,25 @@ async function syncNow(){
       const rdata = typeof remote.body==='string' ? JSON.parse(remote.body) : remote.body;
       if(rdata && rdata.state){
         state = mergeState(state, rdata.state);
-        // Re-apply defensive defaults after merge
+        // Defensive defaults after merge
         state.readings.forEach(r => { if(r.isMain === undefined) r.isMain = true; });
         state.appointments.forEach(a => {
           if(!a.reminders) a.reminders = [7];
           if(a.calendarText === undefined) a.calendarText = '';
         });
+        state.properties.forEach(p => {
+          if(!p.fixedCosts) p.fixedCosts = [];
+          p.meters.forEach(m => {
+            if(m.pricePerUnit === undefined) m.pricePerUnit = 0;
+            if(m.baseFeeMonthly === undefined) m.baseFeeMonthly = 0;
+            if(m.meterRentYearly === undefined) m.meterRentYearly = 0;
+          });
+        });
         localStorage.setItem(STORE_KEY, JSON.stringify(state));
       }
       driveFileId = file.id;
       await uploadDrive();
-    } else {
-      await uploadDrive(true);
-    }
+    } else { await uploadDrive(true); }
     settings.lastSync = Date.now();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     pendingChanges = false;
@@ -1776,11 +1932,7 @@ async function syncNow(){
   }
 }
 function mergeState(local, remote){
-  function mergeArr(a,b){
-    const map = {};
-    [...a, ...b].forEach(x => map[x.id] = x);
-    return Object.values(map);
-  }
+  function mergeArr(a,b){ const map = {}; [...a, ...b].forEach(x => map[x.id] = x); return Object.values(map); }
   return {
     properties: mergeArr(local.properties||[], remote.properties||[]),
     readings: mergeArr(local.readings||[], remote.readings||[]),
@@ -1846,10 +1998,9 @@ function addMinutes(t, mins){
   return d.toTimeString().slice(0,5);
 }
 
-/* ----- Keyboard Shortcuts ----- */
+/* ----- Keyboard ----- */
 document.addEventListener('keydown', e => {
   const inField = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
-  // Esc always works
   if(e.key === 'Escape'){
     document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
     document.getElementById('lightbox').classList.remove('show');
@@ -1873,25 +2024,20 @@ document.getElementById('readDate').value = today();
 load();
 gInit();
 render();
-
 setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
 if('serviceWorker' in navigator){
   const swCode = `
     self.addEventListener('install',e=>{self.skipWaiting()});
     self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});
-    self.addEventListener('fetch',e=>{
-      e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
-    });
+    self.addEventListener('fetch',e=>{ e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))); });
   `;
   const blob = new Blob([swCode],{type:'text/javascript'});
   navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
 }
-
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => {
   if(e.target===m) m.classList.remove('show');
 }));
-
 window.addEventListener('beforeunload', () => {
   save();
   if(pendingChanges && gIsSignedIn()){ try{ autoSync(); }catch(_){} }
