@@ -510,6 +510,41 @@
     }
     .empty-state-icon { font-size: 2.5rem; margin-bottom: 10px; }
 
+    .zaehler-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--bg-elev);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: transform var(--transition);
+      border: 1px solid var(--border);
+    }
+    .zaehler-row:hover { transform: translateX(3px); border-color: var(--accent); }
+    .zaehler-row-info { flex: 1; }
+    .zaehler-row-type {
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .zaehler-row-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .zaehler-empty {
+      padding: 14px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      background: var(--bg-elev);
+      border-radius: 8px;
+    }
+
     /* ============================================
        MOBILE OPTIMIZATIONS
     ============================================ */
@@ -708,9 +743,78 @@
         <label>Notizen</label>
         <textarea id="gsNotes" rows="3"></textarea>
       </div>
+
+      <div class="zaehler-section" id="gsZaehlerSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;">
+          <h4 style="margin:0;color:var(--accent);font-size:0.95rem;">🔢 Zähler</h4>
+          <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.85rem;" id="btnAddZaehler">+ Zähler</button>
+        </div>
+        <div id="zaehlerList"></div>
+      </div>
+
       <div class="modal-actions">
+        <button class="btn btn-danger" id="btnDeleteGrundstueck" style="margin-right:auto;">🗑️ Löschen</button>
         <button class="btn btn-secondary" onclick="closeModal('modalGrundstueck')">Abbrechen</button>
         <button class="btn" id="btnSaveGrundstueck">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       ZÄHLER MODAL (Sub-Modal)
+  ============================================ -->
+  <div class="modal-overlay" id="modalZaehler">
+    <div class="modal">
+      <h3 id="zModalTitle">Neuer Zähler</h3>
+      <div class="form-group">
+        <label>Typ *</label>
+        <select id="zType">
+          <option value="Strom">⚡ Strom</option>
+          <option value="Gas">🔥 Gas</option>
+          <option value="Wasser">💧 Wasser</option>
+          <option value="Warmwasser">🚿 Warmwasser</option>
+          <option value="Heizung">🌡️ Heizung</option>
+          <option value="Sonstiges">📊 Sonstiges</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Zählernummer</label>
+          <input type="text" id="zNummer" placeholder="z.B. 123456789">
+        </div>
+        <div class="form-group">
+          <label>Einheit</label>
+          <select id="zEinheit">
+            <option value="kWh">kWh</option>
+            <option value="m³">m³</option>
+            <option value="MWh">MWh</option>
+            <option value="L">Liter</option>
+            <option value="Stk">Stück</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Grundgebühr (€/Monat)</label>
+          <input type="number" id="zFixkosten" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Preis pro Einheit (€)</label>
+          <input type="number" id="zPreis" step="0.0001" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Ablesefrist (Tag im Jahr, optional)</label>
+        <input type="text" id="zAblesefrist" placeholder="z.B. 31.12">
+      </div>
+      <div class="form-group">
+        <label>Notizen</label>
+        <textarea id="zNotes" rows="2"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="btnDeleteZaehler" style="margin-right:auto;">🗑️ Löschen</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalZaehler')">Abbrechen</button>
+        <button class="btn" id="btnSaveZaehler">Speichern</button>
       </div>
     </div>
   </div>
@@ -735,7 +839,7 @@ const CONFIG = {
   DRIVE_ROOT_FOLDER: 'Zaehler-App',
   PHOTO_FOLDER: 'Fotos',
   DATA_FILE: 'zaehler-data.json',
-  APP_VERSION: '3.1.1'
+  APP_VERSION: '3.2.0'
 };
 
 // ---------- STATE ----------
@@ -1137,6 +1241,148 @@ async function syncFromDrive() {
 setInterval(() => { if (STATE.dirty) syncToDrive(); }, 30000);
 
 /* ============================================================
+   ZAEHLER CRUD
+   ============================================================ */
+
+const ZAEHLER_ICONS = {
+  'Strom': '⚡', 'Gas': '🔥', 'Wasser': '💧',
+  'Warmwasser': '🚿', 'Heizung': '🌡️', 'Sonstiges': '📊'
+};
+
+let editingZaehlerId = null;
+
+function renderZaehlerListInModal() {
+  const list = $('#zaehlerList');
+  if (!editingGrundstueckId) {
+    list.innerHTML = '<div class="zaehler-empty">Erst Grundstück speichern, dann Zähler hinzufügen</div>';
+    $('#btnAddZaehler').disabled = true;
+    return;
+  }
+  $('#btnAddZaehler').disabled = false;
+  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
+  if (!gs || !gs.zaehler || gs.zaehler.length === 0) {
+    list.innerHTML = '<div class="zaehler-empty">Noch keine Zähler angelegt</div>';
+    return;
+  }
+  list.innerHTML = '';
+  gs.zaehler.forEach(z => {
+    const icon = ZAEHLER_ICONS[z.type] || '📊';
+    const row = document.createElement('div');
+    row.className = 'zaehler-row';
+    row.onclick = () => openZaehlerEdit(z.id);
+    row.innerHTML = `
+      <div class="zaehler-row-info">
+        <div class="zaehler-row-type">${icon} ${z.type}</div>
+        <div class="zaehler-row-meta">
+          ${z.nummer ? 'Nr. ' + z.nummer : 'ohne Nummer'} · ${z.einheit || '–'}
+          ${z.fixkosten ? ' · ' + z.fixkosten + ' €/Mo.' : ''}
+        </div>
+      </div>
+      <div>›</div>`;
+    list.appendChild(row);
+  });
+}
+
+function openZaehlerNew() {
+  if (!editingGrundstueckId) {
+    toast('Bitte erst Grundstück speichern', 'warning');
+    return;
+  }
+  editingZaehlerId = null;
+  $('#zModalTitle').textContent = 'Neuer Zähler';
+  $('#zType').value = 'Strom';
+  $('#zNummer').value = '';
+  $('#zEinheit').value = 'kWh';
+  $('#zFixkosten').value = '';
+  $('#zPreis').value = '';
+  $('#zAblesefrist').value = '';
+  $('#zNotes').value = '';
+  $('#btnDeleteZaehler').style.display = 'none';
+  openModal('modalZaehler');
+}
+
+function openZaehlerEdit(zId) {
+  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
+  if (!gs) return;
+  const z = gs.zaehler.find(zz => zz.id === zId);
+  if (!z) return;
+  editingZaehlerId = zId;
+  $('#zModalTitle').textContent = `Bearbeiten: ${z.type}`;
+  $('#zType').value = z.type || 'Strom';
+  $('#zNummer').value = z.nummer || '';
+  $('#zEinheit').value = z.einheit || 'kWh';
+  $('#zFixkosten').value = z.fixkosten || '';
+  $('#zPreis').value = z.preis || '';
+  $('#zAblesefrist').value = z.ablesefrist || '';
+  $('#zNotes').value = z.notes || '';
+  $('#btnDeleteZaehler').style.display = 'inline-flex';
+  openModal('modalZaehler');
+}
+
+function saveZaehler() {
+  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
+  if (!gs) return;
+  if (!gs.zaehler) gs.zaehler = [];
+
+  const data = {
+    type: $('#zType').value,
+    nummer: $('#zNummer').value.trim(),
+    einheit: $('#zEinheit').value,
+    fixkosten: parseFloat($('#zFixkosten').value) || 0,
+    preis: parseFloat($('#zPreis').value) || 0,
+    ablesefrist: $('#zAblesefrist').value.trim(),
+    notes: $('#zNotes').value.trim()
+  };
+
+  if (editingZaehlerId) {
+    const z = gs.zaehler.find(zz => zz.id === editingZaehlerId);
+    if (z) Object.assign(z, data);
+    logActivity('edit', `Zähler "${data.type}" aktualisiert (${gs.name})`, '✏️');
+  } else {
+    const newZ = { id: uid(), ...data };
+    gs.zaehler.push(newZ);
+    logActivity('add', `Zähler "${data.type}" angelegt (${gs.name})`, ZAEHLER_ICONS[data.type] || '🔢');
+  }
+  saveLocal();
+  syncToDrive();
+  renderZaehlerListInModal();
+  renderAll();
+  closeModal('modalZaehler');
+  toast('Zähler gespeichert', 'success');
+}
+
+function deleteZaehler() {
+  if (!editingZaehlerId) return;
+  if (!confirm('Diesen Zähler wirklich löschen? Zugehörige Ablesungen bleiben erhalten.')) return;
+  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
+  if (!gs) return;
+  const z = gs.zaehler.find(zz => zz.id === editingZaehlerId);
+  gs.zaehler = gs.zaehler.filter(zz => zz.id !== editingZaehlerId);
+  saveLocal();
+  syncToDrive();
+  logActivity('delete', `Zähler "${z?.type}" gelöscht`, '🗑️');
+  renderZaehlerListInModal();
+  renderAll();
+  closeModal('modalZaehler');
+  toast('Zähler gelöscht', 'warning');
+}
+
+function deleteGrundstueck() {
+  if (!editingGrundstueckId) return;
+  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
+  if (!gs) return;
+  if (!confirm(`Grundstück "${gs.name}" wirklich löschen? Alle Zähler & Ablesungen werden mitgelöscht!`)) return;
+  STATE.data.grundstuecke = STATE.data.grundstuecke.filter(g => g.id !== editingGrundstueckId);
+  STATE.data.readings = STATE.data.readings.filter(r => r.grundstueckId !== editingGrundstueckId);
+  saveLocal();
+  syncToDrive();
+  logActivity('delete', `Grundstück "${gs.name}" gelöscht`, '🗑️');
+  renderAll();
+  closeModal('modalGrundstueck');
+  toast('Grundstück gelöscht', 'warning');
+}
+
+/* ============================================================
    RENDERING
    ============================================================ */
 
@@ -1315,6 +1561,8 @@ function openGrundstueckNew() {
   $('#gsName').value = '';
   $('#gsAdresse').value = '';
   $('#gsNotes').value = '';
+  $('#btnDeleteGrundstueck').style.display = 'none';
+  renderZaehlerListInModal();
   openModal('modalGrundstueck');
 }
 
@@ -1326,6 +1574,8 @@ function openGrundstueckEdit(id) {
   $('#gsName').value = gs.name || '';
   $('#gsAdresse').value = gs.adresse || '';
   $('#gsNotes').value = gs.notes || '';
+  $('#btnDeleteGrundstueck').style.display = 'inline-flex';
+  renderZaehlerListInModal();
   openModal('modalGrundstueck');
 }
 
@@ -1335,6 +1585,7 @@ function saveGrundstueck() {
     toast('Bezeichnung erforderlich', 'warning');
     return;
   }
+  let isNew = false;
   if (editingGrundstueckId) {
     const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
     if (gs) {
@@ -1352,12 +1603,22 @@ function saveGrundstueck() {
       zaehler: []
     };
     STATE.data.grundstuecke.push(newGs);
+    editingGrundstueckId = newGs.id;
+    isNew = true;
     logActivity('add', `Grundstück "${name}" angelegt`, '🏠');
   }
   saveLocal();
+  syncToDrive();
   renderAll();
-  closeModal('modalGrundstueck');
-  toast('Gespeichert', 'success');
+  if (isNew) {
+    $('#gsModalTitle').textContent = `Bearbeiten: ${name}`;
+    $('#btnDeleteGrundstueck').style.display = 'inline-flex';
+    renderZaehlerListInModal();
+    toast('Grundstück angelegt – jetzt Zähler hinzufügen!', 'success');
+  } else {
+    closeModal('modalGrundstueck');
+    toast('Gespeichert', 'success');
+  }
 }
 
 /* ============================================================
@@ -1619,6 +1880,10 @@ function bindEvents() {
   // Grundstücke
   $('#btnAddGrundstueck').onclick = openGrundstueckNew;
   $('#btnSaveGrundstueck').onclick = saveGrundstueck;
+  $('#btnDeleteGrundstueck').onclick = deleteGrundstueck;
+  $('#btnAddZaehler').onclick = openZaehlerNew;
+  $('#btnSaveZaehler').onclick = saveZaehler;
+  $('#btnDeleteZaehler').onclick = deleteZaehler;
 
   // Settings
   $('#btnGSignIn').onclick = gSignIn;
