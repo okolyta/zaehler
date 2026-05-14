@@ -125,6 +125,11 @@ header .right{display:flex;gap:8px;align-items:center}
 @keyframes pulseWarn{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 img.preview{max-width:100%;border-radius:8px;margin-top:8px}
 canvas.chart{width:100%;height:200px}
+.expect-box{margin-top:8px;padding:8px;background:var(--card2);border-radius:8px}
+.expect-box .head-line{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.expect-box .bar-bg{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden}
+.expect-box .bar-fg{height:100%;transition:width .5s;border-radius:3px}
+.expect-box .ist-line{font-size:11px;color:var(--muted);margin-top:4px}
 @media(max-width:600px){
   .meter-card .reading{font-size:20px}
   .tab{padding:12px 14px}
@@ -263,7 +268,7 @@ canvas.chart{width:100%;height:200px}
 
     <div class="card">
       <h2>ℹ️ Über</h2>
-      <p style="font-size:13px;color:var(--muted)">Version 1.2 · Auto-Sync Edition</p>
+      <p style="font-size:13px;color:var(--muted)">Version 1.3 · Verbrauchs-Vergleich Edition</p>
       <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
       <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
@@ -456,10 +461,12 @@ function openPropertyModal(prop){
 }
 function renderMeterEditList(){
   const c = document.getElementById('meterEditList');
-  c.innerHTML = editingProp.meters.map((m,i)=>`
+  c.innerHTML = editingProp.meters.map((m,i)=>{
+    const t = METER_TYPES[m.type]||METER_TYPES.strom;
+    return `
     <div class="card" style="padding:10px;margin-bottom:6px;background:var(--card2)">
       <div class="row" style="gap:6px">
-        <select onchange="editingProp.meters[${i}].type=this.value">
+        <select onchange="editingProp.meters[${i}].type=this.value;renderMeterEditList()">
           ${Object.entries(METER_TYPES).map(([k,v])=>`<option value="${k}" ${m.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
         </select>
         <input placeholder="Zählernummer" value="${m.number||''}" onchange="editingProp.meters[${i}].number=this.value">
@@ -468,10 +475,14 @@ function renderMeterEditList(){
         <input placeholder="Standort (z. B. Keller)" value="${m.location||''}" onchange="editingProp.meters[${i}].location=this.value">
         <button class="btn err sm" style="flex:0 0 auto" onclick="removeMeterRow(${i})">✕</button>
       </div>
+      <div style="margin-top:6px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">📊 Erwarteter Jahresverbrauch in ${t.unit} (optional)</label>
+        <input type="number" step="0.01" inputmode="decimal" placeholder="z. B. 1500" value="${m.expectedYearly||''}" onchange="editingProp.meters[${i}].expectedYearly=parseFloat(this.value)||0">
+      </div>
     </div>
-  `).join('');
+  `}).join('');
 }
-function addMeterRow(){ editingProp.meters.push({id:uid(),type:'strom',number:'',location:''}); renderMeterEditList(); }
+function addMeterRow(){ editingProp.meters.push({id:uid(),type:'strom',number:'',location:'',expectedYearly:0}); renderMeterEditList(); }
 function removeMeterRow(i){ editingProp.meters.splice(i,1); renderMeterEditList(); }
 function saveProperty(){
   editingProp.name = document.getElementById('propName').value.trim();
@@ -521,6 +532,39 @@ function renderMeterCard(p, m){
   const consume = (last && yearAgo) ? (last.value - yearAgo.value) : null;
   const prediction = predictNextReading(readings);
   const lastDays = last ? daysBetween(last.date, today()) : null;
+  
+  let currentYearly = null;
+  if(readings.length >= 2){
+    const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+    const valDiff = readings[readings.length-1].value - readings[0].value;
+    if(days > 0) currentYearly = valDiff * 365 / days;
+  }
+  let expectComp = '';
+  if(m.expectedYearly && m.expectedYearly > 0){
+    if(currentYearly !== null){
+      const pct = (currentYearly / m.expectedYearly) * 100;
+      const barColor = pct <= 90 ? 'var(--ok)' : pct <= 110 ? 'var(--warn)' : 'var(--err)';
+      const statusIcon = pct <= 90 ? '✅' : pct <= 110 ? '⚠️' : '🔴';
+      const statusTxt = pct <= 90 ? 'im Plan' : pct <= 110 ? 'leicht drüber' : 'deutlich drüber';
+      expectComp = `<div class="expect-box">
+        <div class="head-line">
+          <span>${statusIcon} Soll: ${fmt(m.expectedYearly,0)} ${type.unit}/J</span>
+          <span style="color:${barColor};font-weight:700">${fmt(pct,0)}%</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fg" style="width:${Math.min(pct,150)}%;background:${barColor}"></div>
+        </div>
+        <div class="ist-line">Ist: ${fmt(currentYearly,0)} ${type.unit}/J · ${statusTxt}</div>
+      </div>`;
+    } else {
+      expectComp = `<div class="expect-box">
+        <div class="head-line">
+          <span>📊 Soll: ${fmt(m.expectedYearly,0)} ${type.unit}/J</span>
+        </div>
+        <div class="ist-line">Noch zu wenig Daten für Vergleich</div>
+      </div>`;
+    }
+  }
 
   return `
     <div class="meter-card ${m.type}">
@@ -535,6 +579,7 @@ function renderMeterCard(p, m){
         ${last?`<span>📅 ${formatDate(last.date)} (vor ${lastDays}T)</span>`:'<span>Noch keine Ablesung</span>'}
         ${consume!==null?`<span class="chip ${consume>=0?'acc':'ok'}">Δ ${fmt(consume,2)} ${type.unit}/Jahr</span>`:''}
       </div>
+      ${expectComp}
       ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong> (${prediction.confidence})</div>`:''}
       <div class="actions">
         <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
@@ -896,6 +941,12 @@ function renderStats(){
       const perYear = totalDays>0 ? totalVal*365/totalDays : 0;
       const perMonth = perYear/12;
       const perDay = totalDays>0 ? totalVal/totalDays : 0;
+      let expectInfo = '';
+      if(m.expectedYearly && m.expectedYearly > 0){
+        const pct = (perYear / m.expectedYearly) * 100;
+        const col = pct <= 90 ? 'var(--ok)' : pct <= 110 ? 'var(--warn)' : 'var(--err)';
+        expectInfo = `<div style="margin-top:6px;font-size:13px"><span style="color:${col};font-weight:600">${fmt(pct,0)}% des Solls</span> (Soll: ${fmt(m.expectedYearly,0)} ${t.unit}/J)</div>`;
+      }
       propHtml += `<div style="margin-top:10px">
         <h3>${t.icon} ${t.label}</h3>
         <div class="row">
@@ -903,6 +954,7 @@ function renderStats(){
           <div class="stat-box"><div class="val">${fmt(perMonth,1)}</div><div class="lbl">${t.unit}/Monat</div></div>
           <div class="stat-box"><div class="val">${fmt(perYear,0)}</div><div class="lbl">${t.unit}/Jahr</div></div>
         </div>
+        ${expectInfo}
         <canvas class="chart" id="chart_${p.id}_${m.id}"></canvas>
       </div>`;
     });
