@@ -116,27 +116,21 @@ header .right{display:flex;gap:8px;align-items:center}
 .stat-box{background:var(--card2);padding:12px;border-radius:10px;text-align:center}
 .stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
 .stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
-.bar{height:6px;background:var(--card2);border-radius:3px;overflow:hidden;margin:6px 0}
-.bar > div{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .5s}
-.tag-select{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.tag-select .tag{padding:6px 12px;border-radius:18px;background:var(--card2);
-  border:1px solid var(--border);font-size:13px;cursor:pointer}
-.tag-select .tag.active{background:var(--acc);color:white;border-color:var(--acc)}
 .sync-status{font-size:14px;display:flex;align-items:center;gap:6px;color:#fff;font-weight:700;padding:8px 14px;border-radius:20px;background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px;box-shadow:0 2px 8px rgba(0,0,0,.2);transition:all .3s}
-.sync-status.ok{background:#10b981;border-color:#fff;box-shadow:0 0 0 0 rgba(16,185,129,.7);animation:pulseOk 2s ease-in-out infinite}
+.sync-status.ok{background:#10b981;border-color:#fff;animation:pulseOk 2s ease-in-out infinite}
 .sync-status.err{background:#ef4444;border-color:#fff;animation:pulseErr 1s ease-in-out infinite}
 .sync-status.warn{background:#f59e0b;border-color:#fff;animation:pulseWarn 1s ease-in-out infinite}
 @keyframes pulseOk{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.6)}50%{box-shadow:0 0 0 8px rgba(16,185,129,0)}}
 @keyframes pulseErr{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6);transform:scale(1)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0);transform:scale(1.05)}}
 @keyframes pulseWarn{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
 img.preview{max-width:100%;border-radius:8px;margin-top:8px}
 canvas.chart{width:100%;height:200px}
 @media(max-width:600px){
   .meter-card .reading{font-size:20px}
   .tab{padding:12px 14px}
   header h1{font-size:16px}
-.sync-status{font-size:12px;padding:6px 10px}}
+  .sync-status{font-size:12px;padding:6px 10px}
+}
 </style>
 </head>
 <body>
@@ -232,10 +226,13 @@ canvas.chart{width:100%;height:200px}
       <div class="row">
         <button class="btn" onclick="saveClientId()">Speichern</button>
         <button class="btn ok" onclick="gSignIn()">🔐 Anmelden</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost" onclick="gSwitchAccount()">🔄 Konto wechseln</button>
         <button class="btn ghost" onclick="gSignOut()">Abmelden</button>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px">
-        🔄 <strong>Auto-Sync aktiv:</strong> Daten werden 3 Sek nach jeder Änderung automatisch in Google Drive gesichert. Status siehst du oben rechts im Header.
+        🔄 <strong>Auto-Sync aktiv:</strong> Daten werden 3 Sek nach jeder Änderung automatisch in Google Drive gesichert. Status oben rechts im Header.
       </p>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="syncNow()">⬆️⬇️ Jetzt synchronisieren</button>
@@ -266,7 +263,7 @@ canvas.chart{width:100%;height:200px}
 
     <div class="card">
       <h2>ℹ️ Über</h2>
-      <p style="font-size:13px;color:var(--muted)">Version 1.1 · Auto-Sync Edition</p>
+      <p style="font-size:13px;color:var(--muted)">Version 1.2 · Auto-Sync Edition</p>
       <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
       <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
@@ -370,7 +367,6 @@ let state = { properties: [], readings: [], appointments: [] };
 let settings = { leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0 };
 let editingProp = null, editingAppt = null;
 
-// ---------- Auto-Sync ----------
 let autoSyncTimer = null;
 let pendingChanges = false;
 
@@ -1044,7 +1040,6 @@ function gInit(){
           gTokenClient = google.accounts.oauth2.initTokenClient({
             client_id: settings.gClientId,
             scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
-            prompt: 'select_account',
             callback: (t) => {
               gToken = t;
               gapi.client.setToken({access_token:t.access_token});
@@ -1063,10 +1058,15 @@ function loadScript(src, cb){
   if(document.querySelector(`script[src="${src}"]`)){ cb(); return; }
   const s=document.createElement('script'); s.src=src; s.onload=cb; document.head.appendChild(s);
 }
-function gSignIn(){
+function gSignIn(forceSelect){
   if(!settings.gClientId){ toast('Bitte erst Client-ID eintragen','err'); return; }
-  if(!gTokenClient){ gInit(); setTimeout(gSignIn,1500); return; }
-  gTokenClient.requestAccessToken();
+  if(!gTokenClient){ gInit(); setTimeout(()=>gSignIn(forceSelect),1500); return; }
+  gTokenClient.requestAccessToken(forceSelect ? {prompt:'select_account'} : {});
+}
+function gSwitchAccount(){
+  if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  gToken = null;
+  gSignIn(true);
 }
 function gSignOut(){
   if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
