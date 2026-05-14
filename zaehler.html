@@ -1655,17 +1655,57 @@ function gInit(){
             client_id: settings.gClientId,
             scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
             callback: (t) => {
+              if(t.error){
+                // Silent refresh failed — user needs to click Sign In
+                updateSyncStatus('bereit');
+                return;
+              }
               gToken = t;
+              // Save token with expiry for next app start
+              const expiresIn = (t.expires_in || 3600) * 1000;
+              try {
+                localStorage.setItem('zaehler_gtoken', JSON.stringify({
+                  access_token: t.access_token,
+                  expires_at: Date.now() + expiresIn,
+                  scope: t.scope
+                }));
+              } catch(e){}
               gapi.client.setToken({access_token:t.access_token});
               updateSyncStatus('verbunden');
               toast('Mit Google verbunden ✓','ok');
               setTimeout(syncNow, 800);
             }
           });
-          updateSyncStatus('bereit');
+          // Try to restore previous session
+          tryRestoreToken();
         });
       });
     });
+  }
+}
+
+function tryRestoreToken(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('zaehler_gtoken') || 'null');
+    if(saved && saved.access_token && saved.expires_at && saved.expires_at > Date.now() + 60000){
+      // Token still valid (with 1 min buffer)
+      gToken = saved;
+      gapi.client.setToken({access_token: saved.access_token});
+      updateSyncStatus('verbunden');
+      setTimeout(syncNow, 500);
+      return;
+    }
+  } catch(e){}
+  // Token expired or missing — try silent refresh (no popup)
+  if(gTokenClient){
+    try {
+      updateSyncStatus('synchronisiere…');
+      gTokenClient.requestAccessToken({prompt: ''});
+    } catch(e){
+      updateSyncStatus('bereit');
+    }
+  } else {
+    updateSyncStatus('bereit');
   }
 }
 function loadScript(src, cb){
@@ -1679,10 +1719,12 @@ function gSignIn(forceSelect){
 }
 function gSwitchAccount(){
   if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  try { localStorage.removeItem('zaehler_gtoken'); } catch(e){}
   gToken = null; gSignIn(true);
 }
 function gSignOut(){
   if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  try { localStorage.removeItem('zaehler_gtoken'); } catch(e){}
   gToken=null; updateSyncStatus('lokal'); toast('Abgemeldet','ok');
 }
 function gIsSignedIn(){ return !!gToken && gReady; }
