@@ -3,7 +3,7 @@
   "short_name": "Zähler",
   "start_url": "./zaehler.html",
   "scope": "./",
-  "display": "standalone",
+  "display": "minimal-ui",
   "background_color": "#0f172a",
   "theme_color": "#0ea5e9",
   "icons": [
