@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
 <link rel="apple-touch-icon" href="android-chrome-192x192.png">
-  <style>
+<style>
 :root{
   --bg:#0f172a; --bg2:#1e293b; --card:#1e293b; --card2:#293548;
   --text:#e2e8f0; --muted:#94a3b8; --acc:#0ea5e9; --acc2:#06b6d4;
@@ -122,14 +122,18 @@ header .right{display:flex;gap:8px;align-items:center}
 .tag-select .tag{padding:6px 12px;border-radius:18px;background:var(--card2);
   border:1px solid var(--border);font-size:13px;cursor:pointer}
 .tag-select .tag.active{background:var(--acc);color:white;border-color:var(--acc)}
-.sync-status{font-size:11px;display:flex;align-items:center;gap:4px;color:var(--muted)}
-.sync-status.ok{color:var(--ok)} .sync-status.err{color:var(--err)}
+.sync-status{font-size:11px;display:flex;align-items:center;gap:4px;color:rgba(255,255,255,.9);font-weight:500;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.15)}
+.sync-status.ok{color:#fff;background:rgba(16,185,129,.5)}
+.sync-status.err{color:#fff;background:rgba(239,68,68,.5)}
+.sync-status.warn{color:#fff;background:rgba(245,158,11,.5)}
 .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
 img.preview{max-width:100%;border-radius:8px;margin-top:8px}
 canvas.chart{width:100%;height:200px}
 @media(max-width:600px){
   .meter-card .reading{font-size:20px}
   .tab{padding:12px 14px}
+  header h1{font-size:16px}
+  .sync-status{font-size:10px}
 }
 </style>
 </head>
@@ -138,7 +142,7 @@ canvas.chart{width:100%;height:200px}
 <header>
   <h1>⚡ Zählerstand-Manager</h1>
   <div class="right">
-    <span id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">lokal</span></span>
+    <span id="syncStatus" class="sync-status"><span id="syncText">○ lokal</span></span>
     <button class="btn icon" onclick="toggleTheme()" title="Theme">🌓</button>
   </div>
 </header>
@@ -154,12 +158,10 @@ canvas.chart{width:100%;height:200px}
 
 <div class="container">
 
-  <!-- DASHBOARD -->
   <div class="page" id="page-dashboard">
     <div id="dashContent"></div>
   </div>
 
-  <!-- PROPERTIES -->
   <div class="page" id="page-properties" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h2>🏠 Grundstücke & Zähler</h2>
@@ -168,7 +170,6 @@ canvas.chart{width:100%;height:200px}
     <div id="propList"></div>
   </div>
 
-  <!-- READINGS -->
   <div class="page" id="page-readings" style="display:none">
     <h2 style="margin-bottom:12px">📝 Zählerstand erfassen</h2>
     <div class="card">
@@ -204,7 +205,6 @@ canvas.chart{width:100%;height:200px}
     </div>
   </div>
 
-  <!-- APPOINTMENTS -->
   <div class="page" id="page-appointments" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h2>📅 Termine & Erinnerungen</h2>
@@ -213,13 +213,11 @@ canvas.chart{width:100%;height:200px}
     <div id="apptList"></div>
   </div>
 
-  <!-- STATS -->
   <div class="page" id="page-stats" style="display:none">
     <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
     <div id="statsContent"></div>
   </div>
 
-  <!-- SETTINGS -->
   <div class="page" id="page-settings" style="display:none">
     <h2 style="margin-bottom:12px">⚙️ Einstellungen</h2>
 
@@ -235,7 +233,7 @@ canvas.chart{width:100%;height:200px}
         <button class="btn ghost" onclick="gSignOut()">Abmelden</button>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px">
-        Daten werden in deinem Google Drive im Ordner "Zaehler-App" gespeichert. Termine im Google Kalender.
+        🔄 <strong>Auto-Sync aktiv:</strong> Daten werden 3 Sek nach jeder Änderung automatisch in Google Drive gesichert. Status siehst du oben rechts im Header.
       </p>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="syncNow()">⬆️⬇️ Jetzt synchronisieren</button>
@@ -251,7 +249,7 @@ canvas.chart{width:100%;height:200px}
         <input type="file" id="importFile" style="display:none" accept=".json" onchange="importJSON(event)">
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px">
-        Automatisches lokales Backup ist <strong>immer aktiv</strong> (alle 5 Min). Letzte Sicherung: <span id="lastBackup">–</span>
+        Automatisches lokales Backup ist <strong>immer aktiv</strong>. Letzter Sync: <span id="lastBackup">–</span>
       </p>
     </div>
 
@@ -266,7 +264,7 @@ canvas.chart{width:100%;height:200px}
 
     <div class="card">
       <h2>ℹ️ Über</h2>
-      <p style="font-size:13px;color:var(--muted)">Version 1.0 · Personal Edition</p>
+      <p style="font-size:13px;color:var(--muted)">Version 1.1 · Auto-Sync Edition</p>
       <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
       <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
@@ -276,7 +274,6 @@ canvas.chart{width:100%;height:200px}
 
 <button class="fab" onclick="quickAdd()" title="Schnell-Eintrag">+</button>
 
-<!-- Property Modal -->
 <div class="modal-bg" id="propModal">
   <div class="modal">
     <h2 id="propModalTitle">Grundstück</h2>
@@ -295,7 +292,6 @@ canvas.chart{width:100%;height:200px}
   </div>
 </div>
 
-<!-- Appointment Modal -->
 <div class="modal-bg" id="apptModal">
   <div class="modal">
     <h2 id="apptModalTitle">Termin</h2>
@@ -340,7 +336,6 @@ canvas.chart{width:100%;height:200px}
   </div>
 </div>
 
-<!-- History Modal -->
 <div class="modal-bg" id="histModal">
   <div class="modal">
     <h2 id="histTitle">Verlauf</h2>
@@ -354,10 +349,6 @@ canvas.chart{width:100%;height:200px}
 <div class="toast" id="toast"></div>
 
 <script>
-/* =========================================================
-   ZÄHLERSTAND-MANAGER · personal edition
-   ========================================================= */
-
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
@@ -373,16 +364,14 @@ const METER_TYPES = {
   solar:      {label:'Solar/PV',      unit:'kWh',  icon:'☀️', color:'#facc15'},
 };
 
-// ---------- State ----------
-let state = {
-  properties: [],   // [{id,name,address,note,meters:[{id,type,number,location,note}]}]
-  readings: [],     // [{id,propId,meterId,date,value,note,photo}]
-  appointments: [], // [{id,title,cat,propId,date,time,repeat,note,calId}]
-};
+let state = { properties: [], readings: [], appointments: [] };
 let settings = { leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0 };
 let editingProp = null, editingAppt = null;
 
-// ---------- Persistence ----------
+// ---------- Auto-Sync ----------
+let autoSyncTimer = null;
+let pendingChanges = false;
+
 function load(){
   try { state = JSON.parse(localStorage.getItem(STORE_KEY)) || state; } catch(e){}
   try { settings = {...settings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')}; } catch(e){}
@@ -395,9 +384,9 @@ function save(){
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   scheduleBackup();
+  scheduleAutoSync();
 }
 function scheduleBackup(){
-  // Local rolling backup (keeps last 5)
   try{
     const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
     backups.push({ts:Date.now(), data:state});
@@ -405,8 +394,33 @@ function scheduleBackup(){
     localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
   }catch(e){ console.warn('Backup fail',e); }
 }
+function scheduleAutoSync(){
+  pendingChanges = true;
+  updateSyncStatus(gIsSignedIn() ? 'ungespeichert' : 'lokal');
+  if(autoSyncTimer) clearTimeout(autoSyncTimer);
+  if(!gIsSignedIn()) return;
+  autoSyncTimer = setTimeout(()=>{ autoSync(); }, 3000);
+}
+async function autoSync(){
+  if(!gIsSignedIn() || !pendingChanges) return;
+  try{
+    updateSyncStatus('synchronisiere…');
+    if(!driveFileId){
+      const f = await findDriveFile();
+      if(f) driveFileId = f.id;
+    }
+    await uploadDrive(!driveFileId);
+    pendingChanges = false;
+    settings.lastSync = Date.now();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    updateSyncStatus('verbunden');
+  }catch(e){
+    console.error('AutoSync',e);
+    updateSyncStatus('fehler');
+    setTimeout(()=>{ if(pendingChanges) autoSync(); }, 30000);
+  }
+}
 
-// ---------- Utils ----------
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const fmt = (n,d=2) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
 const today = () => new Date().toISOString().slice(0,10);
@@ -418,7 +432,6 @@ function toast(msg, type=''){
   setTimeout(()=>t.className='toast '+type, 3000);
 }
 
-// ---------- Navigation ----------
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.page').forEach(x=>x.style.display='none');
@@ -433,7 +446,6 @@ function toggleTheme(){
   save();
 }
 
-// ---------- Properties ----------
 function openPropertyModal(prop){
   editingProp = prop ? {...prop, meters:prop.meters.map(m=>({...m}))} : {id:uid(), name:'', address:'', note:'', meters:[]};
   document.getElementById('propModalTitle').textContent = prop ? 'Grundstück bearbeiten' : 'Neues Grundstück';
@@ -547,7 +559,6 @@ function findYearAgo(readings, current){
 
 function predictNextReading(readings){
   if(readings.length<2) return null;
-  // Median interval between readings (only consider intervals > 30 days for relevant ablesungen)
   const intervals = [];
   for(let i=1;i<readings.length;i++){
     const d = daysBetween(readings[i-1].date, readings[i].date);
@@ -562,7 +573,6 @@ function predictNextReading(readings){
   return { date: next, days: median, confidence: conf };
 }
 
-// ---------- Readings ----------
 function updateReadPropSel(){
   const sel = document.getElementById('readPropSel');
   sel.innerHTML = state.properties.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
@@ -598,7 +608,6 @@ function previewPhoto(){
   const f = document.getElementById('readPhoto').files[0];
   if(!f) return;
   const img = document.getElementById('photoPreview');
-  // Compress to max 800px
   const reader = new FileReader();
   reader.onload = e => {
     const tmp = new Image();
@@ -625,7 +634,6 @@ function saveReading(){
   if(!propId||!meterId){ toast('Zähler wählen','err'); return; }
   if(!date){ toast('Datum fehlt','err'); return; }
   if(isNaN(value)){ toast('Zählerstand ungültig','err'); return; }
-  // Sanity check
   const existing = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
   if(existing.length && existing[0].date < date && value < existing[0].value){
     if(!confirm(`Achtung: Neuer Stand (${value}) ist kleiner als letzter (${existing[0].value}). Trotzdem speichern?`)) return;
@@ -641,7 +649,6 @@ function saveReading(){
   document.getElementById('photoPreview').style.display='none';
   document.getElementById('photoPreview').dataset.compressed='';
   showLastReading();
-  // Suggest creating ablesung appointment if next reading predicted
   maybeCreateReadingReminder(propId, meterId);
 }
 
@@ -649,7 +656,6 @@ function maybeCreateReadingReminder(propId, meterId){
   const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>a.date.localeCompare(b.date));
   const pred = predictNextReading(readings);
   if(!pred) return;
-  // Avoid duplicate
   const exists = state.appointments.some(a => a.cat==='ablesung' && a.propId===propId && a.meterId===meterId && a.date===pred.date);
   if(exists) return;
   if(confirm(`📅 Erinnerung für nächste Ablesung am ${formatDate(pred.date)} anlegen?`)){
@@ -712,7 +718,6 @@ function deleteReading(id){
   render();
 }
 
-// ---------- Appointments ----------
 function openAppointmentModal(appt){
   editingAppt = appt ? {...appt} : {id:uid(),title:'',cat:'schornstein',propId:state.properties[0]?.id||'',date:today(),time:'',repeat:'yearly',note:'',calId:''};
   document.getElementById('apptModalTitle').textContent = appt ? 'Termin bearbeiten' : 'Neuer Termin';
@@ -804,7 +809,6 @@ function completeAppointment(id){
   save(); render();
 }
 
-// ---------- Dashboard ----------
 function renderDashboard(){
   const c = document.getElementById('dashContent');
   const totalReadings = state.readings.length;
@@ -814,7 +818,6 @@ function renderDashboard(){
     return d>=0 && d<=settings.leadDays;
   });
   const overdue = state.appointments.filter(a=>daysBetween(today(), a.date)<0);
-  // Find meters needing reading
   const needsReading = [];
   state.properties.forEach(p=>p.meters.forEach(m=>{
     const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
@@ -880,7 +883,6 @@ function renderDashboard(){
   `;
 }
 
-// ---------- Stats ----------
 function renderStats(){
   const c = document.getElementById('statsContent');
   if(!state.readings.length){ c.innerHTML='<div class="empty"><div class="ico">📈</div>Noch keine Daten</div>'; return; }
@@ -891,7 +893,6 @@ function renderStats(){
       const t = METER_TYPES[m.type]||METER_TYPES.strom;
       const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
       if(rs.length<2) return;
-      // Yearly consumption
       const totalDays = daysBetween(rs[0].date, rs[rs.length-1].date);
       const totalVal = rs[rs.length-1].value - rs[0].value;
       const perYear = totalDays>0 ? totalVal*365/totalDays : 0;
@@ -911,7 +912,6 @@ function renderStats(){
     if(p.meters.some(m=>state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).length>=2)) html += propHtml;
   });
   c.innerHTML = html || '<div class="empty"><div class="ico">📈</div>Mindestens 2 Einträge pro Zähler nötig</div>';
-  // Draw charts
   setTimeout(()=>{
     state.properties.forEach(p=>p.meters.forEach(m=>{
       const cv = document.getElementById(`chart_${p.id}_${m.id}`);
@@ -933,7 +933,6 @@ function drawChart(canvas, readings, type){
   const minV = Math.min(...vals), maxV = Math.max(...vals);
   const minD = Math.min(...dates), maxD = Math.max(...dates);
   const rangeV = maxV-minV || 1, rangeD = maxD-minD || 1;
-  // Grid
   ctx.strokeStyle = getCss('--border'); ctx.lineWidth=1;
   ctx.font='11px sans-serif'; ctx.fillStyle=getCss('--muted');
   for(let i=0;i<=4;i++){
@@ -942,7 +941,6 @@ function drawChart(canvas, readings, type){
     ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
     ctx.fillText(fmt(v,0), 5, y+3);
   }
-  // Line
   ctx.strokeStyle = type.color; ctx.lineWidth=2;
   ctx.beginPath();
   readings.forEach((r,i)=>{
@@ -951,14 +949,12 @@ function drawChart(canvas, readings, type){
     if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   });
   ctx.stroke();
-  // Points
   ctx.fillStyle = type.color;
   readings.forEach(r=>{
     const x = pad.l + (W-pad.l-pad.r)*(new Date(r.date).getTime()-minD)/rangeD;
     const y = pad.t + (H-pad.t-pad.b)*(1-(r.value-minV)/rangeV);
     ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
   });
-  // Date labels
   ctx.fillStyle=getCss('--muted');
   if(readings.length){
     ctx.fillText(formatDateShort(readings[0].date), pad.l, H-10);
@@ -968,7 +964,6 @@ function drawChart(canvas, readings, type){
 }
 function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
-// ---------- Render dispatcher ----------
 function render(tab){
   if(!tab){
     const a = document.querySelector('.tab.active');
@@ -980,8 +975,8 @@ function render(tab){
   else if(tab==='appointments') renderAppointments();
   else if(tab==='stats') renderStats();
   else if(tab==='settings') renderSettingsExtras();
-  // Always also refresh other dashboard data summary
-  document.getElementById('dataSize') && (document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length));
+  const ds = document.getElementById('dataSize');
+  if(ds) ds.textContent = humanSize(JSON.stringify(state).length);
 }
 function renderSettingsExtras(){
   document.getElementById('gClientId').value = settings.gClientId||'';
@@ -998,13 +993,11 @@ function humanSize(n){
 function saveClientId(){ settings.gClientId = document.getElementById('gClientId').value.trim(); save(); toast('Client-ID gespeichert','ok'); gInit(); }
 function saveSettings(){ settings.leadDays = parseInt(document.getElementById('setLeadDays').value)||7; save(); toast('Einstellungen gespeichert','ok'); }
 
-// ---------- Helpers ----------
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 function escapeHtml(s){ return (s+'').replace(/[<>&"']/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 function formatDate(d){ if(!d) return '–'; return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function formatDateShort(d){ return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}); }
 
-// ---------- Export / Import ----------
 function exportJSON(){
   const data = JSON.stringify({state, settings, exportedAt:new Date().toISOString()},null,2);
   const blob = new Blob([data],{type:'application/json'});
@@ -1034,13 +1027,11 @@ function resetAll(){
   location.reload();
 }
 
-// ---------- Google Sync ----------
 let gTokenClient=null, gToken=null, gReady=false;
 
 function gInit(){
   if(!settings.gClientId){ updateSyncStatus('lokal'); return; }
   if(typeof google==='undefined' || !google.accounts){
-    // load scripts
     loadScript('https://accounts.google.com/gsi/client', ()=> {
       loadScript('https://apis.google.com/js/api.js', ()=>{
         gapi.load('client', async ()=>{
@@ -1057,7 +1048,6 @@ function gInit(){
               gapi.client.setToken({access_token:t.access_token});
               updateSyncStatus('verbunden');
               toast('Mit Google verbunden ✓','ok');
-              // Auto-sync after login
               setTimeout(syncNow, 800);
             }
           });
@@ -1083,8 +1073,14 @@ function gSignOut(){
 function gIsSignedIn(){ return !!gToken && gReady; }
 function updateSyncStatus(s){
   const txt = document.getElementById('syncText'), el = document.getElementById('syncStatus');
-  txt.textContent = s;
-  el.className = 'sync-status ' + (s==='verbunden'?'ok':s==='fehler'?'err':'');
+  if(!txt||!el) return;
+  const icons = {
+    'verbunden':'✓', 'synchronisiere…':'⏳', 'ungespeichert':'●',
+    'fehler':'⚠', 'lokal':'○', 'bereit':'○'
+  };
+  txt.textContent = (icons[s]||'') + ' ' + s;
+  const cls = (s==='verbunden')?'ok':(s==='fehler')?'err':(s==='ungespeichert'||s==='synchronisiere…')?'warn':'';
+  el.className = 'sync-status ' + cls;
 }
 
 const DRIVE_FILE_NAME = 'zaehler-data.json';
@@ -1100,19 +1096,20 @@ async function syncNow(){
     updateSyncStatus('synchronisiere…');
     const file = await findDriveFile();
     if(file){
-      // Compare timestamps: load remote, merge by id
       const remote = await gapi.client.drive.files.get({fileId:file.id, alt:'media'});
       const rdata = typeof remote.body==='string' ? JSON.parse(remote.body) : remote.body;
       if(rdata && rdata.state){
         state = mergeState(state, rdata.state);
-        save();
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
       }
       driveFileId = file.id;
       await uploadDrive();
     } else {
       await uploadDrive(true);
     }
-    settings.lastSync = Date.now(); save();
+    settings.lastSync = Date.now();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    pendingChanges = false;
     updateSyncStatus('verbunden');
     toast('Sync erfolgreich ✓','ok');
     render();
@@ -1121,7 +1118,6 @@ async function syncNow(){
   }
 }
 function mergeState(local, remote){
-  // Merge by IDs (last writer wins on conflict, prefer larger lists)
   function mergeArr(a,b){
     const map = {};
     [...a, ...b].forEach(x => map[x.id] = x);
@@ -1139,8 +1135,9 @@ async function uploadDrive(isNew){
   const meta = { name: DRIVE_FILE_NAME, mimeType:'application/json' };
   const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
   if(isNew || !driveFileId){
-    await gapi.client.request({path:'/upload/drive/v3/files', method:'POST', params:{uploadType:'multipart'},
+    const r = await gapi.client.request({path:'/upload/drive/v3/files', method:'POST', params:{uploadType:'multipart'},
       headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
+    if(r.result && r.result.id) driveFileId = r.result.id;
   } else {
     await gapi.client.request({path:'/upload/drive/v3/files/'+driveFileId, method:'PATCH', params:{uploadType:'multipart'},
       headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
@@ -1155,7 +1152,10 @@ async function restoreFromDrive(){
     const data = typeof r.body==='string'?JSON.parse(r.body):r.body;
     if(!confirm(`Wiederherstellen vom ${new Date(data.savedAt).toLocaleString('de-DE')}? Lokale Daten werden überschrieben.`)) return;
     state = data.state; if(data.settings) settings = {...settings, ...data.settings};
-    save(); render(); toast('Wiederhergestellt ✓','ok');
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    pendingChanges = false;
+    render(); toast('Wiederhergestellt ✓','ok');
   }catch(e){ toast('Fehler: '+e.message,'err'); }
 }
 async function createCalendarEvent(appt){
@@ -1175,7 +1175,7 @@ async function createCalendarEvent(appt){
     }
     const r = await gapi.client.calendar.events.insert({calendarId:'primary', resource:ev});
     appt.calId = r.result.id;
-    save();
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
     toast('Im Kalender eingetragen ✓','ok');
   }catch(e){ console.error(e); toast('Kalender-Fehler: '+e.message,'err'); }
 }
@@ -1185,19 +1185,15 @@ function addMinutes(t, mins){
   return d.toTimeString().slice(0,5);
 }
 
-// ---------- Init ----------
 document.getElementById('readDate').value = today();
 load();
 gInit();
 render();
 
-// Auto-sync every 10 min if signed in
-setInterval(()=>{ if(gIsSignedIn()) syncNow(); }, 10*60*1000);
+setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
-// Service Worker (offline) — inline registration
 if('serviceWorker' in navigator){
   const swCode = `
-    const C='zaehler-v1';
     self.addEventListener('install',e=>{self.skipWaiting()});
     self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});
     self.addEventListener('fetch',e=>{
@@ -1208,13 +1204,24 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
 }
 
-// Close modals on background click
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => {
   if(e.target===m) m.classList.remove('show');
 }));
 
-// Prevent accidental data loss
-window.addEventListener('beforeunload', save);
+window.addEventListener('beforeunload', (e) => {
+  save();
+  if(pendingChanges && gIsSignedIn()){
+    try{ autoSync(); }catch(_){}
+  }
+});
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && pendingChanges && gIsSignedIn()){
+    autoSync();
+  }
+});
+window.addEventListener('online', () => {
+  if(pendingChanges && gIsSignedIn()) autoSync();
+});
 </script>
 </body>
 </html>
