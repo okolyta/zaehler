@@ -301,6 +301,25 @@ canvas.chart{width:100%;height:200px}
 .kbd-table td{padding:8px;border-bottom:1px solid var(--border);font-size:14px}
 .kbd-table td:first-child{font-family:monospace;color:var(--acc);width:120px}
 
+.doc-item{
+  display:flex;gap:12px;padding:12px;background:var(--card2);
+  border-radius:10px;margin-bottom:8px;align-items:flex-start;
+  border:1px solid var(--border);transition:transform .15s;
+}
+.doc-item:hover{transform:translateX(2px)}
+.doc-icon{font-size:26px;flex-shrink:0;width:36px;text-align:center}
+.doc-info{flex:1;min-width:0}
+.doc-title{font-weight:600;font-size:14px}
+.doc-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.doc-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.cat-row{display:flex;align-items:center;gap:10px;padding:8px 10px;
+  background:var(--card2);border-radius:8px;margin-bottom:6px;
+  border:1px solid var(--border)}
+.cat-row .cat-icon{font-size:20px;width:28px;text-align:center}
+.cat-row .cat-label{flex:1;font-size:14px}
+.cat-row .cat-del{background:none;border:none;color:var(--err);
+  cursor:pointer;padding:4px 8px;font-size:16px;line-height:1}
+
 .crop-wrap{
   position:relative;
   width:100%;
@@ -366,6 +385,7 @@ canvas.chart{width:100%;height:200px}
   <div class="tab" data-tab="readings">📝 Eintragen</div>
   <div class="tab" data-tab="appointments">📅 Termine</div>
   <div class="tab" data-tab="stats">📈 Statistik</div>
+  <div class="tab" data-tab="docs">📄 Dokumente</div>
   <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
 </div>
 
@@ -435,6 +455,17 @@ canvas.chart{width:100%;height:200px}
   <div class="page" id="page-stats" style="display:none">
     <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
     <div id="statsContent"></div>
+  </div>
+
+  <div class="page" id="page-docs" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>📄 Dokumente</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm ghost" onclick="openDocCatModal()">🏷️ Kategorien</button>
+        <button class="btn" onclick="openDocModal()">+ Dokument</button>
+      </div>
+    </div>
+    <div id="docList"></div>
   </div>
 
   <div class="page" id="page-settings" style="display:none">
@@ -630,7 +661,7 @@ canvas.chart{width:100%;height:200px}
       <tr><td>Strg + N</td><td>Neuer Zählerstand</td></tr>
       <tr><td>Strg + S</td><td>Jetzt synchronisieren</td></tr>
       <tr><td>Strg + E</td><td>JSON Export</td></tr>
-      <tr><td>1 – 6</td><td>Tab wechseln</td></tr>
+      <tr><td>1 – 7</td><td>Tab wechseln</td></tr>
       <tr><td>Esc</td><td>Modal schließen</td></tr>
       <tr><td>?</td><td>Diese Hilfe</td></tr>
     </table>
@@ -657,6 +688,60 @@ canvas.chart{width:100%;height:200px}
     <div class="footer">
       <button class="btn ghost" onclick="cancelCropPhoto()">Abbrechen</button>
       <button class="btn ok" onclick="applyCropPhoto()">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT MODAL -->
+<div class="modal-bg" id="docModal">
+  <div class="modal">
+    <h2 id="docModalTitle">Dokument hochladen</h2>
+    <div class="field">
+      <label>Kategorie</label>
+      <select id="docCat"></select>
+    </div>
+    <div class="field">
+      <label>Grundstück</label>
+      <select id="docProp"></select>
+    </div>
+    <div class="field">
+      <label>Titel *</label>
+      <input type="text" id="docTitle" placeholder="z.B. Stromrechnung Januar 2026">
+    </div>
+    <div class="field">
+      <label>Datum</label>
+      <input type="date" id="docDate">
+    </div>
+    <div class="field">
+      <label>Datei (optional)</label>
+      <input type="file" id="docFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Bild, Word, Excel...</div>
+    </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <textarea id="docNote" rows="2"></textarea>
+    </div>
+    <div id="docUploadStatus" style="display:none;font-size:13px;padding:8px;background:var(--card2);border-radius:8px;margin-top:8px"></div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('docModal')">Abbrechen</button>
+      <button class="btn err sm" id="docDelBtn" onclick="deleteDoc()" style="display:none">🗑️ Löschen</button>
+      <button class="btn ok" onclick="saveDoc()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- CATEGORY MODAL -->
+<div class="modal-bg" id="docCatModal">
+  <div class="modal">
+    <h2>🏷️ Kategorien verwalten</h2>
+    <div id="docCatList" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <input type="text" id="newCatIcon" placeholder="🗂️" style="width:56px;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:18px;text-align:center">
+      <input type="text" id="newCatLabel" placeholder="Kategorie-Name" style="flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:15px">
+      <button class="btn ok" onclick="addDocCategory()">+</button>
+    </div>
+    <div class="footer">
+      <button class="btn ok" onclick="closeModal('docCatModal')">Fertig</button>
     </div>
   </div>
 </div>
@@ -709,10 +794,19 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [] };
+let state = { properties: [], readings: [], appointments: [], documents: [] };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
-  themeStyle: 'apple', themeMode: 'dark'
+  themeStyle: 'apple', themeMode: 'dark',
+  docCategories: [
+    {id:'rechnung',    label:'Rechnung',              icon:'📋'},
+    {id:'vertrag',     label:'Vertrag',               icon:'📜'},
+    {id:'grundsteuer', label:'Grundsteuer-Bescheid',  icon:'💰'},
+    {id:'versicherung',label:'Versicherung',          icon:'🛡️'},
+    {id:'wartung',     label:'Wartungsprotokoll',     icon:'🔧'},
+    {id:'schornstein', label:'Schornsteinfeger',      icon:'🔥'},
+    {id:'sonstiges',   label:'Sonstiges',             icon:'📌'}
+  ]
 };
 let editingProp = null, editingAppt = null;
 let currentReminders = [7];
@@ -737,6 +831,18 @@ function load(){
   if(!state.properties) state.properties=[];
   if(!state.readings) state.readings=[];
   if(!state.appointments) state.appointments=[];
+  if(!state.documents) state.documents=[];
+  if(!settings.docCategories || !settings.docCategories.length){
+    settings.docCategories=[
+      {id:'rechnung',    label:'Rechnung',             icon:'📋'},
+      {id:'vertrag',     label:'Vertrag',              icon:'📜'},
+      {id:'grundsteuer', label:'Grundsteuer-Bescheid', icon:'💰'},
+      {id:'versicherung',label:'Versicherung',         icon:'🛡️'},
+      {id:'wartung',     label:'Wartungsprotokoll',    icon:'🔧'},
+      {id:'schornstein', label:'Schornsteinfeger',     icon:'🔥'},
+      {id:'sonstiges',   label:'Sonstiges',            icon:'📌'}
+    ];
+  }
   // Defensive defaults — alte Daten kompatibel halten
   state.readings.forEach(r => { if(r.isMain === undefined) r.isMain = true; });
   state.appointments.forEach(a => {
@@ -1597,6 +1703,234 @@ function cancelCropPhoto(){
   cropRotation = 0;
 }
 
+/* ----- Documents ----- */
+let editingDocId = null;
+
+function getDocCategories(){
+  if(!settings.docCategories||!settings.docCategories.length){
+    settings.docCategories=[
+      {id:'rechnung',label:'Rechnung',icon:'📋'},
+      {id:'sonstiges',label:'Sonstiges',icon:'📌'}
+    ];
+  }
+  return settings.docCategories;
+}
+
+function openDocModal(doc){
+  editingDocId = doc ? doc.id : null;
+  document.getElementById('docModalTitle').textContent = doc ? 'Dokument bearbeiten' : 'Dokument hochladen';
+  document.getElementById('docDelBtn').style.display = doc ? 'inline-flex' : 'none';
+  document.getElementById('docFile').value = '';
+  document.getElementById('docUploadStatus').style.display = 'none';
+
+  const catSel = document.getElementById('docCat');
+  catSel.innerHTML = getDocCategories().map(c=>
+    `<option value="${c.id}" ${doc?.category===c.id?'selected':''}>${c.icon} ${c.label}</option>`
+  ).join('');
+
+  const propSel = document.getElementById('docProp');
+  propSel.innerHTML = '<option value="">— Alle Grundstücke —</option>' +
+    state.properties.map(p=>
+      `<option value="${p.id}" ${doc?.propId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`
+    ).join('');
+
+  document.getElementById('docTitle').value = doc?.title||'';
+  document.getElementById('docDate').value = doc?.date||today();
+  document.getElementById('docNote').value = doc?.note||'';
+  document.getElementById('docModal').classList.add('show');
+}
+
+async function saveDoc(){
+  const title = document.getElementById('docTitle').value.trim();
+  const category = document.getElementById('docCat').value;
+  const propId = document.getElementById('docProp').value;
+  const date = document.getElementById('docDate').value;
+  const note = document.getElementById('docNote').value.trim();
+  const file = document.getElementById('docFile').files[0];
+  const statusEl = document.getElementById('docUploadStatus');
+
+  if(!title){ toast('Titel fehlt','err'); return; }
+
+  if(editingDocId){
+    const doc = state.documents.find(d=>d.id===editingDocId);
+    if(doc){ doc.title=title; doc.category=category; doc.propId=propId; doc.date=date; doc.note=note; }
+    save(); closeModal('docModal'); render('docs');
+    toast('Dokument aktualisiert ✓','ok');
+    return;
+  }
+
+  const newDoc = {
+    id:uid(), title, category, propId, date, note,
+    fileName:'', mimeType:'', driveFileId:'', driveLink:''
+  };
+
+  if(file){
+    statusEl.style.display='block';
+    statusEl.textContent='⏳ Wird in Drive hochgeladen...';
+    if(gIsSignedIn()){
+      try{
+        const result = await uploadDocToDrive(file, newDoc);
+        newDoc.fileName = file.name;
+        newDoc.mimeType = file.type;
+        newDoc.driveFileId = result?.id||'';
+        newDoc.driveLink = result?.webViewLink||result?.webContentLink||'';
+        statusEl.textContent='✅ In Drive gespeichert!';
+      }catch(e){
+        console.error('Doc upload:',e);
+        statusEl.textContent='⚠️ Upload fehlgeschlagen – nur lokal gespeichert';
+        newDoc.fileName = file.name;
+      }
+    } else {
+      statusEl.textContent='⚠️ Nicht verbunden – nur lokal gespeichert';
+      newDoc.fileName = file.name;
+    }
+  }
+
+  state.documents.push(newDoc);
+  save();
+  closeModal('docModal');
+  render('docs');
+  toast('Dokument gespeichert ✓','ok');
+}
+
+function deleteDoc(){
+  if(!editingDocId) return;
+  const doc = state.documents.find(d=>d.id===editingDocId);
+  if(!doc||!confirm(`"${doc.title}" wirklich löschen?`)) return;
+  state.documents = state.documents.filter(d=>d.id!==editingDocId);
+  save(); closeModal('docModal'); render('docs');
+  toast('Dokument gelöscht','ok');
+}
+
+async function uploadDocToDrive(file, doc){
+  if(!gIsSignedIn()) return null;
+  if(!driveDocFolderId) await ensureDriveStructure();
+  const prop = state.properties.find(p=>p.id===doc.propId);
+  let targetFolderId = driveDocFolderId;
+  if(prop){
+    const safeName = prop.name.replace(/[\\/:*?"<>|]/g,'_');
+    targetFolderId = await getOrCreateCachedFolder(safeName, driveDocFolderId);
+  }
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = async (e)=>{
+      try{
+        const base64 = e.target.result.split(',')[1];
+        const mimeType = file.type||'application/octet-stream';
+        const metadata = {name:file.name, parents:[targetFolderId]};
+        const boundary = '-------314159_doc';
+        const body =
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+          `${JSON.stringify(metadata)}\r\n--${boundary}\r\n` +
+          `Content-Type: ${mimeType}\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
+          `${base64}\r\n--${boundary}--`;
+        const res = await gapi.client.request({
+          path:'/upload/drive/v3/files',method:'POST',
+          params:{uploadType:'multipart',fields:'id,name,webViewLink,webContentLink'},
+          headers:{'Content-Type':'multipart/related; boundary='+boundary},
+          body
+        });
+        resolve(res.result);
+      }catch(err){reject(err);}
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderDocuments(){
+  const c = document.getElementById('docList');
+  if(!c) return;
+  if(!state.documents||!state.documents.length){
+    c.innerHTML=`<div class="empty"><div class="ico">📄</div>
+      <p>Noch keine Dokumente.</p>
+      <p style="margin-top:10px"><button class="btn" onclick="openDocModal()">+ Erstes Dokument hochladen</button></p>
+    </div>`;
+    return;
+  }
+  const cats = getDocCategories();
+  const filterProp = document.getElementById('docFilterProp')?.value||'';
+  const filterCat = document.getElementById('docFilterCat')?.value||'';
+  const sorted = [...state.documents].sort((a,b)=>b.date.localeCompare(a.date));
+  const filtered = sorted.filter(d=>{
+    if(filterProp && d.propId!==filterProp) return false;
+    if(filterCat && d.category!==filterCat) return false;
+    return true;
+  });
+  let html=`<div class="row" style="margin-bottom:12px;gap:8px">
+    <select id="docFilterProp" onchange="renderDocuments()" style="flex:1;padding:8px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:13px">
+      <option value="">🏠 Alle Grundstücke</option>
+      ${state.properties.map(p=>`<option value="${p.id}" ${filterProp===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+    </select>
+    <select id="docFilterCat" onchange="renderDocuments()" style="flex:1;padding:8px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:13px">
+      <option value="">📋 Alle Kategorien</option>
+      ${cats.map(c=>`<option value="${c.id}" ${filterCat===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('')}
+    </select>
+  </div>`;
+  if(!filtered.length){
+    html+='<div class="empty" style="padding:20px"><div class="ico">🔍</div>Keine Treffer für diesen Filter</div>';
+  } else {
+    html+=filtered.map(doc=>{
+      const cat=cats.find(c=>c.id===doc.category)||{icon:'📄',label:'Dokument'};
+      const prop=state.properties.find(p=>p.id===doc.propId);
+      return `<div class="doc-item">
+        <div class="doc-icon">${cat.icon}</div>
+        <div class="doc-info">
+          <div class="doc-title">${escapeHtml(doc.title)}</div>
+          <div class="doc-meta">${cat.label}${prop?' · '+escapeHtml(prop.name):''}${doc.date?' · '+formatDate(doc.date):''}${doc.fileName?' · '+escapeHtml(doc.fileName):''}</div>
+          ${doc.note?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${escapeHtml(doc.note)}</div>`:''}
+          <div class="doc-actions">
+            ${doc.driveLink?`<a href="${doc.driveLink}" target="_blank" rel="noopener" class="btn sm ghost">☁️ In Drive öffnen</a>`:''}
+            <button class="btn sm ghost" onclick='openDocModal(${JSON.stringify(doc).replace(/'/g,"&#39;")})'>✏️ Bearbeiten</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  c.innerHTML=html;
+}
+
+function openDocCatModal(){
+  renderDocCatList();
+  document.getElementById('docCatModal').classList.add('show');
+}
+
+function renderDocCatList(){
+  const list=document.getElementById('docCatList');
+  const cats=getDocCategories();
+  if(!cats.length){
+    list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Keine Kategorien vorhanden</div>';
+    return;
+  }
+  list.innerHTML=cats.map((c,i)=>`
+    <div class="cat-row">
+      <div class="cat-icon">${c.icon}</div>
+      <div class="cat-label">${escapeHtml(c.label)}</div>
+      <button class="cat-del" onclick="deleteDocCategory(${i})" title="Löschen">✕</button>
+    </div>
+  `).join('');
+}
+
+function addDocCategory(){
+  const icon=document.getElementById('newCatIcon').value.trim()||'📄';
+  const label=document.getElementById('newCatLabel').value.trim();
+  if(!label){toast('Bitte Name eingeben','err');return;}
+  if(!settings.docCategories) settings.docCategories=[];
+  settings.docCategories.push({id:uid(),label,icon});
+  save(); renderDocCatList();
+  document.getElementById('newCatIcon').value='';
+  document.getElementById('newCatLabel').value='';
+  toast('Kategorie hinzugefügt ✓','ok');
+}
+
+function deleteDocCategory(index){
+  const cats=getDocCategories();
+  if(!confirm(`"${cats[index].label}" wirklich löschen?`)) return;
+  settings.docCategories.splice(index,1);
+  save(); renderDocCatList();
+  toast('Kategorie gelöscht','ok');
+}
+
 /* ----- Photo Sources ----- */
 function openPhotoSource(source){
   if(source==='camera') document.getElementById('readPhotoCamera').click();
@@ -2206,6 +2540,7 @@ function render(tab){
   else if(tab==='readings') updateReadPropSel();
   else if(tab==='appointments') renderAppointments();
   else if(tab==='stats') renderStats();
+  else if(tab==='docs') renderDocuments();
   else if(tab==='settings') renderSettingsExtras();
   const ds = document.getElementById('dataSize');
   if(ds) ds.textContent = humanSize(JSON.stringify(state).length);
@@ -2289,10 +2624,12 @@ let gTokenClient=null, gToken=null, gReady=false;
 let driveFileId = null;
 let driveRootFolderId = null;
 let drivePhotoFolderId = null;
+let driveDocFolderId = null;
 let driveFolderCache = {};
 const DRIVE_FILE_NAME = 'zaehler-data.json';
 const DRIVE_ROOT_FOLDER = 'Zaehler-App';
 const DRIVE_PHOTO_FOLDER = 'Fotos';
+const DRIVE_DOC_FOLDER = 'Dokumente';
 
 function gInit(){
   if(!settings.gClientId){ updateSyncStatus('lokal'); return; }
@@ -2381,6 +2718,7 @@ function gSignOut(){
   gToken=null;
   driveRootFolderId=null;
   drivePhotoFolderId=null;
+  driveDocFolderId=null;
   driveFolderCache={};
   updateSyncStatus('lokal');
   toast('Abgemeldet','ok');
@@ -2428,7 +2766,9 @@ async function ensureDriveStructure(){
   driveRootFolderId = root.id;
   const photos = await findOrCreateDriveFolder(DRIVE_PHOTO_FOLDER, driveRootFolderId);
   drivePhotoFolderId = photos.id;
-  return { rootId: driveRootFolderId, photoId: drivePhotoFolderId };
+  const docs = await findOrCreateDriveFolder(DRIVE_DOC_FOLDER, driveRootFolderId);
+  driveDocFolderId = docs.id;
+  return { rootId: driveRootFolderId, photoId: drivePhotoFolderId, docId: driveDocFolderId };
 }
 
 async function getOrCreateCachedFolder(name, parentId){
@@ -2531,6 +2871,7 @@ function mergeState(local, remote){
     properties: mergeArr(local.properties||[], remote.properties||[]),
     readings: mergeArr(local.readings||[], remote.readings||[]),
     appointments: mergeArr(local.appointments||[], remote.appointments||[]),
+    documents: mergeArr(local.documents||[], remote.documents||[]),
   };
 }
 async function uploadDrive(isNew){
@@ -2621,8 +2962,8 @@ document.addEventListener('keydown', e => {
   }
   if(inField) return;
   if(e.key === '?'){ openShortcutHelp(); e.preventDefault(); return; }
-  if(['1','2','3','4','5','6'].includes(e.key)){
-    const tabs = ['dashboard','properties','readings','appointments','stats','settings'];
+  if(['1','2','3','4','5','6','7'].includes(e.key)){
+    const tabs = ['dashboard','properties','readings','appointments','stats','docs','settings'];
     switchTab(tabs[parseInt(e.key)-1]); e.preventDefault(); return;
   }
   if(e.ctrlKey || e.metaKey){
