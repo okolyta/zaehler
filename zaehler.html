@@ -1,1956 +1,2053 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-style="apple" data-mode="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <meta name="theme-color" content="#0f3460">
-  <meta name="description" content="Zählerstandsverwaltung für mehrere Grundstücke">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="icon" type="image/png" href="icon-192.png">
-  <title>Zaehler-App</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a84ff">
+<title>Zählerstand-Manager</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+<link rel="apple-touch-icon" href="android-chrome-192x192.png">
+<style>
+/* ========================================================
+   THEMES
+   ======================================================== */
+:root,
+:root[data-style="apple"][data-mode="dark"]{
+  --bg:#000000; --bg2:#1c1c1e; --card:#1c1c1e; --card2:#2c2c2e;
+  --text:#f5f5f7; --muted:#8e8e93; --acc:#0a84ff; --acc2:#5ac8fa;
+  --ok:#30d158; --warn:#ff9f0a; --err:#ff453a; --border:#38383a;
+  --radius:14px; --shadow:0 1px 3px rgba(0,0,0,.5);
+  --header-bg:linear-gradient(135deg,#0a84ff,#5ac8fa);
+}
+:root[data-style="apple"][data-mode="light"]{
+  --bg:#f5f5f7; --bg2:#ffffff; --card:#ffffff; --card2:#f2f2f7;
+  --text:#1d1d1f; --muted:#86868b; --acc:#007aff; --acc2:#5ac8fa;
+  --ok:#34c759; --warn:#ff9500; --err:#ff3b30; --border:#d2d2d7;
+  --radius:14px; --shadow:0 1px 3px rgba(0,0,0,.08);
+  --header-bg:linear-gradient(135deg,#007aff,#5ac8fa);
+}
+:root[data-style="glass"][data-mode="dark"]{
+  --bg:#0a0a1f; --bg2:#1a1a3e; --card:rgba(255,255,255,.06); --card2:rgba(255,255,255,.04);
+  --text:#f0f0ff; --muted:#a0a0c0; --acc:#a78bfa; --acc2:#f472b6;
+  --ok:#34d399; --warn:#fbbf24; --err:#fb7185; --border:rgba(255,255,255,.12);
+  --radius:20px; --shadow:0 8px 32px rgba(0,0,0,.4);
+  --header-bg:linear-gradient(135deg,#a78bfa,#f472b6);
+}
+:root[data-style="glass"][data-mode="light"]{
+  --bg:linear-gradient(135deg,#fce7f3,#e0e7ff,#dbeafe); --bg2:rgba(255,255,255,.5);
+  --card:rgba(255,255,255,.65); --card2:rgba(255,255,255,.45);
+  --text:#1e1b4b; --muted:#6b6b8e; --acc:#7c3aed; --acc2:#db2777;
+  --ok:#059669; --warn:#d97706; --err:#dc2626; --border:rgba(255,255,255,.6);
+  --radius:20px; --shadow:0 8px 32px rgba(124,58,237,.15);
+  --header-bg:linear-gradient(135deg,#7c3aed,#db2777);
+}
+:root[data-style="linear"][data-mode="dark"]{
+  --bg:#08090a; --bg2:#0f1011; --card:#101113; --card2:#161719;
+  --text:#ededed; --muted:#7a7d83; --acc:#5e6ad2; --acc2:#7c89e8;
+  --ok:#26b26b; --warn:#f2994a; --err:#e5484d; --border:#1f2023;
+  --radius:8px; --shadow:0 1px 2px rgba(0,0,0,.6);
+  --header-bg:linear-gradient(135deg,#5e6ad2,#7c89e8);
+}
+:root[data-style="linear"][data-mode="light"]{
+  --bg:#fafbfc; --bg2:#ffffff; --card:#ffffff; --card2:#f6f7f8;
+  --text:#25282d; --muted:#646970; --acc:#5e6ad2; --acc2:#7c89e8;
+  --ok:#0f9d58; --warn:#dd6b00; --err:#d93025; --border:#e3e5e8;
+  --radius:8px; --shadow:0 1px 2px rgba(0,0,0,.04);
+  --header-bg:linear-gradient(135deg,#5e6ad2,#7c89e8);
+}
+:root[data-style="glass"] body{background:var(--bg);background-attachment:fixed}
+:root[data-style="glass"] .card,
+:root[data-style="glass"] .meter-card{backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%)}
+:root[data-style="glass"] header{backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+:root[data-style="linear"]{font-family:"Inter",ui-sans-serif,system-ui,sans-serif}
+:root[data-style="linear"] .card,
+:root[data-style="linear"] .meter-card{border-width:1px}
+:root[data-style="linear"] .btn{font-weight:500;letter-spacing:-.01em}
+:root[data-style="linear"] h1,
+:root[data-style="linear"] h2,
+:root[data-style="linear"] h3{letter-spacing:-.02em}
 
-  <!-- External Libs -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://apis.google.com/js/api.js" async defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+/* RESET */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;
+  padding-bottom:80px;min-height:100vh;transition:background .3s,color .3s}
 
-  <style>
-    /* ============================================
-       THEMES & ROOT VARIABLES
-    ============================================ */
-    :root {
-      --radius: 14px;
-      --shadow: 0 4px 12px rgba(0,0,0,0.15);
-      --transition: 0.25s ease;
-    }
+/* HEADER */
+header{background:var(--header-bg);color:white;padding:14px 16px;
+  position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,.2);
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+header h1{font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px}
+header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 
-    /* Theme: Dark (Default) */
-    [data-theme="dark"] {
-      --bg: #1a1a2e;
-      --bg-elev: #232342;
-      --bg-card: #2a2a4a;
-      --text: #f0f0f5;
-      --text-muted: #a0a0b8;
-      --accent: #4cc9f0;
-      --accent-hover: #72d8f5;
-      --success: #06d6a0;
-      --warning: #ffd166;
-      --danger: #ef476f;
-      --border: rgba(255,255,255,0.08);
-    }
+/* BUTTONS */
+.btn{background:var(--acc);color:white;border:none;padding:10px 16px;
+  border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;font-family:inherit}
+.btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn.ok{background:var(--ok)} .btn.warn{background:var(--warn)} .btn.err{background:var(--err)}
+.btn.sm{padding:6px 10px;font-size:12px}
+.btn.icon{padding:8px;width:36px;height:36px;justify-content:center;background:rgba(255,255,255,.15)}
 
-    /* Theme: Light */
-    [data-theme="light"] {
-      --bg: #f5f7fa;
-      --bg-elev: #ffffff;
-      --bg-card: #ffffff;
-      --text: #1a1a2e;
-      --text-muted: #6b7280;
-      --accent: #0f3460;
-      --accent-hover: #1e5089;
-      --success: #059669;
-      --warning: #d97706;
-      --danger: #dc2626;
-      --border: rgba(0,0,0,0.08);
-    }
+/* TABS */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);
+  position:sticky;top:54px;z-index:40;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:14px 18px;cursor:pointer;color:var(--muted);font-weight:500;
+  border-bottom:3px solid transparent;white-space:nowrap;font-size:14px;flex-shrink:0;transition:color .2s}
+.tab.active{color:var(--acc);border-color:var(--acc)}
+.tab:hover{color:var(--text)}
 
-    /* Theme: Solar */
-    [data-theme="solar"] {
-      --bg: #fdf6e3;
-      --bg-elev: #eee8d5;
-      --bg-card: #ffffff;
-      --text: #073642;
-      --text-muted: #586e75;
-      --accent: #cb4b16;
-      --accent-hover: #dc6420;
-      --success: #859900;
-      --warning: #b58900;
-      --danger: #dc322f;
-      --border: rgba(7,54,66,0.1);
-    }
+/* LAYOUT */
+.container{padding:16px;max-width:900px;margin:0 auto}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;
+  border:1px solid var(--border);box-shadow:var(--shadow);transition:transform .15s}
+.card h2{font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3{font-size:14px;margin-bottom:8px;color:var(--muted);font-weight:500}
 
-    /* ============================================
-       BASE STYLES
-    ============================================ */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+/* FORM */
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.field input,.field select,.field textarea{
+  width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--card2);color:var(--text);font-size:15px;font-family:inherit;
+  transition:border-color .2s,box-shadow .2s}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:none;border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 25%,transparent)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row > *{flex:1;min-width:140px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      min-height: 100vh;
-      transition: background var(--transition), color var(--transition);
-    }
+/* QUICK ADD */
+.quick-row{display:flex;gap:8px;align-items:center;padding:10px;
+  background:var(--card2);border-radius:10px;margin-bottom:8px}
+.quick-row .qr-icon{font-size:22px;flex-shrink:0;width:30px;text-align:center}
+.quick-row .qr-label{flex:1;min-width:0;font-size:13px}
+.quick-row .qr-label .name{font-weight:600;font-size:14px}
+.quick-row .qr-label .sub{color:var(--muted);font-size:11px}
+.quick-row input{width:100px;padding:8px;border-radius:7px;border:1px solid var(--border);
+  background:var(--bg2);color:var(--text);font-size:14px}
+.quick-row .qr-actions{display:flex;gap:4px;align-items:center}
+.quick-row label{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer}
 
-    button { font-family: inherit; cursor: pointer; }
-    input, select, textarea { font-family: inherit; }
+/* CHIPS */
+.chip{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;
+  background:var(--card2);color:var(--muted);font-weight:500}
+.chip.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.chip.warn{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.chip.err{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
+.chip.acc{background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
 
-/* ============================================
-       LAYOUT - HEADER (neu)
-    ============================================ */
-    .app-header {
-      background: var(--bg-elev);
-      padding: 12px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      backdrop-filter: blur(10px);
-    }
+/* METER CARDS */
+.meter-card{background:var(--card);border-radius:var(--radius);padding:14px;
+  border:1px solid var(--border);position:relative;overflow:hidden;box-shadow:var(--shadow)}
+.meter-card.gas{border-left:4px solid #ff9f0a}
+.meter-card.strom{border-left:4px solid #ffd60a}
+.meter-card.wasser{border-left:4px solid #5ac8fa}
+.meter-card.warmwasser{border-left:4px solid #ff453a}
+.meter-card.heizung{border-left:4px solid #ff9500}
+.meter-card .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.meter-card .title{font-size:15px;font-weight:600}
+.meter-card .num{font-size:12px;color:var(--muted);font-family:monospace}
+.meter-card .reading{font-size:24px;font-weight:700;color:var(--acc);margin:6px 0}
+.meter-card .unit{font-size:14px;color:var(--muted);margin-left:4px}
+.meter-card .stats{display:flex;gap:10px;font-size:12px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.read-badge{display:inline-flex;align-items:center;gap:2px;font-size:11px;padding:1px 6px;
+  border-radius:8px;background:var(--card2)}
+.read-badge.main{color:var(--warn)}
+.read-badge.sub{color:var(--muted)}
 
-    .app-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--accent);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+/* EXPECT BOX */
+.expect-box{margin-top:8px;padding:8px;background:var(--card2);border-radius:8px}
+.expect-box .head-line{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;gap:6px}
+.expect-box .bar-bg{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden}
+.expect-box .bar-fg{height:100%;transition:width .5s;border-radius:3px}
+.expect-box .ist-line{font-size:11px;color:var(--muted);margin-top:4px}
 
-    .header-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
+/* COST BOX */
+.cost-box{margin-top:8px;padding:10px;background:linear-gradient(135deg,color-mix(in srgb,var(--ok) 8%,transparent),color-mix(in srgb,var(--acc) 8%,transparent));
+  border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);border-radius:8px}
+.cost-box .total{font-size:18px;font-weight:700;color:var(--ok);display:flex;justify-content:space-between;align-items:center}
+.cost-box .total .label{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cost-box .breakdown{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.cost-box .compare{font-size:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
 
-    /* NEUER Connection-Status Badge */
-    .conn-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 20px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      font-size: 0.82rem;
-      font-weight: 500;
-      transition: all var(--transition);
-      cursor: pointer;
-    }
-    .conn-badge:hover { transform: translateY(-1px); }
+/* ANOMALY */
+.anomaly{background:color-mix(in srgb,var(--warn) 15%,transparent);
+  border:1px solid var(--warn);padding:8px 10px;border-radius:8px;margin-top:8px;font-size:12px}
+.anomaly.severe{background:color-mix(in srgb,var(--err) 15%,transparent);border-color:var(--err)}
 
-    .conn-badge .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--text-muted);
-      box-shadow: 0 0 0 0 rgba(0,0,0,0);
-      transition: all var(--transition);
-    }
-    .conn-badge.connected .dot {
-      background: var(--success);
-      box-shadow: 0 0 0 4px rgba(6, 214, 160, 0.2);
-      animation: pulse 2s infinite;
-    }
-    .conn-badge.connected { color: var(--success); }
-    .conn-badge.error .dot { background: var(--danger); }
-    .conn-badge.error { color: var(--danger); }
+/* MODALS */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;
+  display:none;align-items:center;justify-content:center;padding:16px}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border-radius:var(--radius);padding:18px;
+  max-width:520px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border)}
+.modal h2{font-size:18px;margin-bottom:14px}
+.modal .footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.modal-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border)}
+.modal-tab{padding:8px 14px;cursor:pointer;color:var(--muted);font-size:14px;
+  border-bottom:2px solid transparent;font-weight:500}
+.modal-tab.active{color:var(--acc);border-color:var(--acc)}
 
-    @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 4px rgba(6, 214, 160, 0.2); }
-      50% { box-shadow: 0 0 0 8px rgba(6, 214, 160, 0); }
-    }
+/* FIXED COSTS */
+.fc-row{padding:10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
+.fc-row .row{gap:6px}
+.fc-row select,.fc-row input{padding:8px;font-size:13px}
 
-    .user-chip {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 10px 5px 5px;
-      border-radius: 20px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      font-size: 0.82rem;
-    }
-    .user-chip img, .user-chip .avatar {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: var(--accent);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 0.8rem;
-    }
+/* COST DASHBOARD */
+.cost-dash{margin-top:8px}
+.cost-dash .prop-row{padding:10px;background:var(--card2);border-radius:10px;margin-bottom:8px}
+.cost-dash .prop-row .head-line{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.cost-dash .prop-row .prop-name{font-weight:600;font-size:14px}
+.cost-dash .prop-row .prop-total{font-size:18px;font-weight:700;color:var(--ok)}
+.cost-dash .prop-row .prop-breakdown{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.cost-dash .grand-total{padding:14px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:white;border-radius:10px;text-align:center;margin-top:8px}
+.cost-dash .grand-total .val{font-size:28px;font-weight:700;line-height:1}
+.cost-dash .grand-total .lbl{font-size:11px;opacity:.9;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.cost-dash .grand-total .sub{font-size:12px;opacity:.85;margin-top:6px}
 
-    .icon-btn {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 1.1rem;
-      padding: 8px 12px;
-      border-radius: 10px;
-      transition: all var(--transition);
-    }
-    .icon-btn:hover {
-      background: var(--accent);
-      color: white;
-      transform: translateY(-1px);
-    }
+/* FAB */
+.fab{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;
+  background:var(--header-bg);color:white;border:none;font-size:28px;cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:30;
+  display:flex;align-items:center;justify-content:center}
+.fab:active{transform:scale(.95)}
 
-    /* Card Hover */
-    .card {
-      transition: transform var(--transition), box-shadow var(--transition);
-    }
-    .card:hover {
-      box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    }
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty .ico{font-size:48px;margin-bottom:10px;opacity:.5}
 
-    /* Hero Polish */
-    .hero {
-      position: relative;
-      overflow: hidden;
-    }
-    .hero::after {
-      content: '';
-      position: absolute;
-      top: -50%;
-      right: -20%;
-      width: 200px;
-      height: 200px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 50%;
-    }
+/* HISTORY */
+.history-item{display:flex;justify-content:space-between;padding:10px;
+  border-bottom:1px solid var(--border);font-size:14px;align-items:center;gap:8px}
+.history-item:last-child{border-bottom:none}
+.history-item .date{color:var(--muted);font-size:12px}
+.history-item .val{font-weight:600;color:var(--acc)}
+.history-item .del{background:none;border:none;color:var(--err);cursor:pointer;padding:4px 8px;font-size:13px}
 
-    @media (max-width: 600px) {
-      .conn-badge span { display: none; }
-      .conn-badge { padding: 8px; }
-      .user-chip span { display: none; }
-    }
+/* PHOTO */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.photo-grid .pitem{position:relative;cursor:pointer;border-radius:8px;overflow:hidden;
+  border:1px solid var(--border);background:var(--card2);transition:transform .2s}
+.photo-grid .pitem:hover{transform:scale(1.03)}
+.photo-grid .pitem img{width:100%;height:100px;object-fit:cover;display:block}
+.photo-grid .pitem .pdate{position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(to top,rgba(0,0,0,.7),transparent);
+  color:white;padding:14px 6px 4px;font-size:10px}
 
-    main {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 16px;
-      padding-bottom: 80px;
-    }
+/* LIGHTBOX */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;
+  display:none;align-items:center;justify-content:center;padding:20px;cursor:pointer}
+.lightbox.show{display:flex}
+.lightbox img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,.5)}
 
-    /* ============================================
-       CARDS & SECTIONS
-    ============================================ */
-    .card {
-      background: var(--bg-card);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 14px;
-      box-shadow: var(--shadow);
-      border: 1px solid var(--border);
-    }
+/* TOAST */
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+  background:var(--card);color:var(--text);padding:12px 20px;border-radius:10px;
+  border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,.3);
+  z-index:200;opacity:0;transition:all .3s;font-size:14px;max-width:90vw;
+  display:flex;align-items:center;gap:10px}
+.toast.show{opacity:1;bottom:120px}
+.toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--err)}
+.toast .undo-btn{background:var(--acc);color:white;border:none;padding:4px 10px;
+  border-radius:6px;font-size:12px;cursor:pointer;font-weight:600}
 
-    .card-title {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+/* APPOINTMENTS */
+.appointment{display:flex;gap:12px;padding:12px;border-radius:10px;
+  background:var(--card2);margin-bottom:8px;align-items:flex-start}
+.appointment .ico{font-size:24px}
+.appointment .info{flex:1}
+.appointment .title{font-weight:600;font-size:14px}
+.appointment .when{color:var(--muted);font-size:12px;margin-top:2px}
+.appointment.due{background:color-mix(in srgb,var(--warn) 12%,transparent);border:1px solid var(--warn)}
+.appointment.over{background:color-mix(in srgb,var(--err) 12%,transparent);border:1px solid var(--err)}
 
-    .card-title .move-btns {
-      margin-left: auto;
-      display: flex;
-      gap: 4px;
-    }
+/* STATS */
+.stat-box{background:var(--card2);padding:12px;border-radius:10px;text-align:center}
+.stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
+.stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 
-    .move-btns button {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      width: 26px;
-      height: 26px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-    }
+/* SYNC STATUS */
+.sync-status{font-size:13px;display:flex;align-items:center;gap:6px;color:#fff;font-weight:700;
+  padding:7px 12px;border-radius:18px;background:rgba(0,0,0,.35);
+  border:2px solid rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);transition:all .3s}
+.sync-status.ok{background:var(--ok);border-color:#fff;animation:pulseOk 2s ease-in-out infinite}
+.sync-status.err{background:var(--err);border-color:#fff;animation:pulseErr 1s ease-in-out infinite}
+.sync-status.warn{background:var(--warn);border-color:#fff;animation:pulseWarn 1s ease-in-out infinite}
+@keyframes pulseOk{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}50%{box-shadow:0 0 0 8px transparent}}
+@keyframes pulseErr{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes pulseWarn{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 
-    /* ============================================
-       HERO (Standard Profile)
-    ============================================ */
-    .hero {
-      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-      color: white;
-      padding: 20px;
-      border-radius: var(--radius);
-      margin-bottom: 14px;
-    }
-    .hero h2 { font-size: 1.4rem; margin-bottom: 6px; }
-    .hero p { opacity: 0.9; font-size: 0.95rem; }
+/* TAGS */
+.tag-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{padding:6px 12px;border-radius:18px;background:var(--card2);
+  border:1px solid var(--border);font-size:13px;cursor:pointer;user-select:none;transition:all .15s}
+.tag:hover{transform:translateY(-1px)}
+.tag.active{background:var(--acc);color:white;border-color:var(--acc)}
 
-    /* ============================================
-       BUTTONS
-    ============================================ */
-    .btn {
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 12px 18px;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      transition: transform var(--transition), background var(--transition);
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .btn:hover { background: var(--accent-hover); }
-    .btn:active { transform: scale(0.97); }
-    .btn-secondary {
-      background: var(--bg-elev);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    .btn-danger { background: var(--danger); }
-    .btn-block { width: 100%; justify-content: center; }
+img.preview{max-width:100%;border-radius:8px;margin-top:8px}
+canvas.chart{width:100%;height:200px}
+.kbd-footer{text-align:center;padding:16px;color:var(--muted);font-size:12px;cursor:pointer}
+.kbd-footer:hover{color:var(--text)}
+.kbd-table{width:100%;border-collapse:collapse}
+.kbd-table td{padding:8px;border-bottom:1px solid var(--border);font-size:14px}
+.kbd-table td:first-child{font-family:monospace;color:var(--acc);width:120px}
 
-    /* ============================================
-       FORM ELEMENTS
-    ============================================ */
-    .form-group { margin-bottom: 12px; }
-    .form-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-      width: 100%;
-      padding: 11px 12px;
-      background: var(--bg-elev);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 1rem;
-      transition: border var(--transition);
-    }
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    input[type="number"] {
-      font-variant-numeric: tabular-nums;
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    /* ============================================
-       GRUNDSTÜCK LIST
-    ============================================ */
-    .grundstueck-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px;
-      background: var(--bg-elev);
-      border-radius: 10px;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: transform var(--transition);
-    }
-    .grundstueck-item:hover { transform: translateX(3px); }
-    .grundstueck-name { font-weight: 600; }
-    .grundstueck-meta { font-size: 0.8rem; color: var(--text-muted); }
-
-    /* ============================================
-       ACTIVITY FEED
-    ============================================ */
-    .activity-item {
-      display: flex;
-      gap: 10px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.9rem;
-    }
-    .activity-item:last-child { border-bottom: none; }
-    .activity-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: var(--bg-elev);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .activity-icon.anomaly { background: var(--warning); color: #000; }
-    .activity-icon.due { background: var(--danger); color: white; }
-    .activity-time { font-size: 0.75rem; color: var(--text-muted); }
-
-    /* ============================================
-       MODAL
-    ============================================ */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 16px;
-    }
-    .modal-overlay.active { display: flex; }
-    .modal {
-      background: var(--bg-card);
-      border-radius: var(--radius);
-      padding: 20px;
-      max-width: 500px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    .modal h3 { margin-bottom: 14px; }
-    .modal-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-      margin-top: 16px;
-    }
-
-    /* ============================================
-       TOAST
-    ============================================ */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      background: var(--bg-card);
-      color: var(--text);
-      padding: 12px 20px;
-      border-radius: 10px;
-      box-shadow: var(--shadow);
-      border-left: 4px solid var(--accent);
-      z-index: 2000;
-      transition: transform 0.3s ease;
-      max-width: 90%;
-    }
-    .toast.active { transform: translateX(-50%) translateY(0); }
-    .toast.success { border-left-color: var(--success); }
-    .toast.error { border-left-color: var(--danger); }
-    .toast.warning { border-left-color: var(--warning); }
-
-    /* ============================================
-       SETTINGS PANEL
-    ============================================ */
-    .settings-section { margin-bottom: 20px; }
-    .settings-section h4 {
-      font-size: 0.95rem;
-      margin-bottom: 10px;
-      color: var(--accent);
-    }
-    .toggle-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .toggle-row:last-child { border-bottom: none; }
-    .toggle-row span { font-size: 0.9rem; }
-
-    .switch {
-      position: relative;
-      width: 44px;
-      height: 24px;
-      background: var(--bg-elev);
-      border-radius: 12px;
-      cursor: pointer;
-      transition: background var(--transition);
-      border: 1px solid var(--border);
-    }
-    .switch::after {
-      content: '';
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 18px;
-      height: 18px;
-      background: white;
-      border-radius: 50%;
-      transition: left var(--transition);
-    }
-    .switch.on { background: var(--accent); }
-    .switch.on::after { left: 22px; }
-
-    /* ============================================
-       UTILITY
-    ============================================ */
-    .hidden { display: none !important; }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 0.75rem;
-      background: var(--accent);
-      color: white;
-    }
-    .badge-warn { background: var(--warning); color: #000; }
-    .badge-anomaly { background: var(--danger); }
-
-    .empty-state {
-      text-align: center;
-      padding: 30px 16px;
-      color: var(--text-muted);
-    }
-    .empty-state-icon { font-size: 2.5rem; margin-bottom: 10px; }
-
-    .zaehler-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 12px;
-      background: var(--bg-elev);
-      border-radius: 8px;
-      margin-bottom: 6px;
-      cursor: pointer;
-      transition: transform var(--transition);
-      border: 1px solid var(--border);
-    }
-    .zaehler-row:hover { transform: translateX(3px); border-color: var(--accent); }
-    .zaehler-row-info { flex: 1; }
-    .zaehler-row-type {
-      font-weight: 600;
-      font-size: 0.95rem;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .zaehler-row-meta {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-    .zaehler-empty {
-      padding: 14px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      background: var(--bg-elev);
-      border-radius: 8px;
-    }
-
-    /* ============================================
-       MOBILE OPTIMIZATIONS
-    ============================================ */
-    @media (max-width: 600px) {
-      .form-row { grid-template-columns: 1fr; }
-      .hero h2 { font-size: 1.2rem; }
-      main { padding: 12px; }
-    }
-  </style>
+@media(max-width:600px){
+  .meter-card .reading{font-size:20px}
+  .tab{padding:12px 14px}
+  header h1{font-size:16px}
+  .sync-status{font-size:11px;padding:5px 10px}
+  .quick-row input{width:80px}
+}
+</style>
 </head>
-<body data-theme="dark">
+<body>
 
-  <!-- ============================================
-       HEADER
-  ============================================ -->
-  <header class="app-header">
-  <div class="app-title">⚡ Zaehler-App</div>
-  <div class="header-actions">
-    <div class="user-chip hidden" id="userChip">
-      <div class="avatar" id="userAvatar">?</div>
-      <span id="userName">Gast</span>
-    </div>
-    <div class="conn-badge" id="connBadge" title="Verbindungsstatus">
-      <div class="dot"></div>
-      <span id="connText">Offline</span>
-    </div>
-    <button class="icon-btn" id="btnSettings" title="Einstellungen">⚙️</button>
+<header>
+  <h1>⚡ Zähler</h1>
+  <div class="right">
+    <span id="syncStatus" class="sync-status"><span id="syncText">○ lokal</span></span>
+    <button class="btn icon" onclick="refreshApp()" title="App neu laden">🔄</button>
+    <button class="btn icon" onclick="toggleMode()" title="Hell/Dunkel">🌓</button>
   </div>
 </header>
 
-  <!-- ============================================
-       MAIN CONTENT
-  ============================================ -->
-  <main id="mainContent">
+<div class="tabs">
+  <div class="tab active" data-tab="dashboard">📊 Dashboard</div>
+  <div class="tab" data-tab="properties">🏠 Grundstücke</div>
+  <div class="tab" data-tab="readings">📝 Eintragen</div>
+  <div class="tab" data-tab="appointments">📅 Termine</div>
+  <div class="tab" data-tab="stats">📈 Statistik</div>
+  <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
+</div>
 
-    <!-- Hero (Standard Profile only) -->
-    <section class="hero" id="sectionHero" data-section="hero">
-      <h2 id="heroGreeting">Willkommen zurück! 👋</h2>
-      <p id="heroSummary">Lade Daten...</p>
-    </section>
+<div class="container">
 
-    <!-- Quick Entry -->
-    <section class="card" id="sectionQuickEntry" data-section="quickEntry">
-      <div class="card-title">
-        ⚡ Schnelleintrag
-        <div class="move-btns">
-          <button onclick="moveSection('quickEntry','up')">▲</button>
-          <button onclick="moveSection('quickEntry','down')">▼</button>
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="qeGrundstueck">Grundstück</label>
-        <select id="qeGrundstueck"></select>
-      </div>
-      <div class="form-group">
-        <label for="qeZaehler">Zähler</label>
-        <select id="qeZaehler"></select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="qeWert">Ablesewert</label>
-          <input type="number" id="qeWert" step="0.01" inputmode="decimal" placeholder="0.00">
-        </div>
-        <div class="form-group">
-          <label for="qeDatum">Datum</label>
-          <input type="date" id="qeDatum">
-        </div>
-      </div>
-      <button class="btn btn-block" id="btnQuickSave">💾 Speichern</button>
-      <button class="btn btn-secondary btn-block" id="btnPhotoOCR" style="margin-top:8px;">📷 Foto + OCR</button>
-    </section>
+  <div class="page" id="page-dashboard"><div id="dashContent"></div></div>
 
-    <!-- Grundstücke -->
-    <section class="card" id="sectionGrundstuecke" data-section="grundstuecke">
-      <div class="card-title">
-        🏠 Grundstücke
-        <div class="move-btns">
-          <button onclick="moveSection('grundstuecke','up')">▲</button>
-          <button onclick="moveSection('grundstuecke','down')">▼</button>
-        </div>
-      </div>
-      <div id="grundstueckList"></div>
-      <button class="btn btn-secondary btn-block" id="btnAddGrundstueck" style="margin-top:10px;">+ Neues Grundstück</button>
-    </section>
+  <div class="page" id="page-properties" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>🏠 Grundstücke & Zähler</h2>
+      <button class="btn" onclick="openPropertyModal()">+ Grundstück</button>
+    </div>
+    <div id="propList"></div>
+  </div>
 
-    <!-- Activity Feed -->
-    <section class="card" id="sectionActivity" data-section="activity">
-      <div class="card-title">
-        📋 Aktivität
-        <div class="move-btns">
-          <button onclick="moveSection('activity','up')">▲</button>
-          <button onclick="moveSection('activity','down')">▼</button>
-        </div>
+  <div class="page" id="page-readings" style="display:none">
+    <h2 style="margin-bottom:12px">📝 Zählerstand erfassen</h2>
+    <div class="card">
+      <div class="field">
+        <label>Grundstück</label>
+        <select id="readPropSel" onchange="updateReadMeterSel()"></select>
       </div>
-      <div id="activityFeed">
-        <div class="empty-state">
-          <div class="empty-state-icon">📭</div>
-          <div>Noch keine Aktivitäten</div>
-        </div>
+      <div class="field">
+        <label>Zähler</label>
+        <select id="readMeterSel" onchange="showLastReading()"></select>
       </div>
-    </section>
-
-  </main>
-
-  <!-- ============================================
-       SETTINGS MODAL
-  ============================================ -->
-  <div class="modal-overlay" id="modalSettings">
-    <div class="modal">
-      <h3>⚙️ Einstellungen</h3>
-
-      <div class="settings-section">
-        <h4>👤 Konto</h4>
-        <button class="btn btn-block" id="btnGSignIn">Mit Google anmelden</button>
-        <button class="btn btn-secondary btn-block" id="btnSwitchAccount" style="margin-top:8px;">🔄 Konto wechseln</button>
+      <div id="lastReadInfo"></div>
+      <div class="row">
+        <div class="field"><label>Datum</label><input type="date" id="readDate"></div>
+        <div class="field"><label>Zählerstand</label><input type="number" id="readValue" step="0.001" inputmode="decimal" placeholder="0"></div>
       </div>
-
-      <div class="settings-section">
-        <h4>🎨 Design</h4>
-        <div class="form-group">
-          <label>Theme</label>
-          <select id="themeSelect">
-            <option value="dark">🌙 Dark</option>
-            <option value="light">☀️ Light</option>
-            <option value="solar">🌅 Solar</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Dashboard-Profil</label>
-          <select id="profileSelect">
-            <option value="standard">Standard</option>
-            <option value="minimal">Minimal</option>
-          </select>
-        </div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="readIsMain" checked style="width:auto;margin:0">
+          <span>⭐ <strong>Hauptablesung</strong> (Jahresablesung) — sonst 📝 Zwischenstand</span>
+        </label>
       </div>
-
-      <div class="settings-section">
-        <h4>📷 Foto & OCR</h4>
-        <div class="toggle-row">
-          <span>OCR aktivieren (Tesseract)</span>
-          <div class="switch on" id="tglOCR"></div>
-        </div>
-        <div class="toggle-row">
-          <span>KI-OCR (OpenRouter)</span>
-          <div class="switch" id="tglAIOCR"></div>
-        </div>
-        <div class="toggle-row">
-          <span>Bild zuschneiden vor Speichern</span>
-          <div class="switch on" id="tglCrop"></div>
-        </div>
-        <div class="toggle-row">
-          <span>Bestätigungsdialog vor Speichern</span>
-          <div class="switch on" id="tglConfirm"></div>
-        </div>
+      <div class="field">
+        <label>Foto des Zählers (optional)</label>
+        <input type="file" accept="image/*" capture="environment" id="readPhoto" onchange="previewPhoto()">
+        <img id="photoPreview" class="preview" style="display:none">
       </div>
-
-      <div class="settings-section">
-        <h4>🤖 KI (OpenRouter)</h4>
-        <div class="form-group">
-          <label>API-Key</label>
-          <input type="password" id="openrouterKey" placeholder="sk-or-...">
-        </div>
-        <div class="toggle-row">
-          <span>KI-Insights aktivieren</span>
-          <div class="switch" id="tglAIInsights"></div>
-        </div>
+      <div class="field">
+        <label>Notiz (optional)</label>
+        <textarea id="readNote" rows="2" placeholder="z. B. Ablesung durch Nachbar"></textarea>
       </div>
-
-      <div class="settings-section">
-        <h4>💾 Daten</h4>
-        <button class="btn btn-secondary btn-block" id="btnMigrate">📦 Lokale Fotos → Drive migrieren</button>
-        <button class="btn btn-secondary btn-block" id="btnExportData" style="margin-top:8px;">📥 Daten exportieren (JSON)</button>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn" onclick="closeModal('modalSettings')">Schließen</button>
-      </div>
+      <button class="btn ok" style="width:100%;justify-content:center;padding:14px;font-size:16px" onclick="saveReading()">✓ Speichern</button>
     </div>
   </div>
 
-  <!-- ============================================
-       GRUNDSTÜCK MODAL
-  ============================================ -->
-  <div class="modal-overlay" id="modalGrundstueck">
-    <div class="modal">
-      <h3 id="gsModalTitle">Neues Grundstück</h3>
-      <div class="form-group">
-        <label>Bezeichnung</label>
-        <input type="text" id="gsName" placeholder="z.B. Hauptwohnung">
-      </div>
-      <div class="form-group">
-        <label>Adresse (optional)</label>
-        <input type="text" id="gsAdresse">
-      </div>
-      <div class="form-group">
-        <label>Notizen</label>
-        <textarea id="gsNotes" rows="3"></textarea>
-      </div>
-
-      <div class="zaehler-section" id="gsZaehlerSection">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;">
-          <h4 style="margin:0;color:var(--accent);font-size:0.95rem;">🔢 Zähler</h4>
-          <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.85rem;" id="btnAddZaehler">+ Zähler</button>
-        </div>
-        <div id="zaehlerList"></div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-danger" id="btnDeleteGrundstueck" style="margin-right:auto;">🗑️ Löschen</button>
-        <button class="btn btn-secondary" onclick="closeModal('modalGrundstueck')">Abbrechen</button>
-        <button class="btn" id="btnSaveGrundstueck">Speichern</button>
-      </div>
+  <div class="page" id="page-appointments" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>📅 Termine & Erinnerungen</h2>
+      <button class="btn" onclick="openAppointmentModal()">+ Termin</button>
     </div>
+    <div id="apptList"></div>
   </div>
 
-  <!-- ============================================
-       ZÄHLER MODAL (Sub-Modal)
-  ============================================ -->
-  <div class="modal-overlay" id="modalZaehler">
-    <div class="modal">
-      <h3 id="zModalTitle">Neuer Zähler</h3>
-      <div class="form-group">
-        <label>Typ *</label>
-        <select id="zType">
-          <option value="Strom">⚡ Strom</option>
-          <option value="Gas">🔥 Gas</option>
-          <option value="Wasser">💧 Wasser</option>
-          <option value="Warmwasser">🚿 Warmwasser</option>
-          <option value="Heizung">🌡️ Heizung</option>
-          <option value="Sonstiges">📊 Sonstiges</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Zählernummer</label>
-          <input type="text" id="zNummer" placeholder="z.B. 123456789">
+  <div class="page" id="page-stats" style="display:none">
+    <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
+    <div id="statsContent"></div>
+  </div>
+
+  <div class="page" id="page-settings" style="display:none">
+    <h2 style="margin-bottom:12px">⚙️ Einstellungen</h2>
+
+    <div class="card">
+      <h2>🎨 Design</h2>
+      <div class="row">
+        <div class="field">
+          <label>Stil</label>
+          <select id="themeStyleSel" onchange="setThemeStyle(this.value)">
+            <option value="apple">🍎 Apple (klassisch & klar)</option>
+            <option value="glass">✨ Glass (modern & farbig)</option>
+            <option value="linear">📐 Linear (sachlich & produktiv)</option>
+          </select>
         </div>
-        <div class="form-group">
-          <label>Einheit</label>
-          <select id="zEinheit">
-            <option value="kWh">kWh</option>
-            <option value="m³">m³</option>
-            <option value="MWh">MWh</option>
-            <option value="L">Liter</option>
-            <option value="Stk">Stück</option>
+        <div class="field">
+          <label>Modus</label>
+          <select id="themeModeSel" onchange="setThemeMode(this.value)">
+            <option value="dark">🌙 Dunkel</option>
+            <option value="light">☀️ Hell</option>
+            <option value="auto">🔄 System folgen</option>
           </select>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Grundgebühr (€/Monat)</label>
-          <input type="number" id="zFixkosten" step="0.01" inputmode="decimal" placeholder="0.00">
-        </div>
-        <div class="form-group">
-          <label>Preis pro Einheit (€)</label>
-          <input type="number" id="zPreis" step="0.0001" inputmode="decimal" placeholder="0.00">
-        </div>
+      <p style="font-size:12px;color:var(--muted)">💡 Probier alle Themes mal aus — jedes hat seinen eigenen Vibe!</p>
+    </div>
+
+    <div class="card">
+      <h2>☁️ Google Sync</h2>
+      <div class="field">
+        <label>Google OAuth Client-ID</label>
+        <input type="text" id="gClientId" placeholder="xxxxx.apps.googleusercontent.com">
       </div>
-      <div class="form-group">
-        <label>Ablesefrist (Tag im Jahr, optional)</label>
-        <input type="text" id="zAblesefrist" placeholder="z.B. 31.12">
+      <div class="row">
+        <button class="btn" onclick="saveClientId()">Speichern</button>
+        <button class="btn ok" onclick="gSignIn()">🔐 Anmelden</button>
       </div>
-      <div class="form-group">
-        <label>Notizen</label>
-        <textarea id="zNotes" rows="2"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost" onclick="gSwitchAccount()">🔄 Konto wechseln</button>
+        <button class="btn ghost" onclick="gSignOut()">Abmelden</button>
       </div>
-      <div class="modal-actions">
-        <button class="btn btn-danger" id="btnDeleteZaehler" style="margin-right:auto;">🗑️ Löschen</button>
-        <button class="btn btn-secondary" onclick="closeModal('modalZaehler')">Abbrechen</button>
-        <button class="btn" id="btnSaveZaehler">Speichern</button>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">
+        🔄 <strong>Auto-Sync aktiv:</strong> Daten werden 3 Sek nach jeder Änderung automatisch in Google Drive gesichert.
+      </p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="syncNow()">⬆️⬇️ Jetzt synchronisieren</button>
+        <button class="btn ghost" onclick="restoreFromDrive()">↩️ Aus Drive wiederherstellen</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>💾 Backup & Export</h2>
+      <div class="row">
+        <button class="btn" onclick="exportJSON()">⬇️ JSON Backup</button>
+        <button class="btn ghost" onclick="document.getElementById('importFile').click()">⬆️ JSON Import</button>
+        <input type="file" id="importFile" style="display:none" accept=".json" onchange="importJSON(event)">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ok" onclick="exportCSV()">📊 CSV Export (Excel)</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">
+        📊 CSV: Alle Zählerstände + Verbrauch + Kosten als Tabelle.<br>
+        💾 JSON: Komplettes Backup zum Wiederherstellen.<br>
+        Letzter Sync: <span id="lastBackup">–</span>
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>ℹ️ Über</h2>
+      <p style="font-size:13px;color:var(--muted)">Version 2.1 · Kosten-Tracker Edition</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
+      <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
   </div>
 
-  <!-- ============================================
-       TOAST
-  ============================================ -->
-  <div class="toast" id="toast"></div>
+  <div class="kbd-footer" onclick="openShortcutHelp()">⌨️ Drücke <strong>?</strong> für Tastatur-Shortcuts</div>
+</div>
 
-  <!-- ============================================
-       SCRIPTS — wird in Teil 2B + 2C eingefügt
-  ============================================ -->
-  <script>
-    /* ============================================================
-   ZAEHLER-APP CORE
-   ============================================================ */
+<button class="fab" onclick="quickAdd()" title="Schnell-Eintrag">+</button>
 
-// ---------- CONFIG ----------
-const CONFIG = {
-  OAUTH_CLIENT_ID: '149502927545-mq41mdnodo9411tgi54k2rmpet0n46vd.apps.googleusercontent.com',
-  DRIVE_SCOPES: 'https://www.googleapis.com/auth/drive.file',
-  DRIVE_ROOT_FOLDER: 'Zaehler-App',
-  PHOTO_FOLDER: 'Fotos',
-  DATA_FILE: 'zaehler-data.json',
-  APP_VERSION: '3.2.0'
+<!-- PROPERTY MODAL -->
+<div class="modal-bg" id="propModal">
+  <div class="modal">
+    <h2 id="propModalTitle">Grundstück</h2>
+    <div class="field"><label>Name</label><input type="text" id="propName" placeholder="z. B. Hauptwohnsitz"></div>
+    <div class="field"><label>Adresse</label><input type="text" id="propAddr" placeholder="Straße, PLZ Ort"></div>
+    <div class="field"><label>Notiz</label><textarea id="propNote" rows="2"></textarea></div>
+    
+    <hr style="margin:14px 0;border-color:var(--border)">
+    <h3>⚡ Zähler</h3>
+    <div id="meterEditList" style="margin-bottom:8px"></div>
+    <button class="btn sm ghost" onclick="addMeterRow()">+ Zähler hinzufügen</button>
+    
+    <hr style="margin:14px 0;border-color:var(--border)">
+    <h3>💸 Sonstige Fixkosten <span style="font-weight:400;font-size:12px;color:var(--muted)">(Müll, Versicherung, Grundsteuer...)</span></h3>
+    <div id="fixedCostList" style="margin-bottom:8px"></div>
+    <button class="btn sm ghost" onclick="addFixedCost()">+ Fixkosten hinzufügen</button>
+    
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('propModal')">Abbrechen</button>
+      <button class="btn err sm" id="propDelBtn" onclick="deleteProperty()" style="display:none">Löschen</button>
+      <button class="btn ok" onclick="saveProperty()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- APPOINTMENT MODAL -->
+<div class="modal-bg" id="apptModal">
+  <div class="modal">
+    <h2 id="apptModalTitle">Termin</h2>
+    <div class="field"><label>Titel</label><input type="text" id="apptTitle" placeholder="z. B. Schornsteinfeger"></div>
+    <div class="field"><label>Kategorie</label>
+      <select id="apptCat">
+        <option value="schornstein">🔥 Schornsteinfeger</option>
+        <option value="heizung">🔧 Heizungswartung</option>
+        <option value="ablesung">📝 Zählerablesung</option>
+        <option value="rauchmelder">🚨 Rauchmelder-Check</option>
+        <option value="legionellen">💧 Legionellenprüfung</option>
+        <option value="elektro">⚡ Elektro-Check (E-Check)</option>
+        <option value="versicherung">📄 Versicherung</option>
+        <option value="grundsteuer">💰 Grundsteuer</option>
+        <option value="sonstiges">📌 Sonstiges</option>
+      </select>
+    </div>
+    <div class="field"><label>Grundstück</label><select id="apptProp"></select></div>
+    <div class="row">
+      <div class="field"><label>Datum</label><input type="date" id="apptDate"></div>
+      <div class="field"><label>Uhrzeit (optional)</label><input type="time" id="apptTime"></div>
+    </div>
+    <div class="field"><label>Wiederholung</label>
+      <select id="apptRepeat">
+        <option value="none">Einmalig</option>
+        <option value="monthly">Monatlich</option>
+        <option value="quarterly">Vierteljährlich</option>
+        <option value="yearly">Jährlich</option>
+        <option value="2years">Alle 2 Jahre</option>
+        <option value="3years">Alle 3 Jahre</option>
+      </select>
+    </div>
+    <div class="field"><label>📝 Notiz (intern)</label><textarea id="apptNote" rows="2"></textarea></div>
+    <div class="field">
+      <label><input type="checkbox" id="apptCal" onchange="toggleCalFields()" style="width:auto"> ➕ In Google Kalender eintragen</label>
+    </div>
+    <div id="calFields" style="display:none">
+      <div class="field">
+        <label>📨 Kalender-Beschreibung</label>
+        <textarea id="apptCalText" rows="2" placeholder="Wenn leer: wird die Notiz verwendet"></textarea>
+      </div>
+      <div class="field">
+        <label>🔔 Erinnerungen (max 5)</label>
+        <div class="tag-list" id="reminderTags"></div>
+        <div class="row" style="margin-top:6px">
+          <input type="number" id="customReminder" placeholder="Custom (Tage)" min="0" max="365" style="max-width:140px">
+          <button class="btn sm ghost" onclick="addCustomReminder()" style="flex:0">+ Hinzufügen</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('apptModal')">Abbrechen</button>
+      <button class="btn err sm" id="apptDelBtn" onclick="deleteAppointment()" style="display:none">Löschen</button>
+      <button class="btn ok" onclick="saveAppointment()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY MODAL -->
+<div class="modal-bg" id="histModal">
+  <div class="modal">
+    <h2 id="histTitle">Verlauf</h2>
+    <div class="modal-tabs">
+      <div class="modal-tab active" data-mtab="history" onclick="switchHistTab('history')">📜 Verlauf</div>
+      <div class="modal-tab" data-mtab="photos" onclick="switchHistTab('photos')">📸 Fotos</div>
+    </div>
+    <div style="margin-bottom:10px" id="histFilters">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--muted)">
+        <input type="checkbox" id="histOnlyMain" onchange="renderHistContent()" style="width:auto;margin:0">
+        Nur Hauptablesungen anzeigen
+      </label>
+    </div>
+    <div id="histContent"></div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('histModal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- KEYBOARD HELP -->
+<div class="modal-bg" id="kbdModal">
+  <div class="modal">
+    <h2>⌨️ Tastatur-Shortcuts</h2>
+    <table class="kbd-table">
+      <tr><td>Strg + N</td><td>Neuer Zählerstand</td></tr>
+      <tr><td>Strg + S</td><td>Jetzt synchronisieren</td></tr>
+      <tr><td>Strg + E</td><td>JSON Export</td></tr>
+      <tr><td>1 – 6</td><td>Tab wechseln</td></tr>
+      <tr><td>Esc</td><td>Modal schließen</td></tr>
+      <tr><td>?</td><td>Diese Hilfe</td></tr>
+    </table>
+    <div class="footer"><button class="btn ok" onclick="closeModal('kbdModal')">Verstanden</button></div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" src=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ========================================================
+   ZÄHLERSTAND-MANAGER · Kosten-Tracker Edition v2.1
+   ======================================================== */
+
+const STORE_KEY = 'zaehler_v1';
+const SETTINGS_KEY = 'zaehler_settings_v1';
+const BACKUP_KEY = 'zaehler_backup_v1';
+const APP_VERSION = '2.1';
+
+const METER_TYPES = {
+  strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
+  gas:        {label:'Gas',           unit:'m³',   icon:'🔥', color:'#ff9f0a'},
+  wasser:     {label:'Wasser (kalt)', unit:'m³',   icon:'💧', color:'#5ac8fa'},
+  warmwasser: {label:'Warmwasser',    unit:'m³',   icon:'🚿', color:'#ff453a'},
+  heizung:    {label:'Heizung',       unit:'kWh',  icon:'🌡️', color:'#ff9500'},
+  oel:        {label:'Öl',            unit:'L',    icon:'🛢️', color:'#854d0e'},
+  pellets:    {label:'Pellets',       unit:'kg',   icon:'🪵', color:'#92400e'},
+  solar:      {label:'Solar/PV',      unit:'kWh',  icon:'☀️', color:'#facc15'},
 };
 
-// ---------- STATE ----------
-const STATE = {
-  user: null,
-  accessToken: null,
-  driveRootId: null,
-  data: {
-    grundstuecke: [],   // [{id, name, adresse, notes, zaehler: [{id, type, nummer, einheit, fixkosten:[]}]}]
-    readings: [],       // [{id, grundstueckId, zaehlerId, wert, datum, photo, notes, isAnomaly}]
-    estimates: [],      // [{id, grundstueckId, zaehlerId, wert, datum}]
-    activity: [],       // [{id, type, message, timestamp, icon}]
-    settings: {
-      theme: 'dark',
-      profile: 'standard',
-      sectionOrder: ['hero','quickEntry','grundstuecke','activity'],
-      ocrEnabled: true,
-      aiOcrEnabled: false,
-      cropEnabled: true,
-      confirmEnabled: true,
-      aiInsightsEnabled: false,
-      openrouterKey: ''
-    }
-  },
-  dirty: false
+const COST_CATEGORIES = {
+  muell: {label:'Müllabfuhr', icon:'🗑️'},
+  grundsteuer: {label:'Grundsteuer', icon:'💰'},
+  versicherung: {label:'Versicherung', icon:'🛡️'},
+  schornstein: {label:'Schornsteinfeger', icon:'🔥'},
+  hausgeld: {label:'Hausgeld', icon:'🏠'},
+  wartung: {label:'Wartung', icon:'🔧'},
+  internet: {label:'Internet/TV', icon:'📡'},
+  gez: {label:'Rundfunk (GEZ)', icon:'📺'},
+  sonstiges: {label:'Sonstiges', icon:'📌'}
 };
 
-// ---------- UTILS ----------
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const fmtDate = (iso) => new Date(iso).toLocaleDateString('de-DE');
-const fmtTime = (ts) => {
-  const d = new Date(ts);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'gerade eben';
-  if (diff < 3600) return `vor ${Math.floor(diff/60)} Min.`;
-  if (diff < 86400) return `vor ${Math.floor(diff/3600)} Std.`;
-  return d.toLocaleDateString('de-DE');
+const INTERVALS = {
+  monthly: {label:'Monatlich', factor:12},
+  quarterly: {label:'Vierteljährlich', factor:4},
+  semi: {label:'Halbjährlich', factor:2},
+  yearly: {label:'Jährlich', factor:1}
 };
 
-function toast(msg, type = '') {
-  const el = $('#toast');
-  el.textContent = msg;
-  el.className = 'toast active ' + type;
-  setTimeout(() => el.className = 'toast ' + type, 3000);
-}
+const REMINDER_PRESETS = [
+  {days:0, label:'Am Tag'}, {days:1, label:'1 Tag'}, {days:3, label:'3 Tage'},
+  {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
+];
 
-function openModal(id) { $('#' + id).classList.add('active'); }
-function closeModal(id) { $('#' + id).classList.remove('active'); }
-window.closeModal = closeModal;
+let state = { properties: [], readings: [], appointments: [] };
+let settings = {
+  leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
+  themeStyle: 'apple', themeMode: 'dark'
+};
+let editingProp = null, editingAppt = null;
+let currentReminders = [7];
+let histCurrentContext = null;
+let histCurrentTab = 'history';
+let undoTimer = null;
+let autoSyncTimer = null;
+let pendingChanges = false;
 
-// ---------- LOCAL STORAGE ----------
-const LS_KEY = 'zaehler-app-state-v3';
-
-function saveLocal() {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(STATE.data));
-    STATE.dirty = true;
-  } catch (e) {
-    console.error('saveLocal:', e);
-    toast('Lokaler Speicher voll!', 'error');
-  }
-}
-
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      STATE.data = { ...STATE.data, ...parsed };
-      // Settings merge (falls neue Keys)
-      STATE.data.settings = { ...STATE.data.settings, ...(parsed.settings || {}) };
-    }
-  } catch (e) {
-    console.error('loadLocal:', e);
-  }
-}
-
-// ---------- ACTIVITY LOG ----------
-function logActivity(type, message, icon = '📌') {
-  STATE.data.activity.unshift({
-    id: uid(),
-    type,
-    message,
-    icon,
-    timestamp: Date.now()
+/* ----- Persistence ----- */
+function load(){
+  try { state = JSON.parse(localStorage.getItem(STORE_KEY)) || state; } catch(e){}
+  try { settings = {...settings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')}; } catch(e){}
+  if(!state.properties) state.properties=[];
+  if(!state.readings) state.readings=[];
+  if(!state.appointments) state.appointments=[];
+  // Defensive defaults — alte Daten kompatibel halten
+  state.readings.forEach(r => { if(r.isMain === undefined) r.isMain = true; });
+  state.appointments.forEach(a => {
+    if(!a.reminders) a.reminders = [settings.leadDays || 7];
+    if(a.calendarText === undefined) a.calendarText = '';
   });
-  // Max 50 einträge
-  STATE.data.activity = STATE.data.activity.slice(0, 50);
-  saveLocal();
-  renderActivity();
-}
-
-// ---------- OAUTH / GOOGLE ----------
-let tokenClient = null;
-
-function initGoogleAuth() {
-  if (!CONFIG.OAUTH_CLIENT_ID) {
-    console.warn('OAuth Client ID nicht gesetzt!');
-    setConnStatus('error', 'Keine Client-ID');
-    return;
-  }
-  if (typeof google === 'undefined') {
-    setTimeout(initGoogleAuth, 500);
-    return;
-  }
-  try {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.OAUTH_CLIENT_ID,
-      scope: CONFIG.DRIVE_SCOPES,
-      callback: async (resp) => {
-        if (resp.error) {
-          console.warn('OAuth Antwort:', resp.error);
-          if (resp.error === 'interaction_required' ||
-              resp.error === 'login_required' ||
-              resp.error === 'consent_required' ||
-              resp.error === 'access_denied') {
-            setConnStatus('', 'Anmeldung nötig');
-            STATE._silentAuth = false;
-            return;
-          }
-          setConnStatus('error', 'Fehler');
-          toast('Anmeldung fehlgeschlagen', 'error');
-          STATE._silentAuth = false;
-          return;
-        }
-        STATE.accessToken = resp.access_token;
-        const expiresIn = resp.expires_in || 3600;
-        const expiresAt = Date.now() + (expiresIn * 1000);
-        localStorage.setItem('zaehler-session', JSON.stringify({
-          token: resp.access_token,
-          expiresAt,
-          hadConsent: true
-        }));
-        setConnStatus('connected', 'Verbunden');
-        const wasSilent = STATE._silentAuth;
-        STATE._silentAuth = false;
-        if (!wasSilent) {
-          toast('Erfolgreich verbunden ✅', 'success');
-          logActivity('auth', 'Mit Google verbunden', '🔐');
-        }
-        await fetchUserInfo();
-        await ensureDriveStructure();
-        await syncFromDrive();
-      }
+  state.properties.forEach(p => {
+    if(!p.fixedCosts) p.fixedCosts = [];
+    p.meters.forEach(m => {
+      if(m.pricePerUnit === undefined) m.pricePerUnit = 0;
+      if(m.baseFeeMonthly === undefined) m.baseFeeMonthly = 0;
+      if(m.meterRentYearly === undefined) m.meterRentYearly = 0;
     });
-    setConnStatus('', 'Bereit');
-    console.log('Google Auth bereit');
-    tryRestoreSession();
-  } catch (e) {
-    console.error('initGoogleAuth:', e);
-    setConnStatus('error', 'Fehler');
-  }
-}
-
-async function validateToken(token) {
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + encodeURIComponent(token));
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
-async function tryRestoreSession() {
-  const raw = localStorage.getItem('zaehler-session');
-  if (!raw) return;
-  try {
-    const session = JSON.parse(raw);
-    if (session.token && session.expiresAt && Date.now() < session.expiresAt - 60000) {
-      setConnStatus('', 'Prüfe Session...');
-      const isValid = await validateToken(session.token);
-      if (isValid) {
-        STATE.accessToken = session.token;
-        setConnStatus('connected', 'Verbunden');
-        console.log('✓ Session validiert & wiederhergestellt');
-        await fetchUserInfo();
-        await ensureDriveStructure();
-        await syncFromDrive();
-        return;
-      }
-      console.warn('Token ist ungültig, lösche Cache');
-      localStorage.removeItem('zaehler-session');
-    }
-    if (session.hadConsent && tokenClient) {
-      console.log('Token abgelaufen → Silent Re-Auth...');
-      setConnStatus('', 'Wird aktualisiert...');
-      STATE._silentAuth = true;
-      tokenClient.requestAccessToken({ prompt: 'none' });
-    }
-  } catch (e) {
-    console.warn('Session-Restore fehlgeschlagen:', e);
-    localStorage.removeItem('zaehler-session');
-  }
-}
-
-function setConnStatus(state, text) {
-  const badge = $('#connBadge');
-  if (!badge) return;
-  badge.classList.remove('connected', 'error');
-  if (state) badge.classList.add(state);
-  $('#connText').textContent = text;
-}
-
-async function fetchUserInfo() {
-  if (!STATE.accessToken) return;
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${STATE.accessToken}` }
-    });
-    if (!res.ok) return;
-    const info = await res.json();
-    STATE.user = info;
-    const chip = $('#userChip');
-    const av = $('#userAvatar');
-    const nm = $('#userName');
-    if (info.picture) {
-      av.outerHTML = `<img id="userAvatar" src="${info.picture}" alt="">`;
-    } else {
-      av.textContent = (info.name || '?')[0].toUpperCase();
-    }
-    nm.textContent = info.given_name || info.name || 'Konto';
-    chip.classList.remove('hidden');
-  } catch (e) {
-    console.warn('fetchUserInfo:', e);
-  }
-}
-
-function gSignIn() {
-  if (!tokenClient) {
-    toast('Bitte zuerst Client-ID konfigurieren', 'warning');
-    return;
-  }
-  tokenClient.requestAccessToken({ prompt: '' });
-}
-
-function gSwitchAccount() {
-  if (!tokenClient) return;
-  localStorage.removeItem('zaehler-session');
-  tokenClient.requestAccessToken({ prompt: 'select_account' });
-}
-
-function gSignOut() {
-  STATE.accessToken = null;
-  STATE.user = null;
-  localStorage.removeItem('zaehler-session');
-  setConnStatus('', 'Offline');
-  $('#userChip').classList.add('hidden');
-  toast('Abgemeldet', 'success');
-}
-
-// ---------- GOOGLE DRIVE API ----------
-async function driveFetch(url, opts = {}) {
-  if (!STATE.accessToken) throw new Error('Nicht angemeldet');
-  const headers = { Authorization: `Bearer ${STATE.accessToken}`, ...opts.headers };
-  const res = await fetch(url, { ...opts, headers });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Drive API ${res.status}: ${txt}`);
-  }
-  return res;
-}
-
-async function findOrCreateFolder(name, parentId = null) {
-  // Search
-  const q = encodeURIComponent(
-    `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false` +
-    (parentId ? ` and '${parentId}' in parents` : '')
-  );
-  const searchRes = await driveFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`
-  );
-  const json = await searchRes.json();
-  if (json.files && json.files.length > 0) return json.files[0].id;
-
-  // Create
-  const meta = {
-    name,
-    mimeType: 'application/vnd.google-apps.folder',
-    ...(parentId ? { parents: [parentId] } : {})
-  };
-  const createRes = await driveFetch(
-    'https://www.googleapis.com/drive/v3/files?fields=id',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(meta)
-    }
-  );
-  const created = await createRes.json();
-  return created.id;
-}
-
-async function ensureDriveStructure(retry = 0) {
-  if (!STATE.accessToken) {
-    console.warn('Drive: kein Token');
-    return;
-  }
-  try {
-    const rootId = await findOrCreateFolder(CONFIG.DRIVE_ROOT_FOLDER);
-    STATE.driveRootId = rootId;
-    await findOrCreateFolder(CONFIG.PHOTO_FOLDER, rootId);
-    console.log('✓ Drive-Struktur OK:', rootId);
-  } catch (e) {
-    console.error('ensureDriveStructure (Versuch ' + (retry + 1) + '):', e);
-    if (retry < 2) {
-      await new Promise(r => setTimeout(r, 800));
-      return ensureDriveStructure(retry + 1);
-    }
-    toast('Drive-Verbindung fehlgeschlagen – bitte erneut anmelden', 'error');
-    setConnStatus('error', 'Drive-Fehler');
-  }
-}
-
-async function findFileInFolder(name, parentId) {
-  const q = encodeURIComponent(`name='${name}' and '${parentId}' in parents and trashed=false`);
-  const res = await driveFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)`
-  );
-  const json = await res.json();
-  return json.files && json.files.length > 0 ? json.files[0] : null;
-}
-
-async function uploadJsonToDrive(filename, jsonObj, parentId) {
-  const existing = await findFileInFolder(filename, parentId);
-  const metadata = existing
-    ? { name: filename }
-    : { name: filename, parents: [parentId] };
-
-  const boundary = '-------zaehler' + uid();
-  const delim = `\r\n--${boundary}\r\n`;
-  const close = `\r\n--${boundary}--`;
-  const body =
-    delim +
-    'Content-Type: application/json\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delim +
-    'Content-Type: application/json\r\n\r\n' +
-    JSON.stringify(jsonObj) +
-    close;
-
-  const url = existing
-    ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart`
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-  const method = existing ? 'PATCH' : 'POST';
-
-  await driveFetch(url, {
-    method,
-    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-    body
   });
-}
-
-async function downloadJsonFromDrive(filename, parentId) {
-  const file = await findFileInFolder(filename, parentId);
-  if (!file) return null;
-  const res = await driveFetch(
-    `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`
-  );
-  return await res.json();
-}
-
-// ---------- SYNC ----------
-async function syncToDrive() {
-  if (!STATE.accessToken || !STATE.driveRootId) return;
-  try {
-    await uploadJsonToDrive(CONFIG.DATA_FILE, STATE.data, STATE.driveRootId);
-    STATE.dirty = false;
-    console.log('Sync → Drive OK');
-  } catch (e) {
-    console.error('syncToDrive:', e);
-    toast('Sync fehlgeschlagen', 'error');
-  }
-}
-
-async function syncFromDrive() {
-  if (!STATE.accessToken || !STATE.driveRootId) return;
-  try {
-    const remote = await downloadJsonFromDrive(CONFIG.DATA_FILE, STATE.driveRootId);
-    if (remote) {
-      // Naive merge: Drive gewinnt (kann später erweitert werden)
-      STATE.data = { ...STATE.data, ...remote };
-      STATE.data.settings = { ...STATE.data.settings, ...(remote.settings || {}) };
-      saveLocal();
-      renderAll();
-      toast('Daten geladen', 'success');
-    } else {
-      // Erstmals: hochladen
-      await syncToDrive();
-    }
-  } catch (e) {
-    console.error('syncFromDrive:', e);
-  }
-}
-
-// Auto-Sync alle 30s wenn dirty
-setInterval(() => { if (STATE.dirty) syncToDrive(); }, 30000);
-
-/* ============================================================
-   ZAEHLER CRUD
-   ============================================================ */
-
-const ZAEHLER_ICONS = {
-  'Strom': '⚡', 'Gas': '🔥', 'Wasser': '💧',
-  'Warmwasser': '🚿', 'Heizung': '🌡️', 'Sonstiges': '📊'
-};
-
-let editingZaehlerId = null;
-
-function renderZaehlerListInModal() {
-  const list = $('#zaehlerList');
-  if (!editingGrundstueckId) {
-    list.innerHTML = '<div class="zaehler-empty">Erst Grundstück speichern, dann Zähler hinzufügen</div>';
-    $('#btnAddZaehler').disabled = true;
-    return;
-  }
-  $('#btnAddZaehler').disabled = false;
-  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-  if (!gs || !gs.zaehler || gs.zaehler.length === 0) {
-    list.innerHTML = '<div class="zaehler-empty">Noch keine Zähler angelegt</div>';
-    return;
-  }
-  list.innerHTML = '';
-  gs.zaehler.forEach(z => {
-    const icon = ZAEHLER_ICONS[z.type] || '📊';
-    const row = document.createElement('div');
-    row.className = 'zaehler-row';
-    row.onclick = () => openZaehlerEdit(z.id);
-    row.innerHTML = `
-      <div class="zaehler-row-info">
-        <div class="zaehler-row-type">${icon} ${z.type}</div>
-        <div class="zaehler-row-meta">
-          ${z.nummer ? 'Nr. ' + z.nummer : 'ohne Nummer'} · ${z.einheit || '–'}
-          ${z.fixkosten ? ' · ' + z.fixkosten + ' €/Mo.' : ''}
-        </div>
-      </div>
-      <div>›</div>`;
-    list.appendChild(row);
-  });
-}
-
-function openZaehlerNew() {
-  if (!editingGrundstueckId) {
-    toast('Bitte erst Grundstück speichern', 'warning');
-    return;
-  }
-  editingZaehlerId = null;
-  $('#zModalTitle').textContent = 'Neuer Zähler';
-  $('#zType').value = 'Strom';
-  $('#zNummer').value = '';
-  $('#zEinheit').value = 'kWh';
-  $('#zFixkosten').value = '';
-  $('#zPreis').value = '';
-  $('#zAblesefrist').value = '';
-  $('#zNotes').value = '';
-  $('#btnDeleteZaehler').style.display = 'none';
-  openModal('modalZaehler');
-}
-
-function openZaehlerEdit(zId) {
-  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-  if (!gs) return;
-  const z = gs.zaehler.find(zz => zz.id === zId);
-  if (!z) return;
-  editingZaehlerId = zId;
-  $('#zModalTitle').textContent = `Bearbeiten: ${z.type}`;
-  $('#zType').value = z.type || 'Strom';
-  $('#zNummer').value = z.nummer || '';
-  $('#zEinheit').value = z.einheit || 'kWh';
-  $('#zFixkosten').value = z.fixkosten || '';
-  $('#zPreis').value = z.preis || '';
-  $('#zAblesefrist').value = z.ablesefrist || '';
-  $('#zNotes').value = z.notes || '';
-  $('#btnDeleteZaehler').style.display = 'inline-flex';
-  openModal('modalZaehler');
-}
-
-function saveZaehler() {
-  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-  if (!gs) return;
-  if (!gs.zaehler) gs.zaehler = [];
-
-  const data = {
-    type: $('#zType').value,
-    nummer: $('#zNummer').value.trim(),
-    einheit: $('#zEinheit').value,
-    fixkosten: parseFloat($('#zFixkosten').value) || 0,
-    preis: parseFloat($('#zPreis').value) || 0,
-    ablesefrist: $('#zAblesefrist').value.trim(),
-    notes: $('#zNotes').value.trim()
-  };
-
-  if (editingZaehlerId) {
-    const z = gs.zaehler.find(zz => zz.id === editingZaehlerId);
-    if (z) Object.assign(z, data);
-    logActivity('edit', `Zähler "${data.type}" aktualisiert (${gs.name})`, '✏️');
-  } else {
-    const newZ = { id: uid(), ...data };
-    gs.zaehler.push(newZ);
-    logActivity('add', `Zähler "${data.type}" angelegt (${gs.name})`, ZAEHLER_ICONS[data.type] || '🔢');
-  }
-  saveLocal();
-  syncToDrive();
-  renderZaehlerListInModal();
-  renderAll();
-  closeModal('modalZaehler');
-  toast('Zähler gespeichert', 'success');
-}
-
-function deleteZaehler() {
-  if (!editingZaehlerId) return;
-  if (!confirm('Diesen Zähler wirklich löschen? Zugehörige Ablesungen bleiben erhalten.')) return;
-  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-  if (!gs) return;
-  const z = gs.zaehler.find(zz => zz.id === editingZaehlerId);
-  gs.zaehler = gs.zaehler.filter(zz => zz.id !== editingZaehlerId);
-  saveLocal();
-  syncToDrive();
-  logActivity('delete', `Zähler "${z?.type}" gelöscht`, '🗑️');
-  renderZaehlerListInModal();
-  renderAll();
-  closeModal('modalZaehler');
-  toast('Zähler gelöscht', 'warning');
-}
-
-function deleteGrundstueck() {
-  if (!editingGrundstueckId) return;
-  const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-  if (!gs) return;
-  if (!confirm(`Grundstück "${gs.name}" wirklich löschen? Alle Zähler & Ablesungen werden mitgelöscht!`)) return;
-  STATE.data.grundstuecke = STATE.data.grundstuecke.filter(g => g.id !== editingGrundstueckId);
-  STATE.data.readings = STATE.data.readings.filter(r => r.grundstueckId !== editingGrundstueckId);
-  saveLocal();
-  syncToDrive();
-  logActivity('delete', `Grundstück "${gs.name}" gelöscht`, '🗑️');
-  renderAll();
-  closeModal('modalGrundstueck');
-  toast('Grundstück gelöscht', 'warning');
-}
-
-/* ============================================================
-   RENDERING
-   ============================================================ */
-
-function renderAll() {
   applyTheme();
-  applyProfile();
-  applySectionOrder();
-  renderGrundstueckSelect();
-  renderZaehlerSelect();
-  renderGrundstueckList();
-  renderActivity();
-  renderHero();
-  renderSettings();
+}
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  scheduleBackup();
+  scheduleAutoSync();
+}
+function scheduleBackup(){
+  try{
+    const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
+    backups.push({ts:Date.now(), data:state});
+    while(backups.length > 5) backups.shift();
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
+  }catch(e){}
 }
 
-function applyTheme() {
-  document.body.setAttribute('data-theme', STATE.data.settings.theme);
+/* ----- Auto-Sync ----- */
+function scheduleAutoSync(){
+  pendingChanges = true;
+  updateSyncStatus(gIsSignedIn() ? 'ungespeichert' : 'lokal');
+  if(autoSyncTimer) clearTimeout(autoSyncTimer);
+  if(!gIsSignedIn()) return;
+  autoSyncTimer = setTimeout(()=>{ autoSync(); }, 3000);
+}
+async function autoSync(){
+  if(!gIsSignedIn() || !pendingChanges) return;
+  try{
+    updateSyncStatus('synchronisiere…');
+    if(!driveFileId){
+      const f = await findDriveFile();
+      if(f) driveFileId = f.id;
+    }
+    await uploadDrive(!driveFileId);
+    pendingChanges = false;
+    settings.lastSync = Date.now();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    updateSyncStatus('verbunden');
+  }catch(e){
+    console.error('AutoSync',e);
+    updateSyncStatus('fehler');
+    setTimeout(()=>{ if(pendingChanges) autoSync(); }, 30000);
+  }
 }
 
-function applyProfile() {
-  const isMinimal = STATE.data.settings.profile === 'minimal';
-  $('#sectionHero').classList.toggle('hidden', isMinimal);
-  $('#sectionGrundstuecke').classList.toggle('hidden', isMinimal);
-  $('#sectionActivity').classList.toggle('hidden', isMinimal);
+/* ----- Theme ----- */
+function applyTheme(){
+  const root = document.documentElement;
+  root.dataset.style = settings.themeStyle || 'apple';
+  let mode = settings.themeMode || 'dark';
+  if(mode === 'auto'){
+    mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  root.dataset.mode = mode;
+  const ss = document.getElementById('themeStyleSel');
+  const ms = document.getElementById('themeModeSel');
+  if(ss) ss.value = settings.themeStyle;
+  if(ms) ms.value = settings.themeMode;
+}
+function setThemeStyle(s){ settings.themeStyle = s; save(); applyTheme(); }
+function setThemeMode(m){ settings.themeMode = m; save(); applyTheme(); }
+function toggleMode(){
+  setThemeMode(settings.themeMode === 'light' ? 'dark' : 'light');
+}
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if(settings.themeMode === 'auto') applyTheme();
+});
+
+/* ----- Refresh ----- */
+async function refreshApp(){
+  toast('Lade frisch…','ok');
+  try{
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const r of regs) await r.unregister();
+    }
+    if('caches' in window){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  }catch(e){}
+  setTimeout(()=>location.reload(), 500);
 }
 
-function applySectionOrder() {
-  const main = $('#mainContent');
-  const order = STATE.data.settings.sectionOrder;
-  const map = {
-    hero: '#sectionHero',
-    quickEntry: '#sectionQuickEntry',
-    grundstuecke: '#sectionGrundstuecke',
-    activity: '#sectionActivity'
+/* ----- Utils ----- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const fmt = (n,d=2) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
+const fmtEur = (n) => Number(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €';
+const today = () => new Date().toISOString().slice(0,10);
+function dateAdd(date, days){ const d=new Date(date); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
+function toast(msg, type='', undoAction=null){
+  const t = document.getElementById('toast');
+  t.innerHTML = '';
+  const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
+  if(undoAction){
+    const btn = document.createElement('button');
+    btn.className = 'undo-btn'; btn.textContent = '↩ RÜCKGÄNGIG';
+    btn.onclick = () => { undoAction(); t.className = 'toast'; };
+    t.appendChild(btn);
+  }
+  t.className = 'toast show ' + type;
+  if(undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(()=>t.className='toast '+type, undoAction ? 7000 : 3000);
+}
+function escapeHtml(s){ return (s+'').replace(/[<>&"']/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
+function formatDate(d){ if(!d) return '–'; return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function formatDateShort(d){ return new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}); }
+function humanSize(n){
+  if(n<1024) return n+' B';
+  if(n<1048576) return (n/1024).toFixed(1)+' kB';
+  return (n/1048576).toFixed(2)+' MB';
+}
+
+/* ----- Cost calculation core ----- */
+function calcMeterCostsYearly(meter, readings){
+  const hasPrice = meter.pricePerUnit || meter.baseFeeMonthly || meter.meterRentYearly;
+  if(!hasPrice) return null;
+  let yearlyCons = 0, hasData = false;
+  if(readings.length >= 2){
+    const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+    const diff = readings[readings.length-1].value - readings[0].value;
+    if(days > 0){ yearlyCons = diff * 365 / days; hasData = true; }
+  }
+  if(!hasData && meter.expectedYearly) yearlyCons = meter.expectedYearly;
+  const arbeit = yearlyCons * (meter.pricePerUnit || 0);
+  const grund = (meter.baseFeeMonthly || 0) * 12;
+  const zaehler = meter.meterRentYearly || 0;
+  return {
+    arbeit, grund, zaehler,
+    total: arbeit + grund + zaehler,
+    consumption: yearlyCons,
+    hasData,
+    isEstimate: !hasData
   };
-  order.forEach(key => {
-    const el = $(map[key]);
-    if (el) main.appendChild(el);
+}
+function calcFixedCostsYearly(fixedCosts){
+  if(!fixedCosts || !fixedCosts.length) return 0;
+  return fixedCosts.reduce((sum, fc) => {
+    const factor = INTERVALS[fc.interval]?.factor || 1;
+    return sum + (parseFloat(fc.amount) || 0) * factor;
+  }, 0);
+}
+function calcPropertyTotalYearly(property){
+  const breakdown = {meters:{}, meterSum:0, fixed:0, total:0};
+  property.meters.forEach(m => {
+    const readings = state.readings.filter(r=>r.propId===property.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const c = calcMeterCostsYearly(m, readings);
+    if(c){
+      breakdown.meters[m.id] = c;
+      breakdown.meterSum += c.total;
+    }
   });
+  breakdown.fixed = calcFixedCostsYearly(property.fixedCosts);
+  breakdown.total = breakdown.meterSum + breakdown.fixed;
+  return breakdown;
 }
 
-function moveSection(key, dir) {
-  const order = [...STATE.data.settings.sectionOrder];
-  const idx = order.indexOf(key);
-  if (idx === -1) return;
-  const newIdx = dir === 'up' ? idx - 1 : idx + 1;
-  if (newIdx < 0 || newIdx >= order.length) return;
-  [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
-  STATE.data.settings.sectionOrder = order;
-  saveLocal();
-  applySectionOrder();
-}
-window.moveSection = moveSection;
-
-function renderHero() {
-  const h = new Date().getHours();
-  const greet = h < 11 ? 'Guten Morgen' : h < 18 ? 'Hallo' : 'Guten Abend';
-  $('#heroGreeting').textContent = `${greet}! 👋`;
-  const gsCount = STATE.data.grundstuecke.length;
-  const readCount = STATE.data.readings.length;
-  $('#heroSummary').textContent = gsCount
-    ? `${gsCount} Grundstück${gsCount > 1 ? 'e' : ''} · ${readCount} Ablesung${readCount !== 1 ? 'en' : ''}`
-    : 'Lege dein erstes Grundstück an, um zu starten.';
+/* ----- Navigation ----- */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.style.display='none');
+  document.querySelector(`.tab[data-tab="${tab}"]`)?.classList.add('active');
+  document.getElementById('page-'+tab).style.display='block';
+  render(tab);
 }
 
-function renderGrundstueckSelect() {
-  const sel = $('#qeGrundstueck');
-  sel.innerHTML = '';
-  if (STATE.data.grundstuecke.length === 0) {
-    sel.innerHTML = '<option value="">— Kein Grundstück —</option>';
-    $('#qeZaehler').innerHTML = '';
-    return;
-  }
-  STATE.data.grundstuecke.forEach(gs => {
-    const opt = document.createElement('option');
-    opt.value = gs.id;
-    opt.textContent = gs.name;
-    sel.appendChild(opt);
-  });
-  renderZaehlerSelect();
+/* ----- Property Modal ----- */
+function openPropertyModal(prop){
+  editingProp = prop ? 
+    {...prop, meters:prop.meters.map(m=>({...m})), fixedCosts:(prop.fixedCosts||[]).map(c=>({...c}))} : 
+    {id:uid(), name:'', address:'', note:'', meters:[], fixedCosts:[]};
+  if(!editingProp.fixedCosts) editingProp.fixedCosts = [];
+  document.getElementById('propModalTitle').textContent = prop ? 'Grundstück bearbeiten' : 'Neues Grundstück';
+  document.getElementById('propName').value = editingProp.name;
+  document.getElementById('propAddr').value = editingProp.address || '';
+  document.getElementById('propNote').value = editingProp.note || '';
+  document.getElementById('propDelBtn').style.display = prop ? 'inline-flex' : 'none';
+  renderMeterEditList();
+  renderFixedCostList();
+  document.getElementById('propModal').classList.add('show');
 }
-
-function renderZaehlerSelect() {
-  const gsId = $('#qeGrundstueck').value;
-  const gs = STATE.data.grundstuecke.find(g => g.id === gsId);
-  const sel = $('#qeZaehler');
-  sel.innerHTML = '';
-  if (!gs || !gs.zaehler || gs.zaehler.length === 0) {
-    sel.innerHTML = '<option value="">— Kein Zähler —</option>';
-    return;
-  }
-  gs.zaehler.forEach(z => {
-    const opt = document.createElement('option');
-    opt.value = z.id;
-    opt.textContent = `${z.type} (${z.nummer || 'ohne Nr.'})`;
-    sel.appendChild(opt);
-  });
-}
-
-function renderGrundstueckList() {
-  const list = $('#grundstueckList');
-  list.innerHTML = '';
-  if (STATE.data.grundstuecke.length === 0) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">🏠</div>
-        <div>Noch keine Grundstücke</div>
-      </div>`;
-    return;
-  }
-  STATE.data.grundstuecke.forEach(gs => {
-    const div = document.createElement('div');
-    div.className = 'grundstueck-item';
-    div.onclick = () => openGrundstueckEdit(gs.id);
-    const zCount = (gs.zaehler || []).length;
-    const readingsCount = STATE.data.readings.filter(r => r.grundstueckId === gs.id).length;
-    div.innerHTML = `
-      <div>
-        <div class="grundstueck-name">${gs.name}</div>
-        <div class="grundstueck-meta">${zCount} Zähler · ${readingsCount} Ablesungen</div>
+function renderMeterEditList(){
+  const c = document.getElementById('meterEditList');
+  c.innerHTML = editingProp.meters.map((m,i)=>{
+    const t = METER_TYPES[m.type]||METER_TYPES.strom;
+    return `<div class="card" style="padding:10px;margin-bottom:6px;background:var(--card2)">
+      <div class="row" style="gap:6px">
+        <select onchange="editingProp.meters[${i}].type=this.value;renderMeterEditList()">
+          ${Object.entries(METER_TYPES).map(([k,v])=>`<option value="${k}" ${m.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
+        </select>
+        <input placeholder="Zählernummer" value="${escapeHtml(m.number||'')}" onchange="editingProp.meters[${i}].number=this.value">
       </div>
-      <div>›</div>`;
-    list.appendChild(div);
+      <div class="row" style="gap:6px;margin-top:6px">
+        <input placeholder="Standort (z.B. Keller)" value="${escapeHtml(m.location||'')}" onchange="editingProp.meters[${i}].location=this.value">
+        <button class="btn err sm" style="flex:0 0 auto" onclick="removeMeterRow(${i})">✕</button>
+      </div>
+      <div style="margin-top:6px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">📊 Erwarteter Jahresverbrauch in ${t.unit} (optional)</label>
+        <input type="number" step="0.01" inputmode="decimal" placeholder="z. B. 1500" value="${m.expectedYearly||''}" onchange="editingProp.meters[${i}].expectedYearly=parseFloat(this.value)||0">
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">💰 KOSTEN (alle optional)</div>
+        <div class="row" style="gap:6px">
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Arbeitspreis €/${t.unit}</label>
+            <input type="number" step="0.0001" inputmode="decimal" placeholder="0,32" value="${m.pricePerUnit||''}" onchange="editingProp.meters[${i}].pricePerUnit=parseFloat(this.value)||0">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Grundgebühr €/Monat</label>
+            <input type="number" step="0.01" inputmode="decimal" placeholder="8,50" value="${m.baseFeeMonthly||''}" onchange="editingProp.meters[${i}].baseFeeMonthly=parseFloat(this.value)||0">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">Zählermiete €/Jahr</label>
+            <input type="number" step="0.01" inputmode="decimal" placeholder="0" value="${m.meterRentYearly||''}" onchange="editingProp.meters[${i}].meterRentYearly=parseFloat(this.value)||0">
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function addMeterRow(){
+  editingProp.meters.push({id:uid(),type:'strom',number:'',location:'',expectedYearly:0,pricePerUnit:0,baseFeeMonthly:0,meterRentYearly:0});
+  renderMeterEditList();
+}
+function removeMeterRow(i){ editingProp.meters.splice(i,1); renderMeterEditList(); }
+
+/* Fixed Costs */
+function renderFixedCostList(){
+  const c = document.getElementById('fixedCostList');
+  if(!editingProp.fixedCosts.length){
+    c.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0">Noch keine Fixkosten hinterlegt.</div>';
+    return;
+  }
+  c.innerHTML = editingProp.fixedCosts.map((fc,i) => {
+    return `<div class="fc-row">
+      <div class="row">
+        <select onchange="editingProp.fixedCosts[${i}].category=this.value">
+          ${Object.entries(COST_CATEGORIES).map(([k,v])=>`<option value="${k}" ${fc.category===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
+        </select>
+        <input placeholder="Bezeichnung" value="${escapeHtml(fc.label||'')}" onchange="editingProp.fixedCosts[${i}].label=this.value">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input type="number" step="0.01" inputmode="decimal" placeholder="Betrag €" value="${fc.amount||''}" onchange="editingProp.fixedCosts[${i}].amount=parseFloat(this.value)||0">
+        <select onchange="editingProp.fixedCosts[${i}].interval=this.value">
+          ${Object.entries(INTERVALS).map(([k,v])=>`<option value="${k}" ${fc.interval===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+        <button class="btn err sm" style="flex:0 0 auto" onclick="removeFixedCost(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function addFixedCost(){
+  editingProp.fixedCosts.push({id:uid(),category:'sonstiges',label:'',amount:0,interval:'yearly'});
+  renderFixedCostList();
+}
+function removeFixedCost(i){ editingProp.fixedCosts.splice(i,1); renderFixedCostList(); }
+
+function saveProperty(){
+  editingProp.name = document.getElementById('propName').value.trim();
+  editingProp.address = document.getElementById('propAddr').value.trim();
+  editingProp.note = document.getElementById('propNote').value.trim();
+  if(!editingProp.name){ toast('Name fehlt','err'); return; }
+  // Clean up empty fixed costs
+  editingProp.fixedCosts = editingProp.fixedCosts.filter(fc => fc.label || fc.amount);
+  const idx = state.properties.findIndex(p=>p.id===editingProp.id);
+  if(idx>=0) state.properties[idx]=editingProp; else state.properties.push(editingProp);
+  save(); closeModal('propModal'); render();
+  toast('Gespeichert ✓','ok');
+}
+function deleteProperty(){
+  if(!confirm('Grundstück inkl. aller Zählerstände löschen?')) return;
+  const propBackup = state.properties.find(p=>p.id===editingProp.id);
+  const readBackup = state.readings.filter(r=>r.propId===editingProp.id);
+  state.properties = state.properties.filter(p=>p.id!==editingProp.id);
+  state.readings = state.readings.filter(r=>r.propId!==editingProp.id);
+  save(); closeModal('propModal'); render();
+  toast(`Grundstück gelöscht`, 'ok', () => {
+    state.properties.push(propBackup);
+    state.readings.push(...readBackup);
+    save(); render();
+    toast('Wiederhergestellt ✓','ok');
   });
 }
 
-function renderActivity() {
-  const feed = $('#activityFeed');
-  if (!STATE.data.activity || STATE.data.activity.length === 0) {
-    feed.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📭</div>
-        <div>Noch keine Aktivitäten</div>
+function renderProperties(){
+  const c = document.getElementById('propList');
+  if(!state.properties.length){
+    c.innerHTML = `<div class="empty"><div class="ico">🏠</div><p>Noch keine Grundstücke.</p><p style="margin-top:10px"><button class="btn" onclick="openPropertyModal()">+ Erstes Grundstück anlegen</button></p></div>`;
+    return;
+  }
+  c.innerHTML = state.properties.map(p => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2>🏠 ${escapeHtml(p.name)}</h2>
+          ${p.address?`<div style="color:var(--muted);font-size:13px">📍 ${escapeHtml(p.address)}</div>`:''}
+        </div>
+        <button class="btn sm ghost" onclick='openPropertyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️</button>
+      </div>
+      ${p.note?`<div style="color:var(--muted);font-size:13px;margin-top:6px">${escapeHtml(p.note)}</div>`:''}
+      ${(p.fixedCosts && p.fixedCosts.length) ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">💸 ${p.fixedCosts.length} Fixkosten · ${fmtEur(calcFixedCostsYearly(p.fixedCosts))}/Jahr</div>` : ''}
+      <div class="grid" style="margin-top:12px">
+        ${p.meters.map(m => renderMeterCard(p,m)).join('') || '<div class="empty" style="grid-column:1/-1;padding:20px"><div class="ico" style="font-size:32px">⚡</div>Keine Zähler</div>'}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMeterCard(p, m){
+  const type = METER_TYPES[m.type] || METER_TYPES.strom;
+  const all = state.readings.filter(r=>r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const mainOnly = all.filter(r=>r.isMain);
+  const last = all[all.length-1];
+  const lastMain = mainOnly[mainOnly.length-1];
+  const yearAgo = findYearAgo(mainOnly, lastMain);
+  const consume = (lastMain && yearAgo) ? (lastMain.value - yearAgo.value) : null;
+  const prediction = predictNextReading(mainOnly);
+  const lastDays = last ? daysBetween(last.date, today()) : null;
+  
+  let currentYearly = null;
+  if(all.length >= 2){
+    const days = daysBetween(all[0].date, all[all.length-1].date);
+    const valDiff = all[all.length-1].value - all[0].value;
+    if(days > 0) currentYearly = valDiff * 365 / days;
+  }
+  
+  let expectComp = '';
+  if(m.expectedYearly && m.expectedYearly > 0){
+    if(currentYearly !== null){
+      const pct = (currentYearly / m.expectedYearly) * 100;
+      const barColor = pct <= 90 ? 'var(--ok)' : pct <= 110 ? 'var(--warn)' : 'var(--err)';
+      const icn = pct <= 90 ? '✅' : pct <= 110 ? '⚠️' : '🔴';
+      const txt = pct <= 90 ? 'im Plan' : pct <= 110 ? 'leicht drüber' : 'deutlich drüber';
+      expectComp = `<div class="expect-box">
+        <div class="head-line">
+          <span>${icn} Soll: ${fmt(m.expectedYearly,0)} ${type.unit}/J</span>
+          <span style="color:${barColor};font-weight:700">${fmt(pct,0)}%</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fg" style="width:${Math.min(pct,150)}%;background:${barColor}"></div></div>
+        <div class="ist-line">Ist: ${fmt(currentYearly,0)} ${type.unit}/J · ${txt}</div>
       </div>`;
-    return;
-  }
-  feed.innerHTML = '';
-  STATE.data.activity.slice(0, 15).forEach(a => {
-    const div = document.createElement('div');
-    div.className = 'activity-item';
-    const iconClass = a.type === 'anomaly' ? 'anomaly' : a.type === 'due' ? 'due' : '';
-    div.innerHTML = `
-      <div class="activity-icon ${iconClass}">${a.icon || '📌'}</div>
-      <div style="flex:1">
-        <div>${a.message}</div>
-        <div class="activity-time">${fmtTime(a.timestamp)}</div>
-      </div>`;
-    feed.appendChild(div);
-  });
-}
-
-function renderSettings() {
-  $('#themeSelect').value = STATE.data.settings.theme;
-  $('#profileSelect').value = STATE.data.settings.profile;
-  $('#openrouterKey').value = STATE.data.settings.openrouterKey || '';
-  setSwitch('tglOCR', STATE.data.settings.ocrEnabled);
-  setSwitch('tglAIOCR', STATE.data.settings.aiOcrEnabled);
-  setSwitch('tglCrop', STATE.data.settings.cropEnabled);
-  setSwitch('tglConfirm', STATE.data.settings.confirmEnabled);
-  setSwitch('tglAIInsights', STATE.data.settings.aiInsightsEnabled);
-}
-
-function setSwitch(id, on) {
-  $('#' + id).classList.toggle('on', !!on);
-}
-
-/* ============================================================
-   GRUNDSTÜCK CRUD
-   ============================================================ */
-
-let editingGrundstueckId = null;
-
-function openGrundstueckNew() {
-  editingGrundstueckId = null;
-  $('#gsModalTitle').textContent = 'Neues Grundstück';
-  $('#gsName').value = '';
-  $('#gsAdresse').value = '';
-  $('#gsNotes').value = '';
-  $('#btnDeleteGrundstueck').style.display = 'none';
-  renderZaehlerListInModal();
-  openModal('modalGrundstueck');
-}
-
-function openGrundstueckEdit(id) {
-  const gs = STATE.data.grundstuecke.find(g => g.id === id);
-  if (!gs) return;
-  editingGrundstueckId = id;
-  $('#gsModalTitle').textContent = `Bearbeiten: ${gs.name}`;
-  $('#gsName').value = gs.name || '';
-  $('#gsAdresse').value = gs.adresse || '';
-  $('#gsNotes').value = gs.notes || '';
-  $('#btnDeleteGrundstueck').style.display = 'inline-flex';
-  renderZaehlerListInModal();
-  openModal('modalGrundstueck');
-}
-
-function saveGrundstueck() {
-  const name = $('#gsName').value.trim();
-  if (!name) {
-    toast('Bezeichnung erforderlich', 'warning');
-    return;
-  }
-  let isNew = false;
-  if (editingGrundstueckId) {
-    const gs = STATE.data.grundstuecke.find(g => g.id === editingGrundstueckId);
-    if (gs) {
-      gs.name = name;
-      gs.adresse = $('#gsAdresse').value.trim();
-      gs.notes = $('#gsNotes').value.trim();
-      logActivity('edit', `Grundstück "${name}" aktualisiert`, '✏️');
-    }
-  } else {
-    const newGs = {
-      id: uid(),
-      name,
-      adresse: $('#gsAdresse').value.trim(),
-      notes: $('#gsNotes').value.trim(),
-      zaehler: []
-    };
-    STATE.data.grundstuecke.push(newGs);
-    editingGrundstueckId = newGs.id;
-    isNew = true;
-    logActivity('add', `Grundstück "${name}" angelegt`, '🏠');
-  }
-  saveLocal();
-  syncToDrive();
-  renderAll();
-  if (isNew) {
-    $('#gsModalTitle').textContent = `Bearbeiten: ${name}`;
-    $('#btnDeleteGrundstueck').style.display = 'inline-flex';
-    renderZaehlerListInModal();
-    toast('Grundstück angelegt – jetzt Zähler hinzufügen!', 'success');
-  } else {
-    closeModal('modalGrundstueck');
-    toast('Gespeichert', 'success');
-  }
-}
-
-/* ============================================================
-   READING (Schnelleintrag)
-   ============================================================ */
-
-function saveQuickReading() {
-  const gsId = $('#qeGrundstueck').value;
-  const zId = $('#qeZaehler').value;
-  const wert = parseFloat($('#qeWert').value);
-  const datum = $('#qeDatum').value || todayISO();
-
-  if (!gsId || !zId) {
-    toast('Bitte Grundstück & Zähler wählen', 'warning');
-    return;
-  }
-  if (isNaN(wert)) {
-    toast('Bitte gültigen Wert eingeben', 'warning');
-    return;
-  }
-
-  // Anomalie-Check
-  const prev = STATE.data.readings
-    .filter(r => r.zaehlerId === zId)
-    .sort((a, b) => b.datum.localeCompare(a.datum))[0];
-
-  let isAnomaly = false;
-  if (prev) {
-    if (wert < prev.wert) {
-      isAnomaly = true;
-      logActivity('anomaly', `⚠️ Wert kleiner als vorher (${prev.wert} → ${wert})`, '⚠️');
     } else {
-      const diff = wert - prev.wert;
-      const days = Math.max(1, (new Date(datum) - new Date(prev.datum)) / 86400000);
-      const perDay = diff / days;
-      // Heuristik: > 3× Median pro Tag → Anomalie
-      const allDiffs = STATE.data.readings
-        .filter(r => r.zaehlerId === zId)
-        .map((r, i, arr) => i > 0 ? r.wert - arr[i - 1].wert : 0)
-        .filter(x => x > 0);
-      if (allDiffs.length > 2) {
-        const median = allDiffs.sort((a, b) => a - b)[Math.floor(allDiffs.length / 2)];
-        if (perDay > median * 3) {
-          isAnomaly = true;
-          logActivity('anomaly', `⚠️ Ungewöhnlich hoher Verbrauch (${diff.toFixed(2)} in ${Math.round(days)} Tagen)`, '⚠️');
-        }
-      }
+      expectComp = `<div class="expect-box"><div class="head-line"><span>📊 Soll: ${fmt(m.expectedYearly,0)} ${type.unit}/J</span></div><div class="ist-line">Noch zu wenig Daten</div></div>`;
     }
   }
 
-  const reading = {
-    id: uid(),
-    grundstueckId: gsId,
-    zaehlerId: zId,
-    wert,
-    datum,
-    isAnomaly,
-    photo: null,
-    notes: ''
-  };
-  STATE.data.readings.push(reading);
-  saveLocal();
-  syncToDrive();
+  // Cost box
+  let costBox = '';
+  const costs = calcMeterCostsYearly(m, all);
+  if(costs){
+    const parts = [];
+    if(costs.arbeit > 0) parts.push(`Arbeit ${fmtEur(costs.arbeit)}`);
+    if(costs.grund > 0) parts.push(`Grund ${fmtEur(costs.grund)}`);
+    if(costs.zaehler > 0) parts.push(`Miete ${fmtEur(costs.zaehler)}`);
+    
+    // Vorjahresvergleich in EUR
+    let compareLine = '';
+    if(consume !== null && m.pricePerUnit){
+      const prevYearCons = currentYearly - consume; // Vorjahresverbrauch ungefähr
+      const diff = consume * m.pricePerUnit;
+      const sign = diff >= 0 ? '+' : '';
+      const col = diff >= 0 ? 'var(--err)' : 'var(--ok)';
+      compareLine = `<div class="compare"><span style="color:${col};font-weight:600">${sign}${fmtEur(Math.abs(diff))} ggü. Vorjahr</span></div>`;
+    }
+    
+    costBox = `<div class="cost-box">
+      <div class="total">
+        <span class="label">💰 Jahreskosten ${costs.isEstimate?'(geschätzt)':'ca.'}</span>
+        <span>${fmtEur(costs.total)}</span>
+      </div>
+      ${parts.length ? `<div class="breakdown">${parts.join(' · ')}</div>` : ''}
+      ${compareLine}
+    </div>`;
+  }
 
-  const gs = STATE.data.grundstuecke.find(g => g.id === gsId);
-  const z = gs?.zaehler.find(zz => zz.id === zId);
-  logActivity('reading', `Ablesung: ${z?.type} = ${wert} (${gs?.name})`, '📊');
+  let anomaly = '';
+  if(all.length >= 3){
+    const anom = detectAnomaly(all);
+    if(anom){
+      anomaly = `<div class="anomaly ${anom.severity}">${anom.severity === 'severe' ? '🔴' : '⚠️'} <strong>${anom.title}</strong><br>${anom.detail}</div>`;
+    }
+  }
 
-  $('#qeWert').value = '';
-  renderAll();
-  toast('Ablesung gespeichert ✅', 'success');
+  const lastBadge = last ? (last.isMain ? '<span class="read-badge main">⭐ Haupt</span>' : '<span class="read-badge sub">📝 Zwischen</span>') : '';
+  
+  return `<div class="meter-card ${m.type}">
+    <div class="head">
+      <div>
+        <div class="title">${type.icon} ${type.label}</div>
+        <div class="num">Nr: ${escapeHtml(m.number||'–')}${m.location?' · '+escapeHtml(m.location):''}</div>
+      </div>
+    </div>
+    <div class="reading">${last?fmt(last.value,3):'—'}<span class="unit">${type.unit}</span></div>
+    <div class="stats">
+      ${last?`<span>📅 ${formatDate(last.date)} (vor ${lastDays}T)</span>`:'<span>Noch keine Ablesung</span>'}
+      ${lastBadge}
+      ${consume!==null?`<span class="chip ${consume>=0?'acc':'ok'}">Δ ${fmt(consume,2)} ${type.unit}/Jahr</span>`:''}
+    </div>
+    ${expectComp}
+    ${costBox}
+    ${anomaly}
+    ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong></div>`:''}
+    <div class="actions">
+      <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
+      <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${all.length})</button>
+    </div>
+  </div>`;
 }
 
-/* ============================================================
-   PHOTO + OCR
-   ============================================================ */
-
-function triggerPhotoCapture() {
-  const inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = 'image/*';
-  inp.capture = 'environment';
-  inp.onchange = (e) => {
-    const file = e.target.files[0];
-    if (file) handlePhoto(file);
-  };
-  inp.click();
+function findYearAgo(readings, current){
+  if(!current || readings.length<2) return null;
+  const target = new Date(current.date); target.setFullYear(target.getFullYear()-1);
+  let best=null, bestDiff=Infinity;
+  for(const r of readings){
+    if(r.id===current.id) continue;
+    const d = Math.abs(new Date(r.date)-target);
+    if(d<bestDiff && d < 90*86400000){ best=r; bestDiff=d; }
+  }
+  return best;
+}
+function predictNextReading(readings){
+  if(readings.length<2) return null;
+  const intervals = [];
+  for(let i=1;i<readings.length;i++){
+    const d = daysBetween(readings[i-1].date, readings[i].date);
+    if(d>=20) intervals.push(d);
+  }
+  if(!intervals.length) return null;
+  intervals.sort((a,b)=>a-b);
+  const median = intervals[Math.floor(intervals.length/2)];
+  const last = readings[readings.length-1];
+  return { date: dateAdd(last.date, median), days: median };
+}
+function detectAnomaly(readings){
+  if(readings.length < 3) return null;
+  const recentN = Math.min(3, readings.length - 1);
+  const recent = readings.slice(-recentN-1);
+  const baseline = readings.slice(0, -recentN);
+  if(baseline.length < 2) return null;
+  const baseDays = daysBetween(baseline[0].date, baseline[baseline.length-1].date);
+  const baseDiff = baseline[baseline.length-1].value - baseline[0].value;
+  if(baseDays === 0) return null;
+  const basePerDay = baseDiff / baseDays;
+  const recDays = daysBetween(recent[0].date, recent[recent.length-1].date);
+  const recDiff = recent[recent.length-1].value - recent[0].value;
+  if(recDays === 0) return null;
+  const recPerDay = recDiff / recDays;
+  if(basePerDay <= 0) return null;
+  const ratio = recPerDay / basePerDay;
+  if(ratio > 1.5){
+    const pct = Math.round((ratio - 1) * 100);
+    return {
+      severity: ratio > 2 ? 'severe' : 'normal',
+      title: `Verbrauch +${pct}% höher als üblich`,
+      detail: 'Möglich: Leck, Defekt oder geänderte Nutzung. Bitte prüfen!'
+    };
+  }
+  return null;
 }
 
-async function handlePhoto(file) {
-  toast('Bild wird verarbeitet...', '');
-  // 1. Vorschau / optional Crop (vereinfacht: dataURL)
-  const dataUrl = await fileToDataURL(file);
-
-  let value = null;
-
-  // 2. OCR
-  if (STATE.data.settings.aiOcrEnabled && STATE.data.settings.openrouterKey) {
-    try {
-      value = await runAIOCR(dataUrl);
-    } catch (e) {
-      console.warn('AI-OCR Fail, Fallback Tesseract:', e);
-    }
+/* ----- Readings ----- */
+function updateReadPropSel(){
+  const sel = document.getElementById('readPropSel');
+  sel.innerHTML = state.properties.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  updateReadMeterSel();
+}
+function updateReadMeterSel(){
+  const propId = document.getElementById('readPropSel').value;
+  const p = state.properties.find(x=>x.id===propId);
+  const sel = document.getElementById('readMeterSel');
+  if(!p){ sel.innerHTML=''; return; }
+  sel.innerHTML = p.meters.map(m=>{
+    const t = METER_TYPES[m.type]||METER_TYPES.strom;
+    return `<option value="${m.id}">${t.icon} ${t.label} (Nr ${escapeHtml(m.number||'–')})</option>`;
+  }).join('');
+  showLastReading();
+}
+function showLastReading(){
+  const propId = document.getElementById('readPropSel').value;
+  const meterId = document.getElementById('readMeterSel').value;
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  const c = document.getElementById('lastReadInfo');
+  if(!readings.length){ c.innerHTML = '<div class="chip warn" style="margin-bottom:10px">Erster Eintrag für diesen Zähler</div>'; return; }
+  const last = readings[0];
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  const badge = last.isMain ? '⭐ Hauptablesung' : '📝 Zwischenstand';
+  c.innerHTML = `<div class="card" style="background:var(--card2);padding:10px;margin-bottom:10px">
+    <div style="font-size:12px;color:var(--muted)">${badge} am ${formatDate(last.date)}</div>
+    <div style="font-size:18px;font-weight:600;color:var(--acc)">${fmt(last.value,3)} ${t.unit}</div>
+  </div>`;
+}
+function previewPhoto(){
+  const f = document.getElementById('readPhoto').files[0];
+  if(!f) return;
+  const img = document.getElementById('photoPreview');
+  const reader = new FileReader();
+  reader.onload = e => {
+    const tmp = new Image();
+    tmp.onload = () => {
+      const canvas = document.createElement('canvas');
+      const max=800;
+      let w=tmp.width, h=tmp.height;
+      if(w>max){ h=h*max/w; w=max; }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(tmp,0,0,w,h);
+      img.src = canvas.toDataURL('image/jpeg',0.7);
+      img.style.display='block';
+      img.dataset.compressed = img.src;
+    };
+    tmp.src = e.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+function saveReading(){
+  const propId = document.getElementById('readPropSel').value;
+  const meterId = document.getElementById('readMeterSel').value;
+  const date = document.getElementById('readDate').value;
+  const value = parseFloat(document.getElementById('readValue').value);
+  const isMain = document.getElementById('readIsMain').checked;
+  if(!propId||!meterId){ toast('Zähler wählen','err'); return; }
+  if(!date){ toast('Datum fehlt','err'); return; }
+  if(isNaN(value)){ toast('Zählerstand ungültig','err'); return; }
+  const existing = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  if(existing.length && existing[0].date < date && value < existing[0].value){
+    if(!confirm(`Achtung: Neuer Stand (${value}) ist kleiner als letzter (${existing[0].value}). Trotzdem speichern?`)) return;
   }
-
-  if (value === null && STATE.data.settings.ocrEnabled) {
-    try {
-      value = await runTesseractOCR(file);
-    } catch (e) {
-      console.error('Tesseract Fail:', e);
-    }
+  const photo = document.getElementById('photoPreview').dataset.compressed || null;
+  const note = document.getElementById('readNote').value.trim();
+  state.readings.push({id:uid(), propId, meterId, date, value, note, photo, isMain});
+  save();
+  toast(`${isMain?'⭐ Hauptablesung':'📝 Zwischenstand'} gespeichert`, 'ok');
+  document.getElementById('readValue').value='';
+  document.getElementById('readNote').value='';
+  document.getElementById('readPhoto').value='';
+  document.getElementById('photoPreview').style.display='none';
+  document.getElementById('photoPreview').dataset.compressed='';
+  document.getElementById('readIsMain').checked = true;
+  showLastReading();
+  if(isMain) maybeCreateReadingReminder(propId, meterId);
+}
+function maybeCreateReadingReminder(propId, meterId){
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId&&r.isMain).sort((a,b)=>a.date.localeCompare(b.date));
+  const pred = predictNextReading(readings);
+  if(!pred) return;
+  const exists = state.appointments.some(a => a.cat==='ablesung' && a.propId===propId && a.meterId===meterId && a.date===pred.date);
+  if(exists) return;
+  if(confirm(`📅 Erinnerung für nächste Ablesung am ${formatDate(pred.date)} anlegen?`)){
+    state.appointments.push({
+      id:uid(), title:'Zählerablesung', cat:'ablesung', propId, meterId,
+      date: pred.date, time:'', repeat:'none', note:'Automatisch vorgeschlagen', calId:'',
+      reminders:[7,1], calendarText:''
+    });
+    save(); toast('Termin angelegt','ok');
   }
+}
+function quickReadFor(propId, meterId){
+  switchTab('readings');
+  setTimeout(()=>{
+    document.getElementById('readPropSel').value = propId;
+    updateReadMeterSel();
+    document.getElementById('readMeterSel').value = meterId;
+    showLastReading();
+    document.getElementById('readDate').value = today();
+    document.getElementById('readValue').focus();
+  },50);
+}
+function quickAdd(){ switchTab('readings'); setTimeout(()=>document.getElementById('readValue').focus(),100); }
 
-  // 3. Bestätigungsdialog
-  if (STATE.data.settings.confirmEnabled) {
-    const conf = prompt(
-      value !== null
-        ? `Erkannter Wert: ${value}\n\nBestätigen oder korrigieren:`
-        : 'Wert konnte nicht erkannt werden.\nBitte manuell eingeben:',
-      value !== null ? value : ''
-    );
-    if (conf === null) {
-      toast('Abgebrochen', 'warning');
+function dashQuickSave(propId, meterId){
+  const inp = document.getElementById(`qr_${propId}_${meterId}`);
+  const mainCb = document.getElementById(`qrm_${propId}_${meterId}`);
+  const value = parseFloat(inp.value);
+  if(isNaN(value)){ toast('Wert fehlt','err'); inp.focus(); return; }
+  const existing = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  if(existing.length && value < existing[0].value){
+    if(!confirm(`Neuer Stand (${value}) ist kleiner als letzter (${existing[0].value}). Trotzdem speichern?`)){ inp.focus(); return; }
+  }
+  const isMain = mainCb ? mainCb.checked : true;
+  state.readings.push({id:uid(), propId, meterId, date:today(), value, note:'', photo:null, isMain});
+  save();
+  toast(`${isMain?'⭐':'📝'} ${fmt(value,3)} gespeichert`,'ok');
+  inp.value = '';
+  const all = document.querySelectorAll('.quick-row input[type="number"]');
+  let idx = -1; all.forEach((e,i)=>{ if(e===inp) idx=i; });
+  if(idx >= 0 && all[idx+1]) all[idx+1].focus();
+  if(document.querySelector('.tab.active')?.dataset.tab === 'dashboard') renderDashboard();
+}
+
+/* ----- History ----- */
+function showHistory(propId, meterId){
+  histCurrentContext = {propId, meterId};
+  histCurrentTab = 'history';
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  document.getElementById('histTitle').textContent = `${t.icon} ${t.label} – ${p?.name}`;
+  document.querySelectorAll('#histModal .modal-tab').forEach(x=>{
+    x.classList.toggle('active', x.dataset.mtab === 'history');
+  });
+  document.getElementById('histOnlyMain').checked = false;
+  renderHistContent();
+  document.getElementById('histModal').classList.add('show');
+}
+function switchHistTab(tab){
+  histCurrentTab = tab;
+  document.querySelectorAll('#histModal .modal-tab').forEach(x=>{
+    x.classList.toggle('active', x.dataset.mtab === tab);
+  });
+  document.getElementById('histFilters').style.display = tab === 'history' ? 'block' : 'none';
+  renderHistContent();
+}
+function renderHistContent(){
+  if(!histCurrentContext) return;
+  const {propId, meterId} = histCurrentContext;
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  const onlyMain = document.getElementById('histOnlyMain').checked;
+  let readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  if(onlyMain) readings = readings.filter(r=>r.isMain);
+  const c = document.getElementById('histContent');
+  if(histCurrentTab === 'photos'){
+    const withPhotos = readings.filter(r=>r.photo);
+    if(!withPhotos.length){
+      c.innerHTML = '<div class="empty"><div class="ico">📸</div>Keine Fotos vorhanden</div>';
       return;
     }
-    value = parseFloat(conf);
-  }
-
-  if (isNaN(value)) {
-    toast('Kein gültiger Wert', 'error');
+    c.innerHTML = `<div class="photo-grid">${withPhotos.map(r=>`
+      <div class="pitem" onclick="openLightbox('${r.id}')">
+        <img src="${r.photo}" alt="">
+        <div class="pdate">${formatDateShort(r.date)} · ${fmt(r.value,1)}</div>
+      </div>
+    `).join('')}</div>`;
     return;
   }
+  if(!readings.length){ c.innerHTML='<div class="empty">Keine Einträge</div>'; return; }
+  c.innerHTML = readings.map((r,i) => {
+    const next = readings[i+1];
+    const diff = next ? (r.value-next.value) : null;
+    const days = next ? daysBetween(next.date, r.date) : null;
+    const badge = r.isMain ? '<span class="read-badge main">⭐</span>' : '<span class="read-badge sub">📝</span>';
+    const costInfo = (diff && m.pricePerUnit) ? ` · ≈ ${fmtEur(diff * m.pricePerUnit)}` : '';
+    return `<div class="history-item">
+      <div>
+        <div class="date">${badge} ${formatDate(r.date)}</div>
+        ${diff!==null?`<div style="font-size:11px;color:var(--muted)">+${fmt(diff,2)} ${t.unit} in ${days}T${costInfo}</div>`:''}
+        ${r.note?`<div style="font-size:11px;color:var(--muted)">📝 ${escapeHtml(r.note)}</div>`:''}
+        ${r.photo?`<img src="${r.photo}" class="preview" style="max-width:120px;margin-top:4px;cursor:pointer" onclick="openLightbox('${r.id}')">`:''}
+      </div>
+      <div style="text-align:right">
+        <div class="val">${fmt(r.value,3)}</div>
+        <div style="font-size:11px;color:var(--muted)">${t.unit}</div>
+        <button class="del" onclick="deleteReading('${r.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function deleteReading(id){
+  const r = state.readings.find(x=>x.id===id);
+  if(!r) return;
+  state.readings = state.readings.filter(x=>x.id!==id);
+  save();
+  renderHistContent();
+  if(document.querySelector('.tab.active')?.dataset.tab === 'properties') renderProperties();
+  toast('Eintrag gelöscht','', () => {
+    state.readings.push(r);
+    save(); renderHistContent();
+    if(document.querySelector('.tab.active')?.dataset.tab === 'properties') renderProperties();
+    toast('Wiederhergestellt ✓','ok');
+  });
+}
 
-  $('#qeWert').value = value.toFixed(2);
-  toast(`Wert eingetragen: ${value}`, 'success');
+/* ----- Lightbox ----- */
+function openLightbox(readingId){
+  const r = state.readings.find(x=>x.id===readingId);
+  if(!r || !r.photo) return;
+  document.getElementById('lightboxImg').src = r.photo;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('show'); }
 
-  // 4. Foto in Drive hochladen (im Hintergrund)
-  if (STATE.accessToken) {
-    uploadPhotoToDrive(file).catch(e => console.warn('Photo upload:', e));
+/* ----- Appointments ----- */
+function openAppointmentModal(appt){
+  editingAppt = appt ? {...appt} : {
+    id:uid(), title:'', cat:'schornstein', propId:state.properties[0]?.id||'',
+    date:today(), time:'', repeat:'yearly', note:'', calId:'',
+    reminders:[7], calendarText:''
+  };
+  if(!editingAppt.reminders) editingAppt.reminders = [7];
+  currentReminders = [...editingAppt.reminders];
+  document.getElementById('apptModalTitle').textContent = appt ? 'Termin bearbeiten' : 'Neuer Termin';
+  document.getElementById('apptTitle').value = editingAppt.title;
+  document.getElementById('apptCat').value = editingAppt.cat;
+  document.getElementById('apptDate').value = editingAppt.date;
+  document.getElementById('apptTime').value = editingAppt.time||'';
+  document.getElementById('apptRepeat').value = editingAppt.repeat;
+  document.getElementById('apptNote').value = editingAppt.note||'';
+  document.getElementById('apptCalText').value = editingAppt.calendarText||'';
+  document.getElementById('apptCal').checked = !!editingAppt.calId;
+  const propSel = document.getElementById('apptProp');
+  propSel.innerHTML = '<option value="">— Alle —</option>'+state.properties.map(p=>`<option value="${p.id}" ${editingAppt.propId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('apptDelBtn').style.display = appt ? 'inline-flex':'none';
+  toggleCalFields();
+  renderReminderTags();
+  document.getElementById('apptModal').classList.add('show');
+}
+function toggleCalFields(){
+  document.getElementById('calFields').style.display = document.getElementById('apptCal').checked ? 'block' : 'none';
+}
+function renderReminderTags(){
+  const c = document.getElementById('reminderTags');
+  const allDays = [...new Set([...REMINDER_PRESETS.map(p=>p.days), ...currentReminders])].sort((a,b)=>a-b);
+  c.innerHTML = allDays.map(d => {
+    const preset = REMINDER_PRESETS.find(p=>p.days===d);
+    const label = preset ? preset.label : `${d} Tage`;
+    const active = currentReminders.includes(d);
+    return `<div class="tag ${active?'active':''}" onclick="toggleReminder(${d})">${label}</div>`;
+  }).join('');
+}
+function toggleReminder(d){
+  const idx = currentReminders.indexOf(d);
+  if(idx >= 0){ currentReminders.splice(idx, 1); }
+  else {
+    if(currentReminders.length >= 5){ toast('Maximal 5 Erinnerungen','err'); return; }
+    currentReminders.push(d); currentReminders.sort((a,b)=>a-b);
+  }
+  renderReminderTags();
+}
+function addCustomReminder(){
+  const v = parseInt(document.getElementById('customReminder').value);
+  if(isNaN(v) || v < 0 || v > 365){ toast('Wert 0-365 Tage','err'); return; }
+  if(currentReminders.length >= 5){ toast('Maximal 5 Erinnerungen','err'); return; }
+  if(!currentReminders.includes(v)){
+    currentReminders.push(v); currentReminders.sort((a,b)=>a-b);
+    renderReminderTags();
+    document.getElementById('customReminder').value='';
   }
 }
-
-function fileToDataURL(file) {
-  return new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = () => res(reader.result);
-    reader.onerror = rej;
-    reader.readAsDataURL(file);
+function saveAppointment(){
+  editingAppt.title = document.getElementById('apptTitle').value.trim();
+  editingAppt.cat = document.getElementById('apptCat').value;
+  editingAppt.date = document.getElementById('apptDate').value;
+  editingAppt.time = document.getElementById('apptTime').value;
+  editingAppt.repeat = document.getElementById('apptRepeat').value;
+  editingAppt.note = document.getElementById('apptNote').value.trim();
+  editingAppt.calendarText = document.getElementById('apptCalText').value.trim();
+  editingAppt.propId = document.getElementById('apptProp').value;
+  editingAppt.reminders = currentReminders.length ? [...currentReminders] : [7];
+  const wantCal = document.getElementById('apptCal').checked;
+  if(!editingAppt.title){ toast('Titel fehlt','err'); return; }
+  const idx = state.appointments.findIndex(a=>a.id===editingAppt.id);
+  if(idx>=0) state.appointments[idx]=editingAppt; else state.appointments.push(editingAppt);
+  if(wantCal && gIsSignedIn()) createCalendarEvent(editingAppt);
+  save(); closeModal('apptModal'); render();
+  toast('Termin gespeichert ✓','ok');
+}
+function deleteAppointment(){
+  const backup = {...editingAppt};
+  state.appointments = state.appointments.filter(a=>a.id!==editingAppt.id);
+  save(); closeModal('apptModal'); render();
+  toast('Termin gelöscht','', () => {
+    state.appointments.push(backup);
+    save(); render();
+    toast('Wiederhergestellt ✓','ok');
   });
 }
 
-async function runTesseractOCR(file) {
-  if (typeof Tesseract === 'undefined') throw new Error('Tesseract nicht geladen');
-  const result = await Tesseract.recognize(file, 'deu', {
-    tessedit_char_whitelist: '0123456789.,'
-  });
-  const text = result.data.text.replace(/[^\d.,]/g, '').replace(',', '.');
-  const match = text.match(/\d+(\.\d{1,3})?/);
-  if (!match) throw new Error('Kein Wert erkannt');
-  return parseFloat(match[0]);
+const APPT_ICONS = {schornstein:'🔥',heizung:'🔧',ablesung:'📝',rauchmelder:'🚨',legionellen:'💧',elektro:'⚡',versicherung:'📄',grundsteuer:'💰',sonstiges:'📌'};
+
+function renderAppointments(){
+  const c = document.getElementById('apptList');
+  const all = [...state.appointments].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!all.length){
+    c.innerHTML = `<div class="empty"><div class="ico">📅</div>
+      <p>Keine Termine.</p>
+      <p style="margin-top:10px;font-size:13px">Vorschläge: Schornsteinfeger, Heizungswartung, Rauchmelder-Check, Legionellenprüfung, E-Check...</p>
+      <p style="margin-top:10px"><button class="btn" onclick="openAppointmentModal()">+ Termin anlegen</button></p>
+    </div>`;
+    return;
+  }
+  c.innerHTML = all.map(a => {
+    const d = daysBetween(today(), a.date);
+    let cls = '', status = '';
+    const earliest = Math.max(...(a.reminders||[7]));
+    if(d<0){ cls='over'; status='⚠️ überfällig'; }
+    else if(d<=earliest){ cls='due'; status=`🔔 in ${d} Tagen`; }
+    else status = `in ${d} Tagen`;
+    const prop = state.properties.find(p=>p.id===a.propId);
+    const remTxt = (a.reminders||[7]).map(r => r===0?'am Tag':r===1?'1 Tag':`${r} Tage`).join(' · ');
+    return `<div class="appointment ${cls}">
+      <div class="ico">${APPT_ICONS[a.cat]||'📌'}</div>
+      <div class="info">
+        <div class="title">${escapeHtml(a.title)}</div>
+        <div class="when">${formatDate(a.date)}${a.time?' · '+a.time:''} · ${status}${prop?' · '+escapeHtml(prop.name):''}</div>
+        ${a.note?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${escapeHtml(a.note)}</div>`:''}
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">🔁 ${repeatLabel(a.repeat)} · 🔔 ${remTxt}${a.calId?' · ✓ Kalender':''}</div>
+        <div class="actions">
+          <button class="btn sm" onclick='openAppointmentModal(${JSON.stringify(a).replace(/'/g,"&#39;")})'>✏️</button>
+          ${d<=0?`<button class="btn sm ok" onclick="completeAppointment('${a.id}')">✓ Erledigt</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
-
-async function runAIOCR(dataUrl) {
-  const key = STATE.data.settings.openrouterKey;
-  if (!key) throw new Error('Kein API-Key');
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': location.href,
-      'X-Title': 'Zaehler-App'
-    },
-    body: JSON.stringify({
-      model: 'openai/gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Lies NUR den Zählerstand vom Bild und gib ausschließlich die Zahl zurück (mit Punkt als Dezimaltrenner, 2 Nachkommastellen wenn möglich). Keine Erklärung.' },
-          { type: 'image_url', image_url: { url: dataUrl } }
-        ]
-      }],
-      max_tokens: 30
-    })
-  });
-  if (!res.ok) throw new Error('AI-OCR HTTP ' + res.status);
-  const json = await res.json();
-  const txt = json.choices?.[0]?.message?.content?.trim() || '';
-  const match = txt.match(/\d+(\.\d{1,3})?/);
-  if (!match) throw new Error('Keine Zahl in AI-Antwort');
-  return parseFloat(match[0]);
+function repeatLabel(r){
+  return {none:'einmalig',monthly:'monatlich',quarterly:'vierteljährlich',yearly:'jährlich','2years':'alle 2 Jahre','3years':'alle 3 Jahre'}[r]||r;
 }
-
-async function uploadPhotoToDrive(file) {
-  if (!STATE.driveRootId) return;
-  const photoFolderId = await findOrCreateFolder(CONFIG.PHOTO_FOLDER, STATE.driveRootId);
-  const filename = `zaehler-${Date.now()}.${file.type.includes('png') ? 'png' : 'jpg'}`;
-  const meta = { name: filename, parents: [photoFolderId] };
-
-  const boundary = '-------photo' + uid();
-  const buf = await file.arrayBuffer();
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-
-  const body =
-    `--${boundary}\r\n` +
-    'Content-Type: application/json\r\n\r\n' +
-    JSON.stringify(meta) + '\r\n' +
-    `--${boundary}\r\n` +
-    `Content-Type: ${file.type}\r\n` +
-    'Content-Transfer-Encoding: base64\r\n\r\n' +
-    b64 + '\r\n' +
-    `--${boundary}--`;
-
-  await driveFetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-      body
+function completeAppointment(id){
+  const a = state.appointments.find(x=>x.id===id);
+  if(!a) return;
+  if(a.repeat==='none'){
+    if(confirm('Termin abschließen und entfernen?')) {
+      state.appointments = state.appointments.filter(x=>x.id!==id);
     }
-  );
-  logActivity('photo', `Foto hochgeladen: ${filename}`, '📷');
+  } else {
+    const map = {monthly:30,quarterly:91,yearly:365,'2years':730,'3years':1095};
+    a.date = dateAdd(a.date, map[a.repeat]);
+    a.calId='';
+    toast(`Nächster Termin: ${formatDate(a.date)}`,'ok');
+  }
+  save(); render();
 }
 
-/* ============================================================
-   EXPORT / MIGRATE
-   ============================================================ */
-
-function exportJSON() {
-  const blob = new Blob([JSON.stringify(STATE.data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `zaehler-export-${todayISO()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('Export bereit', 'success');
-}
-
-async function migrateLocalPhotos() {
-  toast('Migration vorbereitet (keine lokalen Fotos gefunden)', '');
-  // Hier könnte später echtes Migrationsskript hin
-}
-
-/* ============================================================
-   EVENT BINDING + INIT
-   ============================================================ */
-
-function bindEvents() {
-  // Header
-  $('#btnSettings').onclick = () => openModal('modalSettings');
-  $('#connBadge').onclick = () => openModal('modalSettings');
-
-  // Quick Entry
-  $('#qeGrundstueck').onchange = renderZaehlerSelect;
-  $('#btnQuickSave').onclick = saveQuickReading;
-  $('#btnPhotoOCR').onclick = triggerPhotoCapture;
-
-  // Grundstücke
-  $('#btnAddGrundstueck').onclick = openGrundstueckNew;
-  $('#btnSaveGrundstueck').onclick = saveGrundstueck;
-  $('#btnDeleteGrundstueck').onclick = deleteGrundstueck;
-  $('#btnAddZaehler').onclick = openZaehlerNew;
-  $('#btnSaveZaehler').onclick = saveZaehler;
-  $('#btnDeleteZaehler').onclick = deleteZaehler;
-
-  // Settings
-  $('#btnGSignIn').onclick = gSignIn;
-  $('#btnSwitchAccount').onclick = gSwitchAccount;
-  $('#themeSelect').onchange = (e) => {
-    STATE.data.settings.theme = e.target.value;
-    saveLocal();
-    applyTheme();
-  };
-  $('#profileSelect').onchange = (e) => {
-    STATE.data.settings.profile = e.target.value;
-    saveLocal();
-    applyProfile();
-  };
-  $('#openrouterKey').onchange = (e) => {
-    STATE.data.settings.openrouterKey = e.target.value.trim();
-    saveLocal();
-  };
-
-  // Toggles
-  const toggleMap = {
-    tglOCR: 'ocrEnabled',
-    tglAIOCR: 'aiOcrEnabled',
-    tglCrop: 'cropEnabled',
-    tglConfirm: 'confirmEnabled',
-    tglAIInsights: 'aiInsightsEnabled'
-  };
-  Object.entries(toggleMap).forEach(([id, key]) => {
-    $('#' + id).onclick = () => {
-      STATE.data.settings[key] = !STATE.data.settings[key];
-      saveLocal();
-      setSwitch(id, STATE.data.settings[key]);
-    };
+/* ----- Dashboard ----- */
+function renderDashboard(){
+  const c = document.getElementById('dashContent');
+  const totalReadings = state.readings.length;
+  const totalMeters = state.properties.reduce((s,p)=>s+p.meters.length,0);
+  const upcoming = state.appointments.filter(a=>{
+    const d = daysBetween(today(), a.date);
+    const earliest = Math.max(...(a.reminders||[7]));
+    return d>=0 && d<=earliest;
   });
+  const overdue = state.appointments.filter(a=>daysBetween(today(), a.date)<0);
 
-  // Data
-  $('#btnExportData').onclick = exportJSON;
-  $('#btnMigrate').onclick = migrateLocalPhotos;
+  let quickAddCards = '';
+  if(state.properties.length){
+    state.properties.forEach(p => p.meters.forEach(m => {
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>b.date.localeCompare(a.date));
+      const last = rs[0];
+      const sub = last ? `Letzter: ${fmt(last.value,3)} ${t.unit} (${formatDate(last.date)})` : 'Noch kein Eintrag';
+      quickAddCards += `<div class="quick-row">
+        <div class="qr-icon">${t.icon}</div>
+        <div class="qr-label">
+          <div class="name">${escapeHtml(t.label)} · ${escapeHtml(p.name)}</div>
+          <div class="sub">${sub}</div>
+        </div>
+        <input type="number" step="0.001" inputmode="decimal" id="qr_${p.id}_${m.id}" placeholder="${t.unit}" onkeypress="if(event.key==='Enter')dashQuickSave('${p.id}','${m.id}')">
+        <div class="qr-actions">
+          <label title="Hauptablesung"><input type="checkbox" id="qrm_${p.id}_${m.id}" checked style="width:auto">⭐</label>
+          <button class="btn sm ok" onclick="dashQuickSave('${p.id}','${m.id}')">✓</button>
+        </div>
+      </div>`;
+    }));
+  }
 
-  // URL Shortcuts
-  const params = new URLSearchParams(location.search);
-  if (params.get('action') === 'photo') {
-    setTimeout(triggerPhotoCapture, 500);
+  // COST OVERVIEW
+  let costOverview = '';
+  if(state.properties.length){
+    let grandTotal = 0;
+    let anyCosts = false;
+    const propRows = state.properties.map(p => {
+      const bd = calcPropertyTotalYearly(p);
+      if(bd.total === 0) return '';
+      anyCosts = true;
+      grandTotal += bd.total;
+      const parts = [];
+      p.meters.forEach(m => {
+        const c = bd.meters[m.id];
+        if(c && c.total > 0){
+          const t = METER_TYPES[m.type]||METER_TYPES.strom;
+          parts.push(`${t.icon} ${fmtEur(c.total)}`);
+        }
+      });
+      if(bd.fixed > 0) parts.push(`📌 Fixkosten ${fmtEur(bd.fixed)}`);
+      return `<div class="prop-row">
+        <div class="head-line">
+          <div class="prop-name">🏠 ${escapeHtml(p.name)}</div>
+          <div class="prop-total">${fmtEur(bd.total)}</div>
+        </div>
+        <div class="prop-breakdown">${parts.join(' · ')}</div>
+      </div>`;
+    }).join('');
+    
+    if(anyCosts){
+      const monthly = grandTotal / 12;
+      costOverview = `<div class="card">
+        <h2>💰 Kostenübersicht (Jahr)</h2>
+        <div class="cost-dash">
+          ${propRows}
+          ${state.properties.length > 1 ? `<div class="grand-total">
+            <div class="val">${fmtEur(grandTotal)}</div>
+            <div class="lbl">Beide Grundstücke / Jahr</div>
+            <div class="sub">≈ ${fmtEur(monthly)} pro Monat</div>
+          </div>` : `<div class="grand-total">
+            <div class="val">${fmtEur(monthly)}</div>
+            <div class="lbl">Pro Monat</div>
+          </div>`}
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px">💡 Hinweis: Auto-Hochrechnung aus deinen Eingaben. Vollständig nur, wenn alle Preise & Fixkosten gepflegt sind.</p>
+      </div>`;
+    }
+  }
+
+  c.innerHTML = `
+    <div class="card">
+      <h2>👋 Hallo!</h2>
+      <p style="color:var(--muted);font-size:14px">Heute ist ${formatDate(today())}.</p>
+      <div class="row" style="margin-top:14px">
+        <div class="stat-box"><div class="val">${state.properties.length}</div><div class="lbl">Grundstücke</div></div>
+        <div class="stat-box"><div class="val">${totalMeters}</div><div class="lbl">Zähler</div></div>
+        <div class="stat-box"><div class="val">${totalReadings}</div><div class="lbl">Einträge</div></div>
+        <div class="stat-box"><div class="val">${state.appointments.length}</div><div class="lbl">Termine</div></div>
+      </div>
+    </div>
+
+    ${costOverview}
+
+    ${quickAddCards ? `<div class="card">
+      <h2>⚡ Schnell-Eintrag</h2>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Wert → ⭐ für Hauptablesung → ✓. Enter springt zum nächsten Feld.</p>
+      ${quickAddCards}
+    </div>`:''}
+
+    ${overdue.length?`<div class="card" style="border-color:var(--err)">
+      <h2 style="color:var(--err)">⚠️ Überfällig (${overdue.length})</h2>
+      ${overdue.map(a=>`<div class="appointment over"><div class="ico">${APPT_ICONS[a.cat]||'📌'}</div><div class="info"><div class="title">${escapeHtml(a.title)}</div><div class="when">${formatDate(a.date)}</div></div></div>`).join('')}
+    </div>`:''}
+
+    ${upcoming.length?`<div class="card">
+      <h2>🔔 Anstehende Termine</h2>
+      ${upcoming.map(a=>`<div class="appointment due"><div class="ico">${APPT_ICONS[a.cat]||'📌'}</div><div class="info"><div class="title">${escapeHtml(a.title)}</div><div class="when">${formatDate(a.date)} · in ${daysBetween(today(),a.date)} Tagen</div></div></div>`).join('')}
+    </div>`:''}
+
+    ${!state.properties.length?`<div class="card" style="background:color-mix(in srgb,var(--acc) 10%,transparent);border-color:var(--acc)">
+      <h2>🎉 Willkommen!</h2>
+      <p style="font-size:14px;line-height:1.6">Lege als Erstes ein <strong>Grundstück</strong> an mit deinen <strong>Zählern</strong> und ggf. <strong>Fixkosten</strong>. Dann kannst du Zählerstände erfassen und siehst sofort deine Gesamtkosten.</p>
+      <button class="btn ok" style="margin-top:10px" onclick="switchTab('properties')">🏠 Loslegen</button>
+    </div>`:''}
+  `;
+}
+
+/* ----- Stats ----- */
+function renderStats(){
+  const c = document.getElementById('statsContent');
+  if(!state.readings.length){ c.innerHTML='<div class="empty"><div class="ico">📈</div>Noch keine Daten</div>'; return; }
+  let html='';
+  state.properties.forEach(p => {
+    let propHtml = `<div class="card"><h2>🏠 ${escapeHtml(p.name)}</h2>`;
+    let hasContent = false;
+    p.meters.forEach(m => {
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(rs.length<2) return;
+      hasContent = true;
+      const totalDays = daysBetween(rs[0].date, rs[rs.length-1].date);
+      const totalVal = rs[rs.length-1].value - rs[0].value;
+      const perYear = totalDays>0 ? totalVal*365/totalDays : 0;
+      const perMonth = perYear/12;
+      const perDay = totalDays>0 ? totalVal/totalDays : 0;
+      let expectInfo = '';
+      if(m.expectedYearly && m.expectedYearly > 0){
+        const pct = (perYear / m.expectedYearly) * 100;
+        const col = pct <= 90 ? 'var(--ok)' : pct <= 110 ? 'var(--warn)' : 'var(--err)';
+        expectInfo = `<div style="margin-top:6px;font-size:13px"><span style="color:${col};font-weight:600">${fmt(pct,0)}% des Solls</span> (Soll: ${fmt(m.expectedYearly,0)} ${t.unit}/J)</div>`;
+      }
+      let costInfo = '';
+      const costs = calcMeterCostsYearly(m, rs);
+      if(costs){
+        costInfo = `<div style="margin-top:6px;font-size:13px">💰 <strong>${fmtEur(costs.total)}/Jahr</strong> · ≈ ${fmtEur(costs.total/12)}/Monat</div>`;
+      }
+      propHtml += `<div style="margin-top:10px">
+        <h3>${t.icon} ${t.label}</h3>
+        <div class="row">
+          <div class="stat-box"><div class="val">${fmt(perDay,2)}</div><div class="lbl">${t.unit}/Tag</div></div>
+          <div class="stat-box"><div class="val">${fmt(perMonth,1)}</div><div class="lbl">${t.unit}/Monat</div></div>
+          <div class="stat-box"><div class="val">${fmt(perYear,0)}</div><div class="lbl">${t.unit}/Jahr</div></div>
+        </div>
+        ${expectInfo}
+        ${costInfo}
+        <canvas class="chart" id="chart_${p.id}_${m.id}"></canvas>
+      </div>`;
+    });
+    propHtml += '</div>';
+    if(hasContent) html += propHtml;
+  });
+  c.innerHTML = html || '<div class="empty"><div class="ico">📈</div>Mindestens 2 Einträge pro Zähler nötig</div>';
+  setTimeout(()=>{
+    state.properties.forEach(p=>p.meters.forEach(m=>{
+      const cv = document.getElementById(`chart_${p.id}_${m.id}`);
+      if(cv) drawChart(cv, state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date)), METER_TYPES[m.type]);
+    }));
+  },50);
+}
+function drawChart(canvas, readings, type){
+  const dpr = window.devicePixelRatio||1;
+  const W = canvas.offsetWidth, H = 200;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
+  const pad = {l:50,r:10,t:10,b:30};
+  const vals = readings.map(r=>r.value);
+  const dates = readings.map(r=>new Date(r.date).getTime());
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const minD = Math.min(...dates), maxD = Math.max(...dates);
+  const rangeV = maxV-minV || 1, rangeD = maxD-minD || 1;
+  ctx.strokeStyle = getCss('--border'); ctx.lineWidth=1;
+  ctx.font='11px sans-serif'; ctx.fillStyle=getCss('--muted');
+  for(let i=0;i<=4;i++){
+    const y = pad.t + (H-pad.t-pad.b)*i/4;
+    const v = maxV - rangeV*i/4;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+    ctx.fillText(fmt(v,0), 5, y+3);
+  }
+  ctx.strokeStyle = type.color; ctx.lineWidth=2;
+  ctx.beginPath();
+  readings.forEach((r,i)=>{
+    const x = pad.l + (W-pad.l-pad.r)*(new Date(r.date).getTime()-minD)/rangeD;
+    const y = pad.t + (H-pad.t-pad.b)*(1-(r.value-minV)/rangeV);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  readings.forEach(r=>{
+    const x = pad.l + (W-pad.l-pad.r)*(new Date(r.date).getTime()-minD)/rangeD;
+    const y = pad.t + (H-pad.t-pad.b)*(1-(r.value-minV)/rangeV);
+    ctx.fillStyle = r.isMain ? type.color : getCss('--muted');
+    ctx.beginPath(); ctx.arc(x,y,r.isMain?4:2.5,0,Math.PI*2); ctx.fill();
+  });
+  ctx.fillStyle=getCss('--muted');
+  if(readings.length){
+    ctx.fillText(formatDateShort(readings[0].date), pad.l, H-10);
+    const lastTxt = formatDateShort(readings[readings.length-1].date);
+    ctx.fillText(lastTxt, W-pad.r-ctx.measureText(lastTxt).width, H-10);
   }
 }
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
-function init() {
-  loadLocal();
-  $('#qeDatum').value = todayISO();
-  bindEvents();
-  renderAll();
-  initGoogleAuth();
-  console.log(`Zaehler-App v${CONFIG.APP_VERSION} bereit.`);
+/* ----- Render dispatcher ----- */
+function render(tab){
+  if(!tab){ const a = document.querySelector('.tab.active'); tab = a?a.dataset.tab:'dashboard'; }
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='properties') renderProperties();
+  else if(tab==='readings') updateReadPropSel();
+  else if(tab==='appointments') renderAppointments();
+  else if(tab==='stats') renderStats();
+  else if(tab==='settings') renderSettingsExtras();
+  const ds = document.getElementById('dataSize');
+  if(ds) ds.textContent = humanSize(JSON.stringify(state).length);
+}
+function renderSettingsExtras(){
+  document.getElementById('gClientId').value = settings.gClientId||'';
+  document.getElementById('lastBackup').textContent = settings.lastSync ? new Date(settings.lastSync).toLocaleString('de-DE') : 'lokal-only';
+  document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length);
+  document.getElementById('themeStyleSel').value = settings.themeStyle;
+  document.getElementById('themeModeSel').value = settings.themeMode;
+}
+function saveClientId(){ settings.gClientId = document.getElementById('gClientId').value.trim(); save(); toast('Client-ID gespeichert','ok'); gInit(); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openShortcutHelp(){ document.getElementById('kbdModal').classList.add('show'); }
+
+/* ----- Export / Import ----- */
+function exportJSON(){
+  const data = JSON.stringify({state, settings, exportedAt:new Date().toISOString(), version:APP_VERSION},null,2);
+  const blob = new Blob([data],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `zaehler-backup-${today()}.json`;
+  a.click();
+  toast('JSON Export gestartet','ok');
+}
+function exportCSV(){
+  const rows = [[
+    'Datum','Grundstück','Zähler-Art','Standort','Zählernummer',
+    'Stand','Einheit','Verbrauch seit Vorigem','Tage','Verbrauch/Tag',
+    'Kosten geschätzt €','Hauptablesung','Notiz'
+  ]];
+  state.properties.forEach(p => {
+    p.meters.forEach(m => {
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const readings = state.readings.filter(r=>r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      readings.forEach((r,i) => {
+        const prev = i>0 ? readings[i-1] : null;
+        const diff = prev ? (r.value - prev.value).toFixed(3) : '';
+        const days = prev ? daysBetween(prev.date, r.date) : '';
+        const perDay = (prev && days>0) ? ((r.value-prev.value)/days).toFixed(3) : '';
+        const cost = (prev && m.pricePerUnit) ? ((r.value-prev.value) * m.pricePerUnit).toFixed(2) : '';
+        rows.push([
+          r.date, p.name, t.label, m.location||'', m.number||'',
+          r.value, t.unit, diff, days, perDay, cost,
+          r.isMain ? 'Ja':'Nein', r.note||''
+        ]);
+      });
+    });
+  });
+  // BOM + Semicolon for Excel DE
+  const csv = '\uFEFF' + rows.map(row => 
+    row.map(cell => `"${(cell+'').replace(/"/g,'""')}"`).join(';')
+  ).join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `zaehler-export-${today()}.csv`;
+  a.click();
+  toast('CSV Export gestartet','ok');
+}
+function importJSON(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const obj = JSON.parse(e.target.result);
+      if(!obj.state || !obj.state.properties) throw new Error('Format ungültig');
+      if(!confirm(`Import: ${obj.state.properties.length} Grundstücke, ${obj.state.readings.length} Einträge. Bestehende Daten werden überschrieben. Fortfahren?`)) return;
+      state = obj.state;
+      if(obj.settings) settings = {...settings, ...obj.settings};
+      save(); load(); render(); applyTheme();
+      toast('Import erfolgreich','ok');
+    }catch(err){ toast('Import-Fehler: '+err.message,'err'); }
+  };
+  r.readAsText(f);
+}
+function resetAll(){ localStorage.clear(); location.reload(); }
+
+/* ----- Google Auth + Drive + Calendar ----- */
+let gTokenClient=null, gToken=null, gReady=false;
+let driveFileId = null;
+const DRIVE_FILE_NAME = 'zaehler-data.json';
+
+function gInit(){
+  if(!settings.gClientId){ updateSyncStatus('lokal'); return; }
+  if(typeof google==='undefined' || !google.accounts){
+    loadScript('https://accounts.google.com/gsi/client', ()=> {
+      loadScript('https://apis.google.com/js/api.js', ()=>{
+        gapi.load('client', async ()=>{
+          await gapi.client.init({});
+          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+          gReady=true;
+          gTokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: settings.gClientId,
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
+            callback: (t) => {
+              if(t.error){ updateSyncStatus('bereit'); return; }
+              gToken = t;
+              const expiresIn = (t.expires_in || 3600) * 1000;
+              try {
+                localStorage.setItem('zaehler_gtoken', JSON.stringify({
+                  access_token: t.access_token,
+                  expires_at: Date.now() + expiresIn,
+                  scope: t.scope
+                }));
+              } catch(e){}
+              gapi.client.setToken({access_token:t.access_token});
+              updateSyncStatus('verbunden');
+              toast('Mit Google verbunden ✓','ok');
+              setTimeout(syncNow, 800);
+            }
+          });
+          tryRestoreToken();
+        });
+      });
+    });
+  }
+}
+function tryRestoreToken(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('zaehler_gtoken') || 'null');
+    if(saved && saved.access_token && saved.expires_at && saved.expires_at > Date.now() + 60000){
+      gToken = saved;
+      gapi.client.setToken({access_token: saved.access_token});
+      updateSyncStatus('verbunden');
+      setTimeout(syncNow, 500);
+      return;
+    }
+  } catch(e){}
+  if(gTokenClient){
+    try {
+      updateSyncStatus('synchronisiere…');
+      gTokenClient.requestAccessToken({prompt: ''});
+    } catch(e){ updateSyncStatus('bereit'); }
+  } else { updateSyncStatus('bereit'); }
+}
+function loadScript(src, cb){
+  if(document.querySelector(`script[src="${src}"]`)){ cb(); return; }
+  const s=document.createElement('script'); s.src=src; s.onload=cb; document.head.appendChild(s);
+}
+function gSignIn(forceSelect){
+  if(!settings.gClientId){ toast('Bitte erst Client-ID eintragen','err'); return; }
+  if(!gTokenClient){ gInit(); setTimeout(()=>gSignIn(forceSelect),1500); return; }
+  gTokenClient.requestAccessToken(forceSelect ? {prompt:'select_account'} : {});
+}
+function gSwitchAccount(){
+  if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  try { localStorage.removeItem('zaehler_gtoken'); } catch(e){}
+  gToken = null; gSignIn(true);
+}
+function gSignOut(){
+  if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
+  try { localStorage.removeItem('zaehler_gtoken'); } catch(e){}
+  gToken=null; updateSyncStatus('lokal'); toast('Abgemeldet','ok');
+}
+function gIsSignedIn(){ return !!gToken && gReady; }
+function updateSyncStatus(s){
+  const txt = document.getElementById('syncText'), el = document.getElementById('syncStatus');
+  if(!txt||!el) return;
+  const icons = {'verbunden':'✓','synchronisiere…':'⏳','ungespeichert':'●','fehler':'⚠','lokal':'○','bereit':'○'};
+  txt.textContent = (icons[s]||'') + ' ' + s;
+  const cls = (s==='verbunden')?'ok':(s==='fehler')?'err':(s==='ungespeichert'||s==='synchronisiere…')?'warn':'';
+  el.className = 'sync-status ' + cls;
+}
+async function findDriveFile(){
+  const res = await gapi.client.drive.files.list({q:`name='${DRIVE_FILE_NAME}' and trashed=false`, fields:'files(id,name,modifiedTime)'});
+  return res.result.files[0] || null;
+}
+async function syncNow(){
+  if(!gIsSignedIn()){ toast('Bitte zuerst mit Google anmelden','err'); return; }
+  try{
+    updateSyncStatus('synchronisiere…');
+    const file = await findDriveFile();
+    if(file){
+      const remote = await gapi.client.drive.files.get({fileId:file.id, alt:'media'});
+      const rdata = typeof remote.body==='string' ? JSON.parse(remote.body) : remote.body;
+      if(rdata && rdata.state){
+        state = mergeState(state, rdata.state);
+        // Defensive defaults after merge
+        state.readings.forEach(r => { if(r.isMain === undefined) r.isMain = true; });
+        state.appointments.forEach(a => {
+          if(!a.reminders) a.reminders = [7];
+          if(a.calendarText === undefined) a.calendarText = '';
+        });
+        state.properties.forEach(p => {
+          if(!p.fixedCosts) p.fixedCosts = [];
+          p.meters.forEach(m => {
+            if(m.pricePerUnit === undefined) m.pricePerUnit = 0;
+            if(m.baseFeeMonthly === undefined) m.baseFeeMonthly = 0;
+            if(m.meterRentYearly === undefined) m.meterRentYearly = 0;
+          });
+        });
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      }
+      driveFileId = file.id;
+      await uploadDrive();
+    } else { await uploadDrive(true); }
+    settings.lastSync = Date.now();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    pendingChanges = false;
+    updateSyncStatus('verbunden');
+    toast('Sync erfolgreich ✓','ok');
+    render();
+  }catch(e){
+    console.error(e); updateSyncStatus('fehler'); toast('Sync-Fehler: '+(e.result?.error?.message||e.message),'err');
+  }
+}
+function mergeState(local, remote){
+  function mergeArr(a,b){ const map = {}; [...a, ...b].forEach(x => map[x.id] = x); return Object.values(map); }
+  return {
+    properties: mergeArr(local.properties||[], remote.properties||[]),
+    readings: mergeArr(local.readings||[], remote.readings||[]),
+    appointments: mergeArr(local.appointments||[], remote.appointments||[]),
+  };
+}
+async function uploadDrive(isNew){
+  const content = JSON.stringify({state, settings, savedAt:new Date().toISOString(), version:APP_VERSION},null,2);
+  const boundary = '-------314159265358979323846';
+  const meta = { name: DRIVE_FILE_NAME, mimeType:'application/json' };
+  const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+  if(isNew || !driveFileId){
+    const r = await gapi.client.request({path:'/upload/drive/v3/files', method:'POST', params:{uploadType:'multipart'},
+      headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
+    if(r.result && r.result.id) driveFileId = r.result.id;
+  } else {
+    await gapi.client.request({path:'/upload/drive/v3/files/'+driveFileId, method:'PATCH', params:{uploadType:'multipart'},
+      headers:{'Content-Type':'multipart/related; boundary='+boundary}, body});
+  }
+}
+async function restoreFromDrive(){
+  if(!gIsSignedIn()){ toast('Bitte anmelden','err'); return; }
+  try{
+    const f = await findDriveFile();
+    if(!f){ toast('Keine Cloud-Datei gefunden','err'); return; }
+    const r = await gapi.client.drive.files.get({fileId:f.id, alt:'media'});
+    const data = typeof r.body==='string'?JSON.parse(r.body):r.body;
+    if(!confirm(`Wiederherstellen vom ${new Date(data.savedAt).toLocaleString('de-DE')}? Lokale Daten werden überschrieben.`)) return;
+    state = data.state; if(data.settings) settings = {...settings, ...data.settings};
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    pendingChanges = false;
+    load(); render(); applyTheme();
+    toast('Wiederhergestellt ✓','ok');
+  }catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function createCalendarEvent(appt){
+  try{
+    const start = appt.time ? `${appt.date}T${appt.time}:00` : appt.date;
+    const end = appt.time ? `${appt.date}T${addMinutes(appt.time,60)}:00` : appt.date;
+    const description = appt.calendarText || appt.note || '';
+    const reminders = (appt.reminders||[7]).slice(0,5).map(days => ({method:'popup', minutes: days*24*60}));
+    const ev = {
+      summary: `${APPT_ICONS[appt.cat]||'📌'} ${appt.title}`,
+      description,
+      start: appt.time ? {dateTime:start, timeZone:'Europe/Berlin'} : {date:appt.date},
+      end:   appt.time ? {dateTime:end, timeZone:'Europe/Berlin'} : {date:appt.date},
+      reminders: {useDefault:false, overrides: reminders}
+    };
+    if(appt.repeat && appt.repeat!=='none'){
+      const map = {monthly:'MONTHLY',quarterly:'MONTHLY;INTERVAL=3',yearly:'YEARLY','2years':'YEARLY;INTERVAL=2','3years':'YEARLY;INTERVAL=3'};
+      ev.recurrence = ['RRULE:FREQ='+map[appt.repeat]];
+    }
+    const r = await gapi.client.calendar.events.insert({calendarId:'primary', resource:ev});
+    appt.calId = r.result.id;
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    toast('Im Kalender eingetragen ✓','ok');
+  }catch(e){ console.error(e); toast('Kalender-Fehler: '+e.message,'err'); }
+}
+function addMinutes(t, mins){
+  const [h,m] = t.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m+mins);
+  return d.toTimeString().slice(0,5);
 }
 
-// Auto-Start
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+/* ----- Keyboard ----- */
+document.addEventListener('keydown', e => {
+  const inField = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+  if(e.key === 'Escape'){
+    document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
+    document.getElementById('lightbox').classList.remove('show');
+    return;
+  }
+  if(inField) return;
+  if(e.key === '?'){ openShortcutHelp(); e.preventDefault(); return; }
+  if(['1','2','3','4','5','6'].includes(e.key)){
+    const tabs = ['dashboard','properties','readings','appointments','stats','settings'];
+    switchTab(tabs[parseInt(e.key)-1]); e.preventDefault(); return;
+  }
+  if(e.ctrlKey || e.metaKey){
+    if(e.key === 'n'){ switchTab('readings'); setTimeout(()=>document.getElementById('readValue').focus(),100); e.preventDefault(); }
+    else if(e.key === 's'){ syncNow(); e.preventDefault(); }
+    else if(e.key === 'e'){ exportJSON(); e.preventDefault(); }
+  }
+});
 
-// Service Worker (optional, für Offline)
-if ('serviceWorker' in navigator) {
-  // Kein eigenes SW-File nötig - PWA läuft auch ohne
-}
-  </script>
+/* ----- Init ----- */
+document.getElementById('readDate').value = today();
+load();
+gInit();
+render();
+setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
+if('serviceWorker' in navigator){
+  const swCode = `
+    self.addEventListener('install',e=>{self.skipWaiting()});
+    self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});
+    self.addEventListener('fetch',e=>{ e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))); });
+  `;
+  const blob = new Blob([swCode],{type:'text/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => {
+  if(e.target===m) m.classList.remove('show');
+}));
+window.addEventListener('beforeunload', () => {
+  save();
+  if(pendingChanges && gIsSignedIn()){ try{ autoSync(); }catch(_){} }
+});
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && pendingChanges && gIsSignedIn()) autoSync();
+});
+window.addEventListener('online', () => {
+  if(pendingChanges && gIsSignedIn()) autoSync();
+});
+</script>
 </body>
 </html>
