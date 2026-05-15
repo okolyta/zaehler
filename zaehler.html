@@ -694,35 +694,40 @@ canvas.chart{width:100%;height:200px}
 
 <!-- DOCUMENT MODAL -->
 <div class="modal-bg" id="docModal">
-  <div class="modal">
-    <h2 id="docModalTitle">Dokument hochladen</h2>
-    <div class="field">
-      <label>Kategorie</label>
-      <select id="docCat"></select>
+  <div class="modal" style="display:flex;flex-direction:column;max-height:90vh;padding:0">
+    <div style="padding:18px 18px 0;flex-shrink:0">
+      <h2 id="docModalTitle">Dokument hochladen</h2>
     </div>
-    <div class="field">
-      <label>Grundstück</label>
-      <select id="docProp"></select>
+    <div style="overflow-y:auto;flex:1;padding:0 18px">
+      <div class="field" style="margin-top:14px">
+        <label>Kategorie</label>
+        <select id="docCat" onchange="autoFillDocTitle()"></select>
+      </div>
+      <div id="docTitlePresets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+      <div class="field">
+        <label>Titel *</label>
+        <input type="text" id="docTitle" placeholder="z.B. Stromrechnung Januar 2026" oninput="this.dataset.custom='1'">
+      </div>
+      <div class="field">
+        <label>Grundstück</label>
+        <select id="docProp"></select>
+      </div>
+      <div class="field">
+        <label>Datum</label>
+        <input type="date" id="docDate">
+      </div>
+      <div class="field">
+        <label>Datei (optional)</label>
+        <input type="file" id="docFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Bild, Word, Excel...</div>
+      </div>
+      <div class="field">
+        <label>Notiz (optional)</label>
+        <textarea id="docNote" rows="2"></textarea>
+      </div>
+      <div id="docUploadStatus" style="display:none;font-size:13px;padding:8px;background:var(--card2);border-radius:8px;margin-top:8px;margin-bottom:8px"></div>
     </div>
-    <div class="field">
-      <label>Titel *</label>
-      <input type="text" id="docTitle" placeholder="z.B. Stromrechnung Januar 2026">
-    </div>
-    <div class="field">
-      <label>Datum</label>
-      <input type="date" id="docDate">
-    </div>
-    <div class="field">
-      <label>Datei (optional)</label>
-      <input type="file" id="docFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Bild, Word, Excel...</div>
-    </div>
-    <div class="field">
-      <label>Notiz (optional)</label>
-      <textarea id="docNote" rows="2"></textarea>
-    </div>
-    <div id="docUploadStatus" style="display:none;font-size:13px;padding:8px;background:var(--card2);border-radius:8px;margin-top:8px"></div>
-    <div class="footer">
+    <div class="footer" style="flex-shrink:0;padding:14px 18px;border-top:1px solid var(--border);margin-top:0">
       <button class="btn ghost" onclick="closeModal('docModal')">Abbrechen</button>
       <button class="btn err sm" id="docDelBtn" onclick="deleteDoc()" style="display:none">🗑️ Löschen</button>
       <button class="btn ok" onclick="saveDoc()">Speichern</button>
@@ -1264,6 +1269,7 @@ function renderMeterCard(p, m){
     <div class="actions">
       <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
       <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${all.length})</button>
+      ${last?`<button class="btn sm err" onclick="deleteLastReading('${last.id}','${p.id}','${m.id}')">🗑️ Letzten</button>`:''}
     </div>
   </div>`;
 }
@@ -1555,6 +1561,18 @@ function renderHistContent(){
     </div>`;
   }).join('');
 }
+function deleteLastReading(id, propId, meterId){
+  const r = state.readings.find(x=>x.id===id);
+  if(!r) return;
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  const t = METER_TYPES[m?.type]||METER_TYPES.strom;
+  if(!confirm(`Letzten Eintrag löschen?\n\n${t.icon} ${fmt(r.value,3)} ${t.unit}\n📅 ${formatDate(r.date)}`)) return;
+  state.readings = state.readings.filter(x=>x.id!==id);
+  save(); render();
+  toast('Eintrag gelöscht','ok');
+}
+
 function deleteReading(id){
   const r = state.readings.find(x=>x.id===id);
   if(!r) return;
@@ -1716,6 +1734,52 @@ function getDocCategories(){
   return settings.docCategories;
 }
 
+function autoFillDocTitle(){
+  const catId = document.getElementById('docCat').value;
+  const titleField = document.getElementById('docTitle');
+  const presetsEl = document.getElementById('docTitlePresets');
+  const cat = getDocCategories().find(c=>c.id===catId);
+  if(!cat) return;
+
+  const now = new Date();
+  const months = ['Januar','Februar','März','April','Mai','Juni',
+                  'Juli','August','September','Oktober','November','Dezember'];
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  const quarter = Math.ceil((now.getMonth()+1)/3);
+
+  const presets = [
+    `${cat.label} ${month} ${year}`,
+    `${cat.label} Q${quarter} ${year}`,
+    `${cat.label} ${year}`,
+    `${cat.label} ${now.toLocaleDateString('de-DE')}`
+  ];
+
+  if(!titleField.dataset.custom){
+    titleField.value = presets[0];
+  }
+
+  presetsEl.innerHTML = presets.map(p =>
+    `<span onclick="setDocTitle('${p.replace(/'/g,"\\'")}',this)"
+      style="padding:4px 10px;border-radius:12px;font-size:12px;
+      background:var(--card2);border:1px solid var(--border);
+      cursor:pointer;transition:all .15s;white-space:nowrap"
+      onmouseover="this.style.borderColor='var(--acc)'"
+      onmouseout="this.style.borderColor='var(--border)'"
+    >${p}</span>`
+  ).join('');
+}
+
+function setDocTitle(title){
+  const titleField = document.getElementById('docTitle');
+  titleField.value = title;
+  titleField.dataset.custom = '';
+}
+
+function openDocById(id){
+  const doc = state.documents.find(d=>d.id===id);
+  if(doc) openDocModal(doc);
+}
 function openDocModal(doc){
   editingDocId = doc ? doc.id : null;
   document.getElementById('docModalTitle').textContent = doc ? 'Dokument bearbeiten' : 'Dokument hochladen';
@@ -1734,10 +1798,13 @@ function openDocModal(doc){
       `<option value="${p.id}" ${doc?.propId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`
     ).join('');
 
-  document.getElementById('docTitle').value = doc?.title||'';
+  const titleField = document.getElementById('docTitle');
+  titleField.value = doc?.title||'';
+  titleField.dataset.custom = doc ? '1' : '';
   document.getElementById('docDate').value = doc?.date||today();
   document.getElementById('docNote').value = doc?.note||'';
   document.getElementById('docModal').classList.add('show');
+  if(!doc) setTimeout(autoFillDocTitle, 50);
 }
 
 async function saveDoc(){
@@ -1806,10 +1873,15 @@ async function uploadDocToDrive(file, doc){
   if(!gIsSignedIn()) return null;
   if(!driveDocFolderId) await ensureDriveStructure();
   const prop = state.properties.find(p=>p.id===doc.propId);
+  const cat = getDocCategories().find(c=>c.id===doc.category);
   let targetFolderId = driveDocFolderId;
   if(prop){
-    const safeName = prop.name.replace(/[\\/:*?"<>|]/g,'_');
-    targetFolderId = await getOrCreateCachedFolder(safeName, driveDocFolderId);
+    const safeProp = prop.name.replace(/[\\/:*?"<>|]/g,'_');
+    targetFolderId = await getOrCreateCachedFolder(safeProp, driveDocFolderId);
+  }
+  if(cat){
+    const safeCat = cat.label.replace(/[\\/:*?"<>|]/g,'_');
+    targetFolderId = await getOrCreateCachedFolder(safeCat, targetFolderId);
   }
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -1881,7 +1953,7 @@ function renderDocuments(){
           ${doc.note?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${escapeHtml(doc.note)}</div>`:''}
           <div class="doc-actions">
             ${doc.driveLink?`<a href="${doc.driveLink}" target="_blank" rel="noopener" class="btn sm ghost">☁️ In Drive öffnen</a>`:''}
-            <button class="btn sm ghost" onclick='openDocModal(${JSON.stringify(doc).replace(/'/g,"&#39;")})'>✏️ Bearbeiten</button>
+            <button class="btn sm ghost" onclick="openDocById('${doc.id}')">✏️ Bearbeiten</button>
           </div>
         </div>
       </div>`;
