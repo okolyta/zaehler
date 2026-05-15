@@ -301,6 +301,20 @@ canvas.chart{width:100%;height:200px}
 .kbd-table td{padding:8px;border-bottom:1px solid var(--border);font-size:14px}
 .kbd-table td:first-child{font-family:monospace;color:var(--acc);width:120px}
 
+.version-badge{
+  position:fixed;top:54px;left:0;right:0;
+  background:linear-gradient(90deg,var(--acc),var(--acc2));
+  color:white;text-align:center;font-size:12px;font-weight:600;
+  padding:4px 12px;z-index:39;display:flex;
+  align-items:center;justify-content:center;gap:8px;
+  letter-spacing:.3px;
+}
+.version-badge button{
+  background:rgba(255,255,255,.2);border:none;color:white;
+  font-size:11px;padding:2px 8px;border-radius:8px;cursor:pointer;
+}
+.version-badge button:hover{background:rgba(255,255,255,.35)}
+
 .doc-item{
   display:flex;gap:12px;padding:12px;background:var(--card2);
   border-radius:10px;margin-bottom:8px;align-items:flex-start;
@@ -389,6 +403,10 @@ canvas.chart{width:100%;height:200px}
   <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
 </div>
 
+<div class="version-badge" id="versionBadge">
+  <span>⚡ Version <strong id="versionDisplay"></strong></span>
+  <button onclick="hideVersionBadge()">✕</button>
+</div>
 <div class="container">
 
   <div class="page" id="page-dashboard"><div id="dashContent"></div></div>
@@ -536,7 +554,10 @@ canvas.chart{width:100%;height:200px}
 
     <div class="card">
       <h2>ℹ️ Über</h2>
-      <p style="font-size:13px;color:var(--muted)">Version 2.1 · Kosten-Tracker Edition</p>
+      <p style="font-size:13px;color:var(--muted)">Version <span id="settingsVersion"></span> · Kosten-Tracker Edition</p>
+      <div style="margin-top:10px">
+        <button class="btn sm ghost" onclick="showVersionBadge()">🏷️ Versions-Badge einblenden</button>
+      </div>
       <p style="font-size:12px;color:var(--muted);margin-top:6px">Daten: <span id="dataSize">–</span></p>
       <button class="btn err sm" style="margin-top:10px" onclick="if(confirm('ALLE Daten löschen? Wirklich?'))resetAll()">🗑️ Alles löschen</button>
     </div>
@@ -545,7 +566,7 @@ canvas.chart{width:100%;height:200px}
   <div class="kbd-footer" onclick="openShortcutHelp()">⌨️ Drücke <strong>?</strong> für Tastatur-Shortcuts</div>
 </div>
 
-<button class="fab" onclick="quickAdd()" title="Schnell-Eintrag">+</button>
+<button class="fab" onclick="openModal('fabModal')" title="Hinzufügen">+</button>
 
 <!-- PROPERTY MODAL -->
 <div class="modal-bg" id="propModal">
@@ -718,8 +739,19 @@ canvas.chart{width:100%;height:200px}
       </div>
       <div class="field">
         <label>Datei (optional)</label>
-        <input type="file" id="docFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Bild, Word, Excel...</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <button class="btn sm" type="button" onclick="openDocSource('camera')">📷 Kamera</button>
+          <button class="btn sm ghost" type="button" onclick="openDocSource('file')">📁 Datei</button>
+          <button class="btn sm ghost" type="button" onclick="openDocSource('clipboard')">📋 Einfügen</button>
+        </div>
+        <input type="file" id="docFileCamera" accept="image/*" capture="environment" style="display:none" onchange="handleDocFile(this)">
+        <input type="file" id="docFileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none" onchange="handleDocFile(this)">
+        <div id="docFilePreview" style="display:none;margin-top:8px;padding:8px;background:var(--card2);border-radius:8px;font-size:13px;display:flex;align-items:center;gap:8px">
+          <span id="docFileIcon">📄</span>
+          <span id="docFileName" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <button onclick="clearDocFile()" style="background:none;border:none;color:var(--err);cursor:pointer;font-size:16px">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">PDF, Bild, Word, Excel, Foto...</div>
       </div>
       <div class="field">
         <label>Notiz (optional)</label>
@@ -748,6 +780,25 @@ canvas.chart{width:100%;height:200px}
     <div class="footer">
       <button class="btn ok" onclick="closeModal('docCatModal')">Fertig</button>
     </div>
+  </div>
+</div>
+
+<!-- FAB AUSWAHL MODAL -->
+<div class="modal-bg" id="fabModal">
+  <div class="modal" style="max-width:320px;text-align:center">
+    <h2 style="margin-bottom:20px">Was möchtest du hinzufügen?</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn ok" style="padding:16px;font-size:16px;justify-content:center"
+        onclick="closeModal('fabModal');switchTab('readings');setTimeout(()=>document.getElementById('readValue').focus(),100)">
+        📊 Zählerstand eintragen
+      </button>
+      <button class="btn" style="padding:16px;font-size:16px;justify-content:center;background:var(--acc2)"
+        onclick="closeModal('fabModal');switchTab('docs');setTimeout(openDocModal,100)">
+        📄 Dokument hochladen
+      </button>
+    </div>
+    <button class="btn ghost" style="width:100%;margin-top:10px;justify-content:center"
+      onclick="closeModal('fabModal')">Abbrechen</button>
   </div>
 </div>
 
@@ -828,6 +879,27 @@ let cropDisplayImage = null;
 let cropDragging = null;
 let cropDragStart = null;
 let cropRect = {x:0, y:0, w:100, h:100};
+
+/* ----- Version Badge ----- */
+function initVersionBadge(){
+  document.getElementById('versionDisplay').textContent = APP_VERSION;
+  const hidden = settings.hideVersionBadge || false;
+  document.getElementById('versionBadge').style.display = hidden ? 'none' : 'flex';
+  const tabsEl = document.querySelector('.tabs');
+  if(!hidden) tabsEl.style.marginTop = '28px';
+}
+function hideVersionBadge(){
+  document.getElementById('versionBadge').style.display = 'none';
+  document.querySelector('.tabs').style.marginTop = '0';
+  settings.hideVersionBadge = true;
+  save();
+}
+function showVersionBadge(){
+  document.getElementById('versionBadge').style.display = 'flex';
+  document.querySelector('.tabs').style.marginTop = '28px';
+  settings.hideVersionBadge = false;
+  save();
+}
 
 /* ----- Persistence ----- */
 function load(){
@@ -1721,6 +1793,71 @@ function cancelCropPhoto(){
   cropRotation = 0;
 }
 
+/* ----- Doc File Sources ----- */
+let docSelectedFile = null;
+
+function openDocSource(source){
+  if(source==='camera') document.getElementById('docFileCamera').click();
+  else if(source==='file') document.getElementById('docFileInput').click();
+  else if(source==='clipboard') loadDocFromClipboard();
+}
+
+function handleDocFile(input){
+  const f = input.files[0];
+  if(!f) return;
+  docSelectedFile = f;
+  showDocFilePreview(f);
+  input.value='';
+}
+
+async function loadDocFromClipboard(){
+  try{
+    const items = await navigator.clipboard.read();
+    for(const item of items){
+      for(const type of item.types){
+        if(type.startsWith('image/')){
+          const blob = await item.getType(type);
+          const file = new File([blob], `clipboard-${Date.now()}.jpg`, {type});
+          docSelectedFile = file;
+          showDocFilePreview(file);
+          return;
+        }
+      }
+    }
+    toast('Kein Bild in der Zwischenablage','err');
+  }catch(e){
+    toast('Zwischenablage nicht verfügbar','err');
+  }
+}
+
+function showDocFilePreview(file){
+  const preview = document.getElementById('docFilePreview');
+  const name = document.getElementById('docFileName');
+  const icon = document.getElementById('docFileIcon');
+  if(!preview||!name||!icon) return;
+  const icons = {
+    'application/pdf':'📕',
+    'image/':'🖼️',
+    'application/msword':'📝',
+    'application/vnd.openxmlformats':'📝',
+    'application/vnd.ms-excel':'📊',
+    'text/':'📃'
+  };
+  let fileIcon = '📄';
+  for(const [type, ico] of Object.entries(icons)){
+    if(file.type.startsWith(type)){ fileIcon=ico; break; }
+  }
+  icon.textContent = fileIcon;
+  name.textContent = file.name;
+  preview.style.display = 'flex';
+}
+
+function clearDocFile(){
+  docSelectedFile = null;
+  const preview = document.getElementById('docFilePreview');
+  if(preview) preview.style.display = 'none';
+}
+
 /* ----- Documents ----- */
 let editingDocId = null;
 
@@ -1784,7 +1921,8 @@ function openDocModal(doc){
   editingDocId = doc ? doc.id : null;
   document.getElementById('docModalTitle').textContent = doc ? 'Dokument bearbeiten' : 'Dokument hochladen';
   document.getElementById('docDelBtn').style.display = doc ? 'inline-flex' : 'none';
-  document.getElementById('docFile').value = '';
+  docSelectedFile = null;
+  clearDocFile();
   document.getElementById('docUploadStatus').style.display = 'none';
 
   const catSel = document.getElementById('docCat');
@@ -1813,7 +1951,7 @@ async function saveDoc(){
   const propId = document.getElementById('docProp').value;
   const date = document.getElementById('docDate').value;
   const note = document.getElementById('docNote').value.trim();
-  const file = document.getElementById('docFile').files[0];
+  const file = docSelectedFile;
   const statusEl = document.getElementById('docUploadStatus');
 
   if(!title){ toast('Titel fehlt','err'); return; }
@@ -2618,6 +2756,8 @@ function render(tab){
   if(ds) ds.textContent = humanSize(JSON.stringify(state).length);
 }
 function renderSettingsExtras(){
+  const sv = document.getElementById('settingsVersion');
+  if(sv) sv.textContent = APP_VERSION;
   document.getElementById('gClientId').value = settings.gClientId||'';
   document.getElementById('lastBackup').textContent = settings.lastSync ? new Date(settings.lastSync).toLocaleString('de-DE') : 'lokal-only';
   document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length);
@@ -2626,6 +2766,7 @@ function renderSettingsExtras(){
 }
 function saveClientId(){ settings.gClientId = document.getElementById('gClientId').value.trim(); save(); toast('Client-ID gespeichert','ok'); gInit(); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openModal(id){ document.getElementById(id).classList.add('show'); }
 function openShortcutHelp(){ document.getElementById('kbdModal').classList.add('show'); }
 
 /* ----- Export / Import ----- */
@@ -3050,6 +3191,7 @@ document.getElementById('readDate').value = today();
 load();
 gInit();
 render();
+initVersionBadge();
 setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
 if('serviceWorker' in navigator){
