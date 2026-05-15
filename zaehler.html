@@ -1292,9 +1292,10 @@ async function saveReading(){
       updateSyncStatus('synchronisiere…');
       const p = state.properties.find(x=>x.id===propId);
       const m = p?.meters.find(x=>x.id===meterId);
-      const meterType = METER_TYPES[m?.type]?.label || 'Zaehler';
-      const filename = `${date}_${(p?.name||'Objekt').replace(/[^\w\-]+/g,'_')}_${meterType.replace(/[^\w\-]+/g,'_')}_${value}.jpg`;
-      const uploaded = await uploadPhotoToDrive(photo, filename);
+      const meterLabel = METER_TYPES[m?.type]?.label || 'Zaehler';
+      const propName = p?.name || 'Unbekannt';
+      const filename = `${date}_${value}.jpg`;
+      const uploaded = await uploadPhotoToDrive(photo, filename, propName, meterLabel);
       photoDriveId = uploaded?.id || null;
       photoDriveLink = uploaded?.webViewLink || uploaded?.webContentLink || null;
     }catch(e){
@@ -2288,6 +2289,7 @@ let gTokenClient=null, gToken=null, gReady=false;
 let driveFileId = null;
 let driveRootFolderId = null;
 let drivePhotoFolderId = null;
+let driveFolderCache = {};
 const DRIVE_FILE_NAME = 'zaehler-data.json';
 const DRIVE_ROOT_FOLDER = 'Zaehler-App';
 const DRIVE_PHOTO_FOLDER = 'Fotos';
@@ -2376,7 +2378,12 @@ function gSwitchAccount(){
 function gSignOut(){
   if(gToken && google.accounts) google.accounts.oauth2.revoke(gToken.access_token,()=>{});
   try { localStorage.removeItem('zaehler_gtoken'); } catch(e){}
-  gToken=null; updateSyncStatus('lokal'); toast('Abgemeldet','ok');
+  gToken=null;
+  driveRootFolderId=null;
+  drivePhotoFolderId=null;
+  driveFolderCache={};
+  updateSyncStatus('lokal');
+  toast('Abgemeldet','ok');
 }
 function gIsSignedIn(){ return !!gToken && gReady; }
 function updateSyncStatus(s){
@@ -2424,9 +2431,27 @@ async function ensureDriveStructure(){
   return { rootId: driveRootFolderId, photoId: drivePhotoFolderId };
 }
 
-async function uploadPhotoToDrive(dataUrl, fileName){
-  if(!gIsSignedIn()) return null;
+async function getOrCreateCachedFolder(name, parentId){
+  const key = parentId + '::' + name;
+  if(driveFolderCache[key]) return driveFolderCache[key];
+  const folder = await findOrCreateDriveFolder(name, parentId);
+  driveFolderCache[key] = folder.id;
+  return folder.id;
+}
+
+async function getPhotoTargetFolder(propName, meterType){
   if(!drivePhotoFolderId) await ensureDriveStructure();
+  const safeProp = (propName||'Unbekannt').replace(/[\\/:*?"<>|]/g,'_');
+  const safeMeter = (meterType||'Sonstiges').replace(/[\\/:*?"<>|]/g,'_');
+  const propId = await getOrCreateCachedFolder(safeProp, drivePhotoFolderId);
+  const meterId = await getOrCreateCachedFolder(safeMeter, propId);
+  return meterId;
+}
+
+async function uploadPhotoToDrive(dataUrl, fileName, propName, meterType){
+  if(!gIsSignedIn()) return null;
+
+  const targetFolderId = await getPhotoTargetFolder(propName, meterType);
 
   const parts = dataUrl.split(',');
   const metaPart = parts[0] || '';
@@ -2436,7 +2461,7 @@ async function uploadPhotoToDrive(dataUrl, fileName){
 
   const metadata = {
     name: fileName,
-    parents: [drivePhotoFolderId]
+    parents: [targetFolderId]
   };
 
   const boundary = '-------314159265358979323846_photo';
