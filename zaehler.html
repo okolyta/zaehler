@@ -661,6 +661,10 @@ canvas.chart{width:100%;height:200px}
     <h2 id="propModalTitle">Grundstück</h2>
     <div class="field"><label>Name</label><input type="text" id="propName" placeholder="z. B. Hauptwohnsitz"></div>
     <div class="field"><label>Adresse</label><input type="text" id="propAddr" placeholder="Straße, PLZ Ort"></div>
+    <div class="row">
+      <div class="field"><label>👥 Bewohner</label><input type="number" id="propResidents" min="1" max="20" placeholder="z.B. 2"></div>
+      <div class="field"><label>📐 Wohnfläche m²</label><input type="number" id="propArea" min="1" placeholder="z.B. 85"></div>
+    </div>
     <div class="field"><label>Notiz</label><textarea id="propNote" rows="2"></textarea></div>
     
     <hr style="margin:14px 0;border-color:var(--border)">
@@ -912,6 +916,76 @@ const METER_TYPES = {
   pellets:    {label:'Pellets',       unit:'kg',   icon:'🪵', color:'#92400e'},
   solar:      {label:'Solar/PV',      unit:'kWh',  icon:'☀️', color:'#facc15'},
 };
+
+// Durchschnittswerte Deutschland (Quellen: BDEW, Statistisches Bundesamt, co2online)
+const BENCHMARKS = {
+  strom: {
+    label: 'Strom',
+    unit: 'kWh',
+    perPerson: [0, 1300, 2000, 2500, 2900, 3200, 3500, 3800, 4100, 4400],
+    // Index = Bewohnerzahl, 0=Fallback pro Person
+    perPersonFallback: 1100,
+    tip: 'Durchschnitt DE: ~1.300 kWh/Person/Jahr (ohne Warmwasser)',
+    levels: {low: 0.7, ok: 1.0, high: 1.2, veryHigh: 1.5}
+  },
+  gas: {
+    label: 'Gas (Heizung)',
+    unit: 'kWh',
+    perM2: 120,
+    perM2Range: {low: 80, ok: 120, high: 160, veryHigh: 200},
+    tip: 'Durchschnitt DE: ~120 kWh/m²/Jahr für Gas-Heizung',
+    levels: {low: 0.7, ok: 1.0, high: 1.2, veryHigh: 1.5}
+  },
+  wasser: {
+    label: 'Wasser (kalt)',
+    unit: 'm³',
+    perPerson: [0, 35, 70, 95, 120, 145, 170, 195, 220, 245],
+    perPersonFallback: 35,
+    tip: 'Durchschnitt DE: ~35 m³/Person/Jahr (ca. 95 Liter/Tag)',
+    levels: {low: 0.7, ok: 1.0, high: 1.3, veryHigh: 1.6}
+  },
+  warmwasser: {
+    label: 'Warmwasser',
+    unit: 'm³',
+    perPerson: [0, 15, 25, 35, 42, 50, 58, 65, 72, 80],
+    perPersonFallback: 15,
+    tip: 'Durchschnitt DE: ~15 m³/Person/Jahr',
+    levels: {low: 0.7, ok: 1.0, high: 1.3, veryHigh: 1.6}
+  },
+  heizung: {
+    label: 'Heizung',
+    unit: 'kWh',
+    perM2: 130,
+    perM2Range: {low: 80, ok: 130, high: 180, veryHigh: 250},
+    tip: 'Durchschnitt DE: ~130 kWh/m²/Jahr',
+    levels: {low: 0.7, ok: 1.0, high: 1.2, veryHigh: 1.5}
+  }
+};
+
+function getBenchmark(meterType, residents, areaM2){
+  const b = BENCHMARKS[meterType];
+  if(!b) return null;
+  let expected = 0;
+  if(b.perPerson){
+    const r = Math.max(1, residents || 2);
+    expected = (r < b.perPerson.length) ? b.perPerson[r] : r * b.perPersonFallback;
+  } else if(b.perM2 && areaM2 > 0){
+    expected = b.perM2 * areaM2;
+  } else if(b.perM2){
+    expected = b.perM2 * (areaM2 || 80);
+  }
+  return { expected, tip: b.tip, levels: b.levels, unit: b.unit };
+}
+
+function getBenchmarkRating(actual, expected, levels){
+  if(!expected || !actual) return null;
+  const ratio = actual / expected;
+  if(ratio <= levels.low) return {label:'Sehr sparsam', icon:'🌟', color:'var(--ok)', ratio};
+  if(ratio <= levels.ok) return {label:'Durchschnitt', icon:'✅', color:'var(--ok)', ratio};
+  if(ratio <= levels.high) return {label:'Leicht erhöht', icon:'⚠️', color:'var(--warn)', ratio};
+  if(ratio <= levels.veryHigh) return {label:'Deutlich erhöht', icon:'🔴', color:'var(--err)', ratio};
+  return {label:'Sehr hoch', icon:'🚨', color:'var(--err)', ratio};
+}
 
 const COST_CATEGORIES = {
   muell: {label:'Müllabfuhr', icon:'🗑️'},
@@ -1203,6 +1277,8 @@ function openPropertyModal(prop){
   document.getElementById('propModalTitle').textContent = prop ? 'Grundstück bearbeiten' : 'Neues Grundstück';
   document.getElementById('propName').value = editingProp.name;
   document.getElementById('propAddr').value = editingProp.address || '';
+  document.getElementById('propResidents').value = editingProp.residents || '';
+  document.getElementById('propArea').value = editingProp.area || '';
   document.getElementById('propNote').value = editingProp.note || '';
   document.getElementById('propDelBtn').style.display = prop ? 'inline-flex' : 'none';
   renderMeterEditList();
@@ -1288,6 +1364,8 @@ function removeFixedCost(i){ editingProp.fixedCosts.splice(i,1); renderFixedCost
 function saveProperty(){
   editingProp.name = document.getElementById('propName').value.trim();
   editingProp.address = document.getElementById('propAddr').value.trim();
+  editingProp.residents = parseInt(document.getElementById('propResidents').value) || 0;
+  editingProp.area = parseInt(document.getElementById('propArea').value) || 0;
   editingProp.note = document.getElementById('propNote').value.trim();
   if(!editingProp.name){ toast('Name fehlt','err'); return; }
   // Clean up empty fixed costs
@@ -1324,6 +1402,7 @@ function renderProperties(){
         <div>
           <h2>🏠 ${escapeHtml(p.name)}</h2>
           ${p.address?`<div style="color:var(--muted);font-size:13px">📍 ${escapeHtml(p.address)}</div>`:''}
+          ${(p.residents||p.area)?`<div style="color:var(--muted);font-size:13px">${p.residents?'👥 '+p.residents+' Bewohner':''}${p.residents&&p.area?' · ':''}${p.area?'📐 '+p.area+' m²':''}</div>`:''}
         </div>
         <button class="btn sm ghost" onclick='openPropertyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️</button>
       </div>
@@ -1428,12 +1507,39 @@ function renderMeterCard(p, m){
     </div>
     ${expectComp}
     ${costBox}
+    ${renderBenchmarkBox(m, p, currentYearly)}
     ${anomaly}
     ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong></div>`:''}
     <div class="actions">
       <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
       <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${all.length})</button>
       ${last?`<button class="btn sm err" onclick="deleteLastReading('${last.id}','${p.id}','${m.id}')">🗑️ Letzten</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderBenchmarkBox(meter, property, currentYearly){
+  if(!currentYearly || currentYearly <= 0) return '';
+  const bm = getBenchmark(meter.type, property.residents, property.area);
+  if(!bm || !bm.expected) return '';
+  const rating = getBenchmarkRating(currentYearly, bm.expected, bm.levels);
+  if(!rating) return '';
+  const pct = Math.round(rating.ratio * 100);
+  const diff = currentYearly - bm.expected;
+  const diffSign = diff >= 0 ? '+' : '';
+  const residents = property.residents || '?';
+  const area = property.area || '?';
+  const basis = BENCHMARKS[meter.type]?.perPerson ? `${residents} Bewohner` : `${area} m²`;
+  return `<div style="margin-top:8px;padding:10px;background:color-mix(in srgb,${rating.color} 8%,transparent);border:1px solid color-mix(in srgb,${rating.color} 30%,transparent);border-radius:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+      <span>${rating.icon} <strong>Benchmark</strong> (${basis})</span>
+      <span style="color:${rating.color};font-weight:700">${pct}%</span>
+    </div>
+    <div style="height:6px;background:var(--bg2);border-radius:3px;margin:6px 0;overflow:hidden">
+      <div style="height:100%;width:${Math.min(pct, 200)}%;max-width:100%;background:${rating.color};border-radius:3px;transition:width .5s"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">
+      ${rating.label} · Ist: ${fmt(currentYearly,0)} · Soll: ~${fmt(bm.expected,0)} ${bm.unit}/Jahr · ${diffSign}${fmt(Math.abs(diff),0)} ${bm.unit}
     </div>
   </div>`;
 }
@@ -2020,6 +2126,117 @@ function getModelFallbackList(){
   if(idx < 0) return [current, ...cachedVisionModels.map(m => m.id)];
   const ordered = [...cachedVisionModels.slice(idx), ...cachedVisionModels.slice(0, idx)];
   return ordered.map(m => m.id);
+}
+
+/* ----- KI Insights ----- */
+async function runKIInsights(){
+  const resultEl = document.getElementById('kiInsightsResult');
+  if(!resultEl) return;
+  if(!settings.openrouterKey){ toast('Bitte OpenRouter API-Key in Einstellungen eintragen','err'); return; }
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)">🧠 KI analysiert deine Verbrauchsdaten...</div>';
+
+  // Daten zusammenstellen
+  let summary = 'VERBRAUCHSDATEN HAUSHALT:\n\n';
+
+  state.properties.forEach(p => {
+    summary += `OBJEKT: ${p.name}`;
+    if(p.residents) summary += ` · ${p.residents} Bewohner`;
+    if(p.area) summary += ` · ${p.area} m²`;
+    summary += '\n';
+
+    p.meters.forEach(m => {
+      const t = METER_TYPES[m.type] || METER_TYPES.strom;
+      const readings = state.readings.filter(r=>r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(!readings.length) return;
+
+      const first = readings[0];
+      const last = readings[readings.length - 1];
+      const days = daysBetween(first.date, last.date);
+      const diff = last.value - first.value;
+      const yearly = days > 0 ? diff * 365 / days : 0;
+
+      summary += `  ${t.label}: ${readings.length} Ablesungen\n`;
+      summary += `    Zeitraum: ${first.date} bis ${last.date} (${days} Tage)\n`;
+      summary += `    Verbrauch: ${diff.toFixed(2)} ${t.unit} gesamt · ~${yearly.toFixed(0)} ${t.unit}/Jahr\n`;
+
+      if(m.pricePerUnit) summary += `    Preis: ${m.pricePerUnit} €/${t.unit}\n`;
+      if(m.baseFeeMonthly) summary += `    Grundgebühr: ${m.baseFeeMonthly} €/Monat\n`;
+
+      const bm = getBenchmark(m.type, p.residents, p.area);
+      if(bm && bm.expected){
+        summary += `    Benchmark: ~${bm.expected.toFixed(0)} ${t.unit}/Jahr (${p.residents||'2'} Personen / ${p.area||'80'} m²)\n`;
+        summary += `    Verhältnis: ${(yearly/bm.expected*100).toFixed(0)}% vom Durchschnitt\n`;
+      }
+      summary += '\n';
+    });
+
+    if(p.fixedCosts && p.fixedCosts.length){
+      const fcTotal = calcFixedCostsYearly(p.fixedCosts);
+      summary += `  Fixkosten: ${fcTotal.toFixed(2)} €/Jahr\n`;
+      p.fixedCosts.forEach(fc => {
+        const cat = COST_CATEGORIES[fc.category] || {label:fc.category};
+        const factor = INTERVALS[fc.interval]?.factor || 1;
+        summary += `    ${cat.label}: ${fc.amount} € × ${factor}/Jahr = ${(fc.amount*factor).toFixed(2)} €/Jahr\n`;
+      });
+    }
+    summary += '\n';
+  });
+
+  try{
+    const model = settings.ocrModel || 'google/gemini-flash-1.5-8b';
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Authorization': `Bearer ${settings.openrouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'Zaehler-App Insights'
+      },
+      body: JSON.stringify({
+        model,
+        messages:[
+          {
+            role:'system',
+            content:'Du bist ein Energieberater und Verbrauchsexperte für deutsche Haushalte. Analysiere die Verbrauchsdaten und gib eine kurze, hilfreiche Analyse auf Deutsch. Verwende Emojis für Übersichtlichkeit. Formatiere mit Absätzen. Maximal 300 Wörter. Sei konkret und nenne Zahlen.'
+          },
+          {
+            role:'user',
+            content:`Analysiere diese Verbrauchsdaten und gib mir:\n1. 📊 Gesamtbewertung (Sparfuchs / Durchschnitt / Vielverbraucher)\n2. 🔍 Auffälligkeiten (was fällt auf?)\n3. 💰 Einspar-Potenzial (konkret in € wenn möglich)\n4. 💡 3 konkrete Tipps zum Sparen\n5. 🔮 Prognose nächstes Jahr\n\nDaten:\n${summary}`
+          }
+        ],
+        max_tokens: 800,
+        temperature: 0.4
+      })
+    });
+
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const reply = json.choices?.[0]?.message?.content || '';
+
+    if(!reply) throw new Error('Leere Antwort');
+
+    const htmlReply = reply
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    resultEl.innerHTML = `
+      <div style="padding:14px;background:var(--card2);border-radius:10px;border:1px solid var(--border)">
+        <div style="font-size:14px;line-height:1.7"><p>${htmlReply}</p></div>
+        <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">🤖 ${model.split('/').pop()} · ${new Date().toLocaleTimeString('de-DE')}</span>
+          <button class="btn sm ghost" onclick="runKIInsights()">🔄 Nochmal</button>
+        </div>
+      </div>`;
+
+    toast('KI-Analyse fertig ✅', 'ok');
+  }catch(e){
+    console.error('KI-Insights:', e);
+    resultEl.innerHTML = `<div style="padding:12px;color:var(--err);font-size:13px">❌ Fehler: ${e.message}<br><br><button class="btn sm ghost" onclick="runKIInsights()">🔄 Nochmal versuchen</button></div>`;
+    toast('KI-Analyse fehlgeschlagen', 'err');
+  }
 }
 
 /* ----- OCR Connection Test ----- */
@@ -3299,6 +3516,14 @@ function renderDashboard(){
       ${alertsHtml}
     </div>` : ''}
 
+    ${(settings.ocrKiEnabled && settings.openrouterKey && totalReadings >= 2) ? `<div class="card" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="margin:0;font-size:14px">🧠 KI-Analyse</h2>
+        <button class="btn sm" onclick="runKIInsights()">Analyse starten</button>
+      </div>
+      <div id="kiInsightsResult" style="margin-top:10px;display:none"></div>
+    </div>` : ''}
+
     ${quickAddCards ? `<div class="card">
       <h2>⚡ Schnell-Eintrag</h2>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Wert → ⭐ für Hauptablesung → ✓</p>
@@ -3342,6 +3567,15 @@ function renderStats(){
       if(costs){
         costInfo = `<div style="margin-top:6px;font-size:13px">💰 <strong>${fmtEur(costs.total)}/Jahr</strong> · ≈ ${fmtEur(costs.total/12)}/Monat</div>`;
       }
+      let benchInfo = '';
+      const bm = getBenchmark(m.type, p.residents, p.area);
+      if(bm && bm.expected && perYear > 0){
+        const rating = getBenchmarkRating(perYear, bm.expected, bm.levels);
+        if(rating){
+          const basis = BENCHMARKS[m.type]?.perPerson ? `${p.residents||'?'} Bewohner` : `${p.area||'?'} m²`;
+          benchInfo = `<div style="margin-top:6px;font-size:13px">${rating.icon} <strong>${rating.label}</strong> · ${Math.round(rating.ratio*100)}% vom Durchschnitt (${basis})<br><span style="color:var(--muted)">${bm.tip}</span></div>`;
+        }
+      }
       propHtml += `<div style="margin-top:10px">
         <h3>${t.icon} ${t.label}</h3>
         <div class="row">
@@ -3351,6 +3585,7 @@ function renderStats(){
         </div>
         ${expectInfo}
         ${costInfo}
+        ${benchInfo}
         <canvas class="chart" id="chart_${p.id}_${m.id}"></canvas>
       </div>`;
     });
