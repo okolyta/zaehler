@@ -365,7 +365,7 @@ canvas.chart{width:100%;height:200px}
         </label>
       </div>
       <div class="field">
-        <label>Foto des Zählers (optional)</label>
+        <label>Foto des Zählers (optional · wird bei Google Sync in Drive gespeichert)</label>
         <input type="file" accept="image/*" capture="environment" id="readPhoto" onchange="previewPhoto()">
         <img id="photoPreview" class="preview" style="display:none">
       </div>
@@ -602,7 +602,7 @@ canvas.chart{width:100%;height:200px}
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.1';
+const APP_VERSION = '2.2';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1190,7 +1190,7 @@ function previewPhoto(){
   };
   reader.readAsDataURL(f);
 }
-function saveReading(){
+async function saveReading(){
   const propId = document.getElementById('readPropSel').value;
   const meterId = document.getElementById('readMeterSel').value;
   const date = document.getElementById('readDate').value;
@@ -1199,21 +1199,57 @@ function saveReading(){
   if(!propId||!meterId){ toast('Zähler wählen','err'); return; }
   if(!date){ toast('Datum fehlt','err'); return; }
   if(isNaN(value)){ toast('Zählerstand ungültig','err'); return; }
+
   const existing = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
   if(existing.length && existing[0].date < date && value < existing[0].value){
     if(!confirm(`Achtung: Neuer Stand (${value}) ist kleiner als letzter (${existing[0].value}). Trotzdem speichern?`)) return;
   }
-  const photo = document.getElementById('photoPreview').dataset.compressed || null;
+
+  let photo = document.getElementById('photoPreview').dataset.compressed || null;
+  let photoDriveId = null;
+  let photoDriveLink = null;
+
   const note = document.getElementById('readNote').value.trim();
-  state.readings.push({id:uid(), propId, meterId, date, value, note, photo, isMain});
+
+  if(photo && gIsSignedIn()){
+    try{
+      updateSyncStatus('synchronisiere…');
+      const p = state.properties.find(x=>x.id===propId);
+      const m = p?.meters.find(x=>x.id===meterId);
+      const meterType = METER_TYPES[m?.type]?.label || 'Zaehler';
+      const filename = `${date}_${(p?.name||'Objekt').replace(/[^\w\-]+/g,'_')}_${meterType.replace(/[^\w\-]+/g,'_')}_${value}.jpg`;
+      const uploaded = await uploadPhotoToDrive(photo, filename);
+      photoDriveId = uploaded?.id || null;
+      photoDriveLink = uploaded?.webViewLink || uploaded?.webContentLink || null;
+    }catch(e){
+      console.error('Foto-Upload fehlgeschlagen', e);
+      toast('Foto konnte nicht in Drive gespeichert werden – Eintrag wird lokal gespeichert','err');
+    }
+  }
+
+  state.readings.push({
+    id:uid(),
+    propId,
+    meterId,
+    date,
+    value,
+    note,
+    photo,
+    photoDriveId,
+    photoDriveLink,
+    isMain
+  });
+
   save();
   toast(`${isMain?'⭐ Hauptablesung':'📝 Zwischenstand'} gespeichert`, 'ok');
+
   document.getElementById('readValue').value='';
   document.getElementById('readNote').value='';
   document.getElementById('readPhoto').value='';
   document.getElementById('photoPreview').style.display='none';
   document.getElementById('photoPreview').dataset.compressed='';
   document.getElementById('readIsMain').checked = true;
+
   showLastReading();
   if(isMain) maybeCreateReadingReminder(propId, meterId);
 }
@@ -1325,6 +1361,7 @@ function renderHistContent(){
         ${diff!==null?`<div style="font-size:11px;color:var(--muted)">+${fmt(diff,2)} ${t.unit} in ${days}T${costInfo}</div>`:''}
         ${r.note?`<div style="font-size:11px;color:var(--muted)">📝 ${escapeHtml(r.note)}</div>`:''}
         ${r.photo?`<img src="${r.photo}" class="preview" style="max-width:120px;margin-top:4px;cursor:pointer" onclick="openLightbox('${r.id}')">`:''}
+        ${r.photoDriveLink?`<div style="margin-top:4px"><a href="${r.photoDriveLink}" target="_blank" rel="noopener" style="font-size:11px;color:var(--acc)">☁️ Foto in Drive öffnen</a></div>`:''}
       </div>
       <div style="text-align:right">
         <div class="val">${fmt(r.value,3)}</div>
@@ -1804,7 +1841,11 @@ function resetAll(){ localStorage.clear(); location.reload(); }
 /* ----- Google Auth + Drive + Calendar ----- */
 let gTokenClient=null, gToken=null, gReady=false;
 let driveFileId = null;
+let driveRootFolderId = null;
+let drivePhotoFolderId = null;
 const DRIVE_FILE_NAME = 'zaehler-data.json';
+const DRIVE_ROOT_FOLDER = 'Zaehler-App';
+const DRIVE_PHOTO_FOLDER = 'Fotos';
 
 function gInit(){
   if(!settings.gClientId){ updateSyncStatus('lokal'); return; }
@@ -1819,7 +1860,7 @@ function gInit(){
           gTokenClient = google.accounts.oauth2.initTokenClient({
             client_id: settings.gClientId,
             scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events',
-            callback: (t) => {
+            callback: async (t) => {
               if(t.error){ updateSyncStatus('bereit'); return; }
               gToken = t;
               const expiresIn = (t.expires_in || 3600) * 1000;
@@ -1831,9 +1872,16 @@ function gInit(){
                 }));
               } catch(e){}
               gapi.client.setToken({access_token:t.access_token});
-              updateSyncStatus('verbunden');
-              toast('Mit Google verbunden ✓','ok');
-              setTimeout(syncNow, 800);
+              try{
+                await ensureDriveStructure();
+                updateSyncStatus('verbunden');
+                toast('Mit Google verbunden ✓','ok');
+                setTimeout(syncNow, 800);
+              }catch(e){
+                console.error('Drive-Struktur Fehler', e);
+                updateSyncStatus('fehler');
+                toast('Drive-Struktur konnte nicht vorbereitet werden','err');
+              }
             }
           });
           tryRestoreToken();
@@ -1842,14 +1890,20 @@ function gInit(){
     });
   }
 }
-function tryRestoreToken(){
+async function tryRestoreToken(){
   try {
     const saved = JSON.parse(localStorage.getItem('zaehler_gtoken') || 'null');
     if(saved && saved.access_token && saved.expires_at && saved.expires_at > Date.now() + 60000){
       gToken = saved;
       gapi.client.setToken({access_token: saved.access_token});
-      updateSyncStatus('verbunden');
-      setTimeout(syncNow, 500);
+      try{
+        await ensureDriveStructure();
+        updateSyncStatus('verbunden');
+        setTimeout(syncNow, 500);
+      }catch(e){
+        console.error('Drive-Struktur Restore-Fehler', e);
+        updateSyncStatus('fehler');
+      }
       return;
     }
   } catch(e){}
@@ -1889,9 +1943,79 @@ function updateSyncStatus(s){
   el.className = 'sync-status ' + cls;
 }
 async function findDriveFile(){
-  const res = await gapi.client.drive.files.list({q:`name='${DRIVE_FILE_NAME}' and trashed=false`, fields:'files(id,name,modifiedTime)'});
+  if(!driveRootFolderId) await ensureDriveStructure();
+  const res = await gapi.client.drive.files.list({
+    q:`name='${DRIVE_FILE_NAME}' and '${driveRootFolderId}' in parents and trashed=false`,
+    fields:'files(id,name,modifiedTime)'
+  });
   return res.result.files[0] || null;
 }
+async function findOrCreateDriveFolder(name, parentId=null){
+  const q = parentId
+    ? `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+    : `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await gapi.client.drive.files.list({ q, fields:'files(id,name)' });
+  if(res.result.files && res.result.files.length) return res.result.files[0];
+
+  const meta = {
+    name,
+    mimeType:'application/vnd.google-apps.folder'
+  };
+  if(parentId) meta.parents = [parentId];
+
+  const createRes = await gapi.client.drive.files.create({
+    resource: meta,
+    fields: 'id,name'
+  });
+  return createRes.result;
+}
+
+async function ensureDriveStructure(){
+  if(!gIsSignedIn()) return null;
+  const root = await findOrCreateDriveFolder(DRIVE_ROOT_FOLDER);
+  driveRootFolderId = root.id;
+  const photos = await findOrCreateDriveFolder(DRIVE_PHOTO_FOLDER, driveRootFolderId);
+  drivePhotoFolderId = photos.id;
+  return { rootId: driveRootFolderId, photoId: drivePhotoFolderId };
+}
+
+async function uploadPhotoToDrive(dataUrl, fileName){
+  if(!gIsSignedIn()) return null;
+  if(!drivePhotoFolderId) await ensureDriveStructure();
+
+  const parts = dataUrl.split(',');
+  const metaPart = parts[0] || '';
+  const base64Data = parts[1] || '';
+  const mimeMatch = metaPart.match(/data:(.*?);base64/);
+  const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+  const metadata = {
+    name: fileName,
+    parents: [drivePhotoFolderId]
+  };
+
+  const boundary = '-------314159265358979323846_photo';
+  const body =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    `${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Type: ${mimeType}\r\n` +
+    `Content-Transfer-Encoding: base64\r\n\r\n` +
+    `${base64Data}\r\n` +
+    `--${boundary}--`;
+
+  const res = await gapi.client.request({
+    path:'/upload/drive/v3/files',
+    method:'POST',
+    params:{ uploadType:'multipart', fields:'id,name,webViewLink,webContentLink' },
+    headers:{ 'Content-Type':'multipart/related; boundary=' + boundary },
+    body
+  });
+
+  return res.result;
+}
+
 async function syncNow(){
   if(!gIsSignedIn()){ toast('Bitte zuerst mit Google anmelden','err'); return; }
   try{
@@ -1942,7 +2066,9 @@ function mergeState(local, remote){
 async function uploadDrive(isNew){
   const content = JSON.stringify({state, settings, savedAt:new Date().toISOString(), version:APP_VERSION},null,2);
   const boundary = '-------314159265358979323846';
-  const meta = { name: DRIVE_FILE_NAME, mimeType:'application/json' };
+  const meta = driveRootFolderId
+    ? { name: DRIVE_FILE_NAME, mimeType:'application/json', parents:[driveRootFolderId] }
+    : { name: DRIVE_FILE_NAME, mimeType:'application/json' };
   const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
   if(isNew || !driveFileId){
     const r = await gapi.client.request({path:'/upload/drive/v3/files', method:'POST', params:{uploadType:'multipart'},
