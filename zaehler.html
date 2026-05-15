@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
 <style>
 /* ========================================================
    THEMES
@@ -379,6 +380,7 @@ canvas.chart{width:100%;height:200px}
   header h1{font-size:16px}
   .sync-status{font-size:11px;padding:5px 10px}
   .quick-row input{width:80px}
+  .version-badge{font-size:11px;padding:3px 10px}
 }
 </style>
 </head>
@@ -510,6 +512,43 @@ canvas.chart{width:100%;height:200px}
         </div>
       </div>
       <p style="font-size:12px;color:var(--muted)">💡 Probier alle Themes mal aus — jedes hat seinen eigenen Vibe!</p>
+    </div>
+
+    <div class="card">
+      <h2>🔍 OCR / Texterkennung</h2>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ocrToggle" onchange="settings.ocrEnabled=this.checked;save()" style="width:auto">
+          <span><strong>OCR aktivieren</strong> — Zählerstand automatisch erkennen</span>
+        </label>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">📷 Tesseract.js (kostenlos, läuft lokal im Browser). Erkennung startet nach dem Zuschneiden.</p>
+      <hr style="border-color:var(--border);margin:12px 0">
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ocrKiToggle" onchange="settings.ocrKiEnabled=this.checked;save();document.getElementById('ocrKiSettings').style.display=this.checked?'block':'none'" style="width:auto">
+          <span>🤖 <strong>KI-OCR (OpenRouter)</strong> — genauer, braucht API-Key</span>
+        </label>
+      </div>
+      <div id="ocrKiSettings" style="display:none">
+        <div class="field">
+          <label>OpenRouter API-Key</label>
+          <input type="password" id="openrouterKey" placeholder="sk-or-..." onchange="settings.openrouterKey=this.value.trim();save()">
+        </div>
+        <div class="field">
+          <label>KI-Modell</label>
+          <select id="ocrModelSel" onchange="settings.ocrModel=this.value;save()">
+            <option value="google/gemini-flash-1.5-8b">⚡ Gemini Flash 1.5 8B (schnell & günstig)</option>
+            <option value="openai/gpt-4o-mini">🧠 GPT-4o Mini (gut & günstig)</option>
+            <option value="anthropic/claude-3-haiku-20240307">💬 Claude 3 Haiku (schnell)</option>
+            <option value="google/gemini-pro-vision">🔬 Gemini Pro Vision (sehr genau)</option>
+          </select>
+        </div>
+        <p style="font-size:12px;color:var(--muted)">
+          💡 Key holen: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--acc)">openrouter.ai/keys</a><br>
+          Ablauf: KI-OCR zuerst → bei Fehler automatisch Fallback auf Tesseract
+        </p>
+      </div>
     </div>
 
     <div class="card">
@@ -813,7 +852,7 @@ canvas.chart{width:100%;height:200px}
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.6';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -854,6 +893,10 @@ let state = { properties: [], readings: [], appointments: [], documents: [] };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
+  ocrEnabled: true,
+  ocrKiEnabled: false,
+  openrouterKey: '',
+  ocrModel: 'google/gemini-flash-1.5-8b',
   docCategories: [
     {id:'rechnung',    label:'Rechnung',              icon:'📋'},
     {id:'vertrag',     label:'Vertrag',               icon:'📜'},
@@ -1793,6 +1836,154 @@ function cancelCropPhoto(){
   cropRotation = 0;
 }
 
+/* ----- OCR Engine ----- */
+let ocrBusy = false;
+
+async function runOCRonCroppedImage(dataUrl){
+  if(ocrBusy) return;
+  if(settings.ocrEnabled === false && !settings.ocrKiEnabled) return;
+
+  ocrBusy = true;
+  toast('🔍 OCR läuft — Zählerstand wird erkannt...','');
+
+  let value = null;
+
+  // Stufe 1: KI-OCR wenn aktiviert
+  if(settings.ocrKiEnabled && settings.openrouterKey){
+    try{
+      value = await runOpenRouterOCR(dataUrl);
+      if(value !== null){
+        console.log('KI-OCR erkannt:', value);
+      }
+    }catch(e){
+      console.warn('KI-OCR fehlgeschlagen, Fallback auf Tesseract:', e);
+    }
+  }
+
+  // Stufe 2: Tesseract wenn KI nicht aktiv oder fehlgeschlagen
+  if(value === null && settings.ocrEnabled !== false){
+    try{
+      value = await runTesseractOCR(dataUrl);
+      if(value !== null){
+        console.log('Tesseract erkannt:', value);
+      }
+    }catch(e){
+      console.warn('Tesseract OCR fehlgeschlagen:', e);
+    }
+  }
+
+  ocrBusy = false;
+
+  if(value !== null && !isNaN(value)){
+    const readVal = document.getElementById('readValue');
+    if(readVal){
+      readVal.value = value;
+      readVal.focus();
+      readVal.select();
+      toast(`✅ Erkannt: ${fmt(value,3)} — bitte prüfen & bestätigen!`,'ok');
+    }
+  } else {
+    toast('🔍 Kein Wert erkannt — bitte manuell eingeben','');
+  }
+}
+
+async function runTesseractOCR(dataUrl){
+  if(typeof Tesseract === 'undefined'){
+    throw new Error('Tesseract.js noch nicht geladen');
+  }
+
+  const worker = await Tesseract.createWorker('deu', 1);
+  try{
+    await worker.setParameters({
+      tessedit_char_whitelist: '0123456789., '
+    });
+    const { data } = await worker.recognize(dataUrl);
+    await worker.terminate();
+
+    if(!data || !data.text) return null;
+    console.log('Tesseract Rohtext:', data.text);
+    return parseOCRText(data.text);
+  }catch(e){
+    try{ await worker.terminate(); }catch(x){}
+    throw e;
+  }
+}
+
+async function runOpenRouterOCR(dataUrl){
+  const key = settings.openrouterKey;
+  const model = settings.ocrModel || 'google/gemini-flash-1.5-8b';
+  if(!key) throw new Error('Kein API-Key');
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method:'POST',
+    headers:{
+      'Authorization': `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': location.href,
+      'X-Title': 'Zaehler-App OCR'
+    },
+    body: JSON.stringify({
+      model,
+      messages:[{
+        role:'user',
+        content:[
+          {
+            type:'text',
+            text:'Du siehst ein Foto eines Zählers (Strom, Gas, Wasser oder Heizung). Lies NUR den aktuellen Zählerstand ab und gib ausschließlich die Zahl zurück. Verwende einen Punkt als Dezimaltrenner. Keine Einheit, keine Erklärung, nur die Zahl. Beispiel: 12345.678\nWenn du keinen Zählerstand erkennen kannst, antworte mit NONE.'
+          },
+          {
+            type:'image_url',
+            image_url:{ url: dataUrl }
+          }
+        ]
+      }],
+      max_tokens: 30,
+      temperature: 0.1
+    })
+  });
+
+  if(!res.ok){
+    const errTxt = await res.text().catch(()=>'');
+    throw new Error('OpenRouter HTTP ' + res.status + ': ' + errTxt.slice(0,200));
+  }
+
+  const json = await res.json();
+  const txt = (json.choices?.[0]?.message?.content||'').trim();
+  console.log('OpenRouter Antwort:', txt);
+
+  if(!txt || txt.toUpperCase() === 'NONE') return null;
+
+  const cleaned = txt.replace(/[^\d.,]/g, '').replace(',', '.');
+  const match = cleaned.match(/\d+(\.\d{1,4})?/);
+  return match ? parseFloat(match[0]) : null;
+}
+
+function parseOCRText(text){
+  if(!text || !text.trim()) return null;
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  let bestMatch = null;
+  let bestLen = 0;
+
+  for(const line of lines){
+    const cleaned = line.replace(/\s/g,'').replace(/,/g,'.');
+    // Zählerstände: mindestens 3 Ziffern
+    const matches = cleaned.match(/\d{3,}(\.\d{1,3})?/g);
+    if(matches){
+      for(const m of matches){
+        const val = parseFloat(m);
+        // Plausibel: 3-8 Stellen
+        if(!isNaN(val) && val >= 1 && val < 99999999 && m.length > bestLen){
+          bestMatch = val;
+          bestLen = m.length;
+        }
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
 /* ----- Doc File Sources ----- */
 let docSelectedFile = null;
 
@@ -2368,6 +2559,11 @@ function applyCropPhoto(){
   img.dataset.compressed=finalData;
   closeModal('photoCropModal');
   toast('Foto zugeschnitten ✓','ok');
+
+  // OCR starten wenn aktiviert
+  if(settings.ocrEnabled !== false || settings.ocrKiEnabled){
+    setTimeout(()=> runOCRonCroppedImage(finalData), 300);
+  }
 }
 
 function cancelCropPhoto(){
@@ -2758,6 +2954,16 @@ function render(tab){
 function renderSettingsExtras(){
   const sv = document.getElementById('settingsVersion');
   if(sv) sv.textContent = APP_VERSION;
+  const ocrT = document.getElementById('ocrToggle');
+  if(ocrT) ocrT.checked = settings.ocrEnabled !== false;
+  const ocrKi = document.getElementById('ocrKiToggle');
+  if(ocrKi) ocrKi.checked = !!settings.ocrKiEnabled;
+  const ocrKiS = document.getElementById('ocrKiSettings');
+  if(ocrKiS) ocrKiS.style.display = settings.ocrKiEnabled ? 'block' : 'none';
+  const orKey = document.getElementById('openrouterKey');
+  if(orKey) orKey.value = settings.openrouterKey||'';
+  const ocrM = document.getElementById('ocrModelSel');
+  if(ocrM) ocrM.value = settings.ocrModel||'google/gemini-flash-1.5-8b';
   document.getElementById('gClientId').value = settings.gClientId||'';
   document.getElementById('lastBackup').textContent = settings.lastSync ? new Date(settings.lastSync).toLocaleString('de-DE') : 'lokal-only';
   document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length);
