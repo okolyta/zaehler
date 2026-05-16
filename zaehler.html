@@ -275,6 +275,24 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
 .stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 
+.de-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.de-table th{text-align:left;padding:8px 10px;font-weight:600;border-bottom:2px solid var(--border);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.de-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.de-table tr:last-child td{border-bottom:none}
+.de-table .de-icon{font-size:18px;width:30px}
+.de-table .de-bar{height:8px;border-radius:4px;background:var(--bg2);position:relative;min-width:80px}
+.de-table .de-bar-fill{height:100%;border-radius:4px;transition:width .5s}
+.de-table .de-val{font-weight:700;white-space:nowrap}
+.de-table .de-avg{color:var(--muted);white-space:nowrap}
+.de-table .de-pct{font-weight:700;white-space:nowrap;min-width:60px;text-align:right}
+
+.de-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
+.de-legend span{display:inline-flex;align-items:center;gap:4px}
+.de-legend .dot{width:8px;height:8px;border-radius:50%}
+
+.de-ki-box{margin-top:12px;padding:12px;background:var(--card2);border-radius:10px;border:1px solid var(--border)}
+.de-ki-box .ki-text{font-size:13px;line-height:1.7}
+
 .dash-alert{display:flex;gap:12px;padding:12px;border-radius:12px;
   background:var(--card2);border:1px solid var(--border);margin-bottom:8px;
   align-items:center;cursor:pointer;transition:all .15s}
@@ -504,6 +522,7 @@ canvas.chart{width:100%;height:200px}
 
   <div class="page" id="page-stats" style="display:none">
     <h2 style="margin-bottom:12px">📈 Statistik & Verbrauch</h2>
+    <div id="deCompare"></div>
     <div id="statsContent"></div>
   </div>
 
@@ -2128,6 +2147,239 @@ function getModelFallbackList(){
   return ordered.map(m => m.id);
 }
 
+/* ----- DE Durchschnittsvergleich ----- */
+const DE_AVERAGES = {
+  strom: {
+    label: 'Strom', icon: '⚡', unit: 'kWh/Jahr',
+    source: 'BDEW 2024',
+    byPersons: {1:1300, 2:2000, 3:2500, 4:2900, 5:3200, 6:3500},
+    national: 3000,
+    description: 'Ohne Warmwasserbereitung. Mit Durchlauferhitzer ca. +500 kWh/Person.'
+  },
+  gas: {
+    label: 'Gas (Heizung)', icon: '🔥', unit: 'kWh/Jahr',
+    source: 'BDEW / co2online 2024',
+    byM2: {50:6000, 70:8400, 90:10800, 110:13200, 130:15600, 150:18000},
+    perM2: 120,
+    national: 12000,
+    description: 'Abhängig von Gebäudealter, Dämmung und Region. Neubau: ~50 kWh/m², Altbau: ~160 kWh/m².'
+  },
+  wasser: {
+    label: 'Wasser (kalt)', icon: '💧', unit: 'm³/Jahr',
+    source: 'Statistisches Bundesamt 2024',
+    byPersons: {1:35, 2:70, 3:95, 4:120, 5:145, 6:170},
+    national: 46,
+    perDay: '~127 Liter/Person/Tag',
+    description: 'Trinkwasser inkl. Toilettenspülung, Duschen, Kochen. Ohne Gartenbewässerung.'
+  },
+  warmwasser: {
+    label: 'Warmwasser', icon: '🚿', unit: 'm³/Jahr',
+    source: 'co2online / VDI 2024',
+    byPersons: {1:15, 2:25, 3:35, 4:42, 5:50, 6:58},
+    national: 20,
+    description: 'Ca. 35-50 Liter Warmwasser/Person/Tag bei 40°C.'
+  },
+  heizung: {
+    label: 'Heizung (allg.)', icon: '🌡️', unit: 'kWh/Jahr',
+    source: 'dena / co2online 2024',
+    byM2: {50:6500, 70:9100, 90:11700, 110:14300, 130:16900, 150:19500},
+    perM2: 130,
+    national: 15000,
+    description: 'Alle Heizungsarten gemittelt. Wärmepumpe: ~30 kWh/m², Öl: ~150 kWh/m².'
+  }
+};
+
+function renderDECompare(){
+  const el = document.getElementById('deCompare');
+  if(!el) return;
+  if(!state.properties.length || !state.readings.length){
+    el.innerHTML = '';
+    return;
+  }
+
+  let rows = [];
+
+  state.properties.forEach(p => {
+    p.meters.forEach(m => {
+      const de = DE_AVERAGES[m.type];
+      if(!de) return;
+
+      const t = METER_TYPES[m.type] || METER_TYPES.strom;
+      const readings = state.readings.filter(r => r.propId===p.id && r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(readings.length < 2) return;
+
+      const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+      const diff = readings[readings.length-1].value - readings[0].value;
+      if(days <= 0) return;
+      const yearly = diff * 365 / days;
+
+      // Durchschnitt berechnen
+      let avg = de.national;
+      let basis = 'DE Ø';
+
+      if(de.byPersons && p.residents){
+        const r = Math.min(p.residents, 6);
+        avg = de.byPersons[r] || de.national;
+        basis = `${r}-Personen-Haushalt`;
+      } else if(de.byM2 && p.area){
+        avg = de.perM2 * p.area;
+        basis = `${p.area} m² Wohnfläche`;
+      } else if(de.byPersons){
+        avg = de.byPersons[2] || de.national;
+        basis = '2-Personen-Haushalt (Standard)';
+      }
+
+      const pct = Math.round((yearly / avg) * 100);
+      const diffVal = yearly - avg;
+      const color = pct <= 70 ? 'var(--ok)' : pct <= 100 ? 'var(--ok)' : pct <= 120 ? 'var(--warn)' : 'var(--err)';
+      const rating = pct <= 70 ? '🌟 Sehr sparsam' : pct <= 100 ? '✅ Im Rahmen' : pct <= 120 ? '⚠️ Leicht erhöht' : pct <= 150 ? '🔴 Erhöht' : '🚨 Sehr hoch';
+
+      rows.push({
+        icon: de.icon,
+        label: de.label,
+        prop: p.name,
+        yearly: yearly,
+        avg: avg,
+        unit: de.unit.replace('/Jahr',''),
+        pct: pct,
+        color: color,
+        rating: rating,
+        basis: basis,
+        diff: diffVal,
+        source: de.source,
+        description: de.description
+      });
+    });
+  });
+
+  if(!rows.length){
+    el.innerHTML = '';
+    return;
+  }
+
+  const tableRows = rows.map(r => {
+    const barPct = Math.min(r.pct, 200);
+    const diffSign = r.diff >= 0 ? '+' : '';
+    return `<tr>
+      <td class="de-icon">${r.icon}</td>
+      <td>
+        <div style="font-weight:600">${r.label}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(r.prop)} · ${r.basis}</div>
+      </td>
+      <td class="de-val" style="color:${r.color}">${fmt(r.yearly,0)}</td>
+      <td class="de-avg">~${fmt(r.avg,0)} ${r.unit}</td>
+      <td style="min-width:100px">
+        <div class="de-bar">
+          <div class="de-bar-fill" style="width:${barPct/2}%;background:${r.color}"></div>
+        </div>
+      </td>
+      <td class="de-pct" style="color:${r.color}">${r.pct}%</td>
+      <td style="font-size:12px;white-space:nowrap">${r.rating}</td>
+    </tr>`;
+  }).join('');
+
+  const hasKI = settings.ocrKiEnabled && settings.openrouterKey;
+
+  el.innerHTML = `<div class="card">
+    <h2>🇩🇪 Verbrauch im Deutschland-Vergleich</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:6px">Dein Jahresverbrauch verglichen mit dem statistischen Durchschnitt deutscher Haushalte.</p>
+    <div style="overflow-x:auto">
+      <table class="de-table">
+        <tr>
+          <th></th>
+          <th>Zähler</th>
+          <th>Dein Wert</th>
+          <th>🇩🇪 Durchschnitt</th>
+          <th>Vergleich</th>
+          <th></th>
+          <th>Bewertung</th>
+        </tr>
+        ${tableRows}
+      </table>
+    </div>
+    <div class="de-legend">
+      <span><span class="dot" style="background:var(--ok)"></span> ≤100% Durchschnitt</span>
+      <span><span class="dot" style="background:var(--warn)"></span> 100-120% Leicht erhöht</span>
+      <span><span class="dot" style="background:var(--err)"></span> >120% Deutlich erhöht</span>
+    </div>
+    <details style="margin-top:10px">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer">📚 Quellen & Hinweise</summary>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">
+        ${[...new Set(rows.map(r=>r.source))].map(s=>`<div>📖 ${s}</div>`).join('')}
+        <div style="margin-top:6px">${rows.map(r=>`<div>${r.icon} ${r.description}</div>`).join('')}</div>
+        <div style="margin-top:6px">⚠️ Durchschnittswerte sind Richtwerte. Tatsächlicher Verbrauch hängt von Gebäude, Geräten, Verhalten und Region ab.</div>
+      </div>
+    </details>
+    ${hasKI ? `<div class="de-ki-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:600;font-size:13px">🧠 KI-Einschätzung</span>
+        <button class="btn sm" onclick="runDECompareKI()">Analysieren</button>
+      </div>
+      <div id="deCompareKIResult"></div>
+    </div>` : ''}
+  </div>`;
+}
+
+async function runDECompareKI(){
+  const el = document.getElementById('deCompareKIResult');
+  if(!el) return;
+  if(!settings.openrouterKey){ toast('API-Key fehlt','err'); return; }
+
+  el.innerHTML = '<div style="text-align:center;padding:10px;color:var(--muted)">🧠 Analysiere deinen Verbrauch im DE-Vergleich...</div>';
+
+  let data = 'VERBRAUCHSVERGLEICH MIT DEUTSCHEM DURCHSCHNITT:\n\n';
+
+  state.properties.forEach(p => {
+    data += `Objekt: ${p.name} (${p.residents||'?'} Bewohner, ${p.area||'?'} m²)\n`;
+    p.meters.forEach(m => {
+      const de = DE_AVERAGES[m.type];
+      if(!de) return;
+      const t = METER_TYPES[m.type]||METER_TYPES.strom;
+      const readings = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(readings.length < 2) return;
+      const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+      const diff = readings[readings.length-1].value - readings[0].value;
+      if(days <= 0) return;
+      const yearly = diff * 365 / days;
+      let avg = de.national;
+      if(de.byPersons && p.residents) avg = de.byPersons[Math.min(p.residents,6)] || de.national;
+      else if(de.perM2 && p.area) avg = de.perM2 * p.area;
+      const pct = Math.round((yearly/avg)*100);
+      data += `  ${t.label}: ${yearly.toFixed(0)} ${de.unit} (DE-Schnitt: ${avg} → ${pct}%)\n`;
+    });
+    data += '\n';
+  });
+
+  try{
+    const model = settings.ocrModel || 'google/gemini-flash-1.5-8b';
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Authorization': `Bearer ${settings.openrouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'Zaehler-App DE-Vergleich'
+      },
+      body: JSON.stringify({
+        model,
+        messages:[
+          {role:'system', content:'Du bist ein deutscher Energieberater. Gib eine kurze, persönliche Einschätzung des Verbrauchs im Vergleich zum deutschen Durchschnitt. Nutze Emojis. Sei konkret mit Zahlen. Maximal 150 Wörter. Erwähne auch regionale Unterschiede oder saisonale Faktoren wenn relevant.'},
+          {role:'user', content:`Bewerte meinen Verbrauch im Vergleich zum deutschen Durchschnitt. Wo stehe ich gut, wo kann ich sparen?\n\n${data}`}
+        ],
+        max_tokens: 400,
+        temperature: 0.3
+      })
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const reply = json.choices?.[0]?.message?.content || '';
+    const html = reply.replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+    el.innerHTML = `<div class="ki-text"><p>${html}</p></div><div style="font-size:11px;color:var(--muted);margin-top:6px">🤖 ${model.split('/').pop()}</div>`;
+  }catch(e){
+    el.innerHTML = `<div style="color:var(--err);font-size:13px">❌ ${e.message}</div>`;
+  }
+}
+
 /* ----- KI Insights ----- */
 async function runKIInsights(){
   const resultEl = document.getElementById('kiInsightsResult');
@@ -3540,6 +3792,7 @@ function renderDashboard(){
 
 /* ----- Stats ----- */
 function renderStats(){
+  renderDECompare();
   const c = document.getElementById('statsContent');
   if(!state.readings.length){ c.innerHTML='<div class="empty"><div class="ico">📈</div>Noch keine Daten</div>'; return; }
   let html='';
@@ -4134,4 +4387,4 @@ window.addEventListener('online', () => {
 });
 </script>
 </body>
-</html>
+   </html>
