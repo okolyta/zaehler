@@ -3643,7 +3643,9 @@ function renderDEOverview(){
   state.properties.forEach(p => {
     if(!p.residents && !p.area) return;
 
-    const stats = getDEStats(p.residents, p.area);
+    const existingTypes = p.meters.map(m => m.type);
+    const stats = getDEStats(p.residents, p.area).filter(s => existingTypes.includes(s.type));
+    if(!stats.length) return;
     const totalCostYearly = stats.reduce((s,x) => s + x.costYearly, 0);
     const totalCostMonthly = totalCostYearly / 12;
 
