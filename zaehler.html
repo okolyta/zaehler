@@ -275,6 +275,26 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .stat-box .val{font-size:22px;font-weight:700;color:var(--acc)}
 .stat-box .lbl{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 
+.waste-row{display:flex;gap:10px;padding:10px 12px;background:var(--card2);
+  border-radius:10px;margin-bottom:6px;align-items:center;
+  border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.waste-row:hover{transform:translateX(2px);border-color:var(--acc)}
+.waste-row .w-icon{font-size:22px;flex-shrink:0;width:30px;text-align:center}
+.waste-row .w-body{flex:1;min-width:0}
+.waste-row .w-name{font-weight:600;font-size:14px}
+.waste-row .w-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.waste-row .w-badge{padding:4px 10px;border-radius:12px;font-size:11px;
+  font-weight:600;flex-shrink:0;white-space:nowrap}
+.waste-row.today{border-color:var(--err);background:color-mix(in srgb,var(--err) 8%,transparent)}
+.waste-row.today .w-badge{background:var(--err);color:white}
+.waste-row.tomorrow{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
+.waste-row.tomorrow .w-badge{background:var(--warn);color:#000}
+.waste-row.soon{border-color:var(--ok)}
+.waste-row.soon .w-badge{background:var(--ok);color:white}
+
+.ics-result{padding:12px;background:var(--card2);border-radius:10px;
+  margin-top:10px;font-size:13px;border:1px solid var(--border)}
+
 .cost-entry{display:flex;gap:12px;padding:12px;background:var(--card2);
   border-radius:10px;margin-bottom:8px;border:1px solid var(--border);
   align-items:flex-start;transition:all .15s;cursor:pointer}
@@ -547,6 +567,19 @@ canvas.chart{width:100%;height:200px}
       <button class="btn" onclick="openAppointmentModal()">+ Termin</button>
     </div>
     <div id="apptList"></div>
+
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">🗑️ Müllkalender</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm" onclick="document.getElementById('icsFileInput').click()">📅 ICS importieren</button>
+          <button class="btn sm ghost" onclick="openWasteManual()">+ Manuell</button>
+        </div>
+      </div>
+      <input type="file" id="icsFileInput" accept=".ics,.ical" style="display:none" onchange="importICSFile(this)">
+      <div id="wasteOverview"></div>
+      <div id="wasteNextDates"></div>
+    </div>
   </div>
 
   <div class="page" id="page-stats" style="display:none">
@@ -1060,6 +1093,58 @@ canvas.chart{width:100%;height:200px}
   </div>
 </div>
 
+<!-- WASTE MANUAL MODAL -->
+<div class="modal-bg" id="wasteModal">
+  <div class="modal">
+    <h2 id="wasteModalTitle">Mülltermin</h2>
+    <div class="field">
+      <label>Art *</label>
+      <select id="wasteType">
+        <option value="restmuell">🗑️ Restmüll</option>
+        <option value="gelbe_tonne">♻️ Gelbe Tonne</option>
+        <option value="papier">📦 Papiermüll</option>
+        <option value="bio">🌱 Biomüll</option>
+        <option value="glas">🫙 Glasmüll</option>
+        <option value="sperr">🛋️ Sperrmüll</option>
+        <option value="sonstiges">📌 Sonstiges</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Grundstück</label>
+      <select id="wasteProp"></select>
+    </div>
+    <div class="field">
+      <label>Nächstes Datum *</label>
+      <input type="date" id="wasteDate">
+    </div>
+    <div class="field">
+      <label>Wiederholung</label>
+      <select id="wasteRepeat">
+        <option value="weekly">Wöchentlich</option>
+        <option value="biweekly">Alle 2 Wochen</option>
+        <option value="4weeks">Alle 4 Wochen</option>
+        <option value="monthly">Monatlich</option>
+        <option value="none">Einmalig</option>
+      </select>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="wasteReminder" checked style="width:auto">
+        <span>🔔 Am Vorabend erinnern</span>
+      </label>
+    </div>
+    <div class="field">
+      <label>Notiz</label>
+      <input type="text" id="wasteNote" placeholder="z.B. Ab 6 Uhr rausstellen">
+    </div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('wasteModal')">Abbrechen</button>
+      <button class="btn err sm" id="wasteDelBtn" onclick="deleteWaste()" style="display:none">🗑️</button>
+      <button class="btn ok" onclick="saveWaste()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- FAB AUSWAHL MODAL -->
 <div class="modal-bg" id="fabModal">
   <div class="modal" style="max-width:320px;text-align:center">
@@ -1244,7 +1329,7 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [], documents: [], costs: [] };
+let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [] };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
@@ -1310,6 +1395,7 @@ function load(){
   if(!state.appointments) state.appointments=[];
   if(!state.documents) state.documents=[];
   if(!state.costs) state.costs=[];
+  if(!state.wasteSchedule) state.wasteSchedule=[];
   if(!settings.docCategories || !settings.docCategories.length){
     settings.docCategories=[
       {id:'rechnung',    label:'Rechnung',             icon:'📋'},
@@ -2914,6 +3000,386 @@ async function runDECompareKI(){
   }
 }
 
+/* ----- Dashboard Waste Widget ----- */
+function renderDashWaste(){
+  if(!state.wasteSchedule || !state.wasteSchedule.length) return '';
+  const upcoming = getNextWasteDates(4);
+  if(!upcoming.length) return '';
+
+  const rows = upcoming.map(w => {
+    let cls = '';
+    if(w.daysUntil === 0) cls = 'today';
+    else if(w.daysUntil === 1) cls = 'tomorrow';
+    else if(w.daysUntil <= 3) cls = 'soon';
+
+    const badge = w.daysUntil === 0 ? '🔴 HEUTE'
+      : w.daysUntil === 1 ? '⚠️ MORGEN'
+      : `${w.daysUntil}T`;
+
+    return `<div class="waste-row ${cls}" onclick="switchTab('appointments')" style="margin-bottom:4px">
+      <div class="w-icon">${w.icon}</div>
+      <div class="w-body">
+        <div class="w-name" style="font-size:13px">${escapeHtml(w.label)}</div>
+        <div class="w-meta">${formatDate(w.nextDate)}</div>
+      </div>
+      <div class="w-badge">${badge}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="card" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h2 style="font-size:14px;margin:0">🗑️ Müllkalender</h2>
+      <span class="chip" onclick="switchTab('appointments')" style="cursor:pointer">Alle →</span>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+/* ----- Müllkalender / ICS ----- */
+const WASTE_TYPES = {
+  restmuell: {label:'Restmüll', icon:'🗑️', color:'#6b7280'},
+  gelbe_tonne: {label:'Gelbe Tonne', icon:'♻️', color:'#eab308'},
+  papier: {label:'Papiermüll', icon:'📦', color:'#3b82f6'},
+  bio: {label:'Biomüll', icon:'🌱', color:'#22c55e'},
+  glas: {label:'Glasmüll', icon:'🫙', color:'#8b5cf6'},
+  sperr: {label:'Sperrmüll', icon:'🛋️', color:'#f97316'},
+  sonstiges: {label:'Sonstiges', icon:'📌', color:'#6b7280'}
+};
+
+const WASTE_REPEAT = {
+  weekly: {label:'Wöchentlich', days:7},
+  biweekly: {label:'Alle 2 Wochen', days:14},
+  '4weeks': {label:'Alle 4 Wochen', days:28},
+  monthly: {label:'Monatlich', days:30},
+  none: {label:'Einmalig', days:0}
+};
+
+let editingWasteId = null;
+
+function detectWasteType(text){
+  const t = text.toLowerCase();
+  if(t.includes('rest') || t.includes('hausmüll') || t.includes('schwarz')) return 'restmuell';
+  if(t.includes('gelb') || t.includes('wertstoff') || t.includes('leichtverpackung') || t.includes('lvp')) return 'gelbe_tonne';
+  if(t.includes('papier') || t.includes('pappe') || t.includes('blau')) return 'papier';
+  if(t.includes('bio') || t.includes('grün') || t.includes('kompost') || t.includes('braun')) return 'bio';
+  if(t.includes('glas')) return 'glas';
+  if(t.includes('sperr') || t.includes('groß')) return 'sperr';
+  return 'sonstiges';
+}
+
+function parseICS(text){
+  const events = [];
+  const blocks = text.split('BEGIN:VEVENT');
+
+  for(let i = 1; i < blocks.length; i++){
+    const block = blocks[i].split('END:VEVENT')[0];
+    const ev = {};
+
+    const lines = block.split('\n');
+    let currentKey = '';
+    let currentVal = '';
+
+    for(const rawLine of lines){
+      const line = rawLine.replace(/\r$/, '');
+      if(line.startsWith(' ') || line.startsWith('\t')){
+        currentVal += line.trim();
+        continue;
+      }
+      if(currentKey) ev[currentKey] = currentVal;
+      const colonIdx = line.indexOf(':');
+      if(colonIdx > 0){
+        const fullKey = line.substring(0, colonIdx);
+        currentKey = fullKey.split(';')[0].trim().toUpperCase();
+        currentVal = line.substring(colonIdx + 1).trim();
+      }
+    }
+    if(currentKey) ev[currentKey] = currentVal;
+
+    if(ev.DTSTART){
+      let dateStr = ev.DTSTART;
+      if(dateStr.length >= 8){
+        const d = dateStr.substring(0,4)+'-'+dateStr.substring(4,6)+'-'+dateStr.substring(6,8);
+        ev._date = d;
+      }
+    }
+
+    if(ev.SUMMARY) ev._summary = ev.SUMMARY.replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\n/g,' ').trim();
+    if(ev.DESCRIPTION) ev._description = ev.DESCRIPTION.replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\n/g,'\n').trim();
+
+    if(ev.RRULE){
+      const parts = {};
+      ev.RRULE.split(';').forEach(p => {
+        const [k,v] = p.split('=');
+        if(k && v) parts[k] = v;
+      });
+      ev._rrule = parts;
+    }
+
+    if(ev._date && ev._summary){
+      events.push(ev);
+    }
+  }
+
+  return events;
+}
+
+function importICSFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    try{
+      const events = parseICS(text);
+      if(!events.length){
+        toast('Keine Termine in der ICS-Datei gefunden','err');
+        return;
+      }
+      processICSEvents(events, file.name);
+    }catch(err){
+      console.error('ICS Parse Error:', err);
+      toast('ICS-Datei konnte nicht gelesen werden','err');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function processICSEvents(events, fileName){
+  const grouped = {};
+
+  events.forEach(ev => {
+    const type = detectWasteType(ev._summary);
+    const key = type + '::' + ev._summary;
+    if(!grouped[key]){
+      grouped[key] = {
+        type,
+        summary: ev._summary,
+        dates: [],
+        rrule: ev._rrule || null
+      };
+    }
+    grouped[key].dates.push(ev._date);
+  });
+
+  Object.values(grouped).forEach(g => {
+    g.dates.sort();
+  });
+
+  let imported = 0;
+  const todayStr = today();
+  const propId = state.properties[0]?.id || '';
+
+  Object.values(grouped).forEach(g => {
+    const futureDates = g.dates.filter(d => d >= todayStr);
+    const allDates = futureDates.length ? futureDates : g.dates.slice(-5);
+
+    let repeat = 'none';
+    if(g.rrule){
+      const freq = g.rrule.FREQ;
+      const interval = parseInt(g.rrule.INTERVAL) || 1;
+      if(freq === 'WEEKLY' && interval === 1) repeat = 'weekly';
+      else if(freq === 'WEEKLY' && interval === 2) repeat = 'biweekly';
+      else if(freq === 'WEEKLY' && interval === 4) repeat = '4weeks';
+      else if(freq === 'MONTHLY') repeat = 'monthly';
+    } else if(allDates.length >= 2){
+      const gaps = [];
+      for(let i = 1; i < Math.min(allDates.length, 6); i++){
+        gaps.push(daysBetween(allDates[i-1], allDates[i]));
+      }
+      const avg = gaps.reduce((s,g)=>s+g,0) / gaps.length;
+      if(avg <= 9) repeat = 'weekly';
+      else if(avg <= 16) repeat = 'biweekly';
+      else if(avg <= 32) repeat = '4weeks';
+      else repeat = 'monthly';
+    }
+
+    allDates.forEach(d => {
+      const exists = state.wasteSchedule.some(w =>
+        w.type === g.type && w.date === d
+      );
+      if(!exists){
+        state.wasteSchedule.push({
+          id: uid(),
+          type: g.type,
+          label: g.summary,
+          date: d,
+          repeat,
+          propId,
+          reminder: true,
+          note: '',
+          source: 'ics',
+          sourceFile: fileName
+        });
+        imported++;
+      }
+    });
+  });
+
+  save();
+  renderWasteOverview();
+  toast(`📅 ${imported} Mülltermine aus "${fileName}" importiert`, 'ok');
+}
+
+function openWasteManual(waste){
+  editingWasteId = waste ? waste.id : null;
+  document.getElementById('wasteModalTitle').textContent = waste ? 'Termin bearbeiten' : 'Neuer Mülltermin';
+  document.getElementById('wasteDelBtn').style.display = waste ? 'inline-flex' : 'none';
+
+  const propSel = document.getElementById('wasteProp');
+  propSel.innerHTML = '<option value="">— Alle —</option>' +
+    state.properties.map(p => `<option value="${p.id}" ${waste?.propId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+
+  document.getElementById('wasteType').value = waste?.type || 'restmuell';
+  document.getElementById('wasteDate').value = waste?.date || today();
+  document.getElementById('wasteRepeat').value = waste?.repeat || 'biweekly';
+  document.getElementById('wasteReminder').checked = waste?.reminder !== false;
+  document.getElementById('wasteNote').value = waste?.note || '';
+
+  document.getElementById('wasteModal').classList.add('show');
+}
+
+function openWasteById(id){
+  const w = state.wasteSchedule.find(x => x.id === id);
+  if(w) openWasteManual(w);
+}
+
+function saveWaste(){
+  const type = document.getElementById('wasteType').value;
+  const date = document.getElementById('wasteDate').value;
+  if(!date){ toast('Datum fehlt','err'); return; }
+
+  const data = {
+    type,
+    label: WASTE_TYPES[type]?.label || type,
+    date,
+    repeat: document.getElementById('wasteRepeat').value,
+    propId: document.getElementById('wasteProp').value,
+    reminder: document.getElementById('wasteReminder').checked,
+    note: document.getElementById('wasteNote').value.trim(),
+    source: 'manual'
+  };
+
+  if(editingWasteId){
+    const w = state.wasteSchedule.find(x => x.id === editingWasteId);
+    if(w) Object.assign(w, data);
+  } else {
+    state.wasteSchedule.push({id:uid(), ...data});
+  }
+
+  save(); closeModal('wasteModal'); renderWasteOverview();
+  toast('Mülltermin gespeichert ✓','ok');
+}
+
+function deleteWaste(){
+  if(!editingWasteId) return;
+  if(!confirm('Diesen Termin löschen?')) return;
+  state.wasteSchedule = state.wasteSchedule.filter(x => x.id !== editingWasteId);
+  save(); closeModal('wasteModal'); renderWasteOverview();
+  toast('Gelöscht','ok');
+}
+
+function getNextWasteDates(limit){
+  const todayStr = today();
+  const upcoming = [];
+
+  state.wasteSchedule.forEach(w => {
+    const wt = WASTE_TYPES[w.type] || WASTE_TYPES.sonstiges;
+    let nextDate = w.date;
+
+    if(w.repeat && w.repeat !== 'none'){
+      const repeatDays = WASTE_REPEAT[w.repeat]?.days || 14;
+      while(nextDate < todayStr){
+        nextDate = dateAdd(nextDate, repeatDays);
+      }
+    }
+
+    if(nextDate >= todayStr){
+      const daysUntil = daysBetween(todayStr, nextDate);
+      upcoming.push({
+        ...w,
+        nextDate,
+        daysUntil,
+        icon: wt.icon,
+        label: w.label || wt.label,
+        color: wt.color
+      });
+    }
+  });
+
+  upcoming.sort((a,b) => a.daysUntil - b.daysUntil);
+  return limit ? upcoming.slice(0, limit) : upcoming;
+}
+
+function renderWasteOverview(){
+  const overviewEl = document.getElementById('wasteOverview');
+  const datesEl = document.getElementById('wasteNextDates');
+  if(!overviewEl || !datesEl) return;
+
+  if(!state.wasteSchedule.length){
+    overviewEl.innerHTML = `<div class="empty" style="padding:20px">
+      <div class="ico" style="font-size:36px">📅</div>
+      <p>Noch keine Mülltermine.</p>
+      <p style="font-size:13px;color:var(--muted);margin-top:6px">
+        Importiere eine <strong>.ics Datei</strong> von deinem Entsorger<br>
+        oder lege Termine <strong>manuell</strong> an.
+      </p>
+    </div>`;
+    datesEl.innerHTML = '';
+    return;
+  }
+
+  const types = {};
+  state.wasteSchedule.forEach(w => {
+    if(!types[w.type]) types[w.type] = {count:0, type:w.type};
+    types[w.type].count++;
+  });
+
+  overviewEl.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    ${Object.values(types).map(t => {
+      const wt = WASTE_TYPES[t.type] || WASTE_TYPES.sonstiges;
+      return `<span class="chip">${wt.icon} ${wt.label} (${t.count})</span>`;
+    }).join('')}
+    <button class="btn sm ghost" onclick="clearAllWaste()" style="margin-left:auto">🗑️ Alle löschen</button>
+  </div>`;
+
+  const upcoming = getNextWasteDates(10);
+
+  if(!upcoming.length){
+    datesEl.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:8px">Keine anstehenden Termine</div>';
+    return;
+  }
+
+  datesEl.innerHTML = `<h3 style="font-size:13px;color:var(--muted);margin-bottom:8px">Nächste Termine</h3>` +
+    upcoming.map(w => {
+      let cls = '';
+      let badgeText = '';
+      if(w.daysUntil === 0){ cls = 'today'; badgeText = '🔴 HEUTE'; }
+      else if(w.daysUntil === 1){ cls = 'tomorrow'; badgeText = '⚠️ MORGEN'; }
+      else if(w.daysUntil <= 3){ cls = 'soon'; badgeText = `in ${w.daysUntil}T`; }
+      else { badgeText = `in ${w.daysUntil}T`; }
+
+      const prop = state.properties.find(p => p.id === w.propId);
+      const repeatLabel = WASTE_REPEAT[w.repeat]?.label || '';
+
+      return `<div class="waste-row ${cls}" onclick="openWasteById('${w.id}')">
+        <div class="w-icon">${w.icon}</div>
+        <div class="w-body">
+          <div class="w-name">${escapeHtml(w.label)}</div>
+          <div class="w-meta">${formatDate(w.nextDate)}${prop?' · '+escapeHtml(prop.name):''}${repeatLabel?' · '+repeatLabel:''}${w.note?' · '+escapeHtml(w.note):''}</div>
+        </div>
+        ${badgeText ? `<div class="w-badge">${badgeText}</div>` : ''}
+      </div>`;
+    }).join('');
+}
+
+function clearAllWaste(){
+  if(!confirm(`Alle ${state.wasteSchedule.length} Mülltermine löschen?`)) return;
+  state.wasteSchedule = [];
+  save(); renderWasteOverview();
+  toast('Alle Mülltermine gelöscht','ok');
+}
+
 /* ----- DE Durchschnitts-Übersicht ----- */
 const DE_PRICES = {
   strom: {price: 0.35, unit: '€/kWh', label: 'Strom'},
@@ -4185,6 +4651,7 @@ function deleteAppointment(){
 const APPT_ICONS = {schornstein:'🔥',heizung:'🔧',ablesung:'📝',rauchmelder:'🚨',legionellen:'💧',elektro:'⚡',versicherung:'📄',grundsteuer:'💰',sonstiges:'📌'};
 
 function renderAppointments(){
+  renderWasteOverview();
   const c = document.getElementById('apptList');
   const all = [...state.appointments].sort((a,b)=>a.date.localeCompare(b.date));
   if(!all.length){
@@ -4357,6 +4824,30 @@ function renderDashboard(){
     });
   });
 
+  // Müll-Alerts
+  if(state.wasteSchedule && state.wasteSchedule.length){
+    const wasteNext = getNextWasteDates(5);
+    wasteNext.forEach(w => {
+      if(w.daysUntil === 0){
+        alerts.push({
+          priority: 1, type:'urgent', icon:w.icon,
+          title: w.label,
+          sub: 'HEUTE abholen lassen!',
+          badge: '🔴 HEUTE',
+          action: ()=>{ switchTab('appointments'); }
+        });
+      } else if(w.daysUntil === 1){
+        alerts.push({
+          priority: 1, type:'warn', icon:w.icon,
+          title: w.label + ' rausstellen!',
+          sub: 'Morgen wird abgeholt',
+          badge: '⚠️ MORGEN',
+          action: ()=>{ switchTab('appointments'); }
+        });
+      }
+    });
+  }
+
   // Sortieren: urgent → warn → info
   alerts.sort((a,b) => a.priority - b.priority);
 
@@ -4461,6 +4952,8 @@ function renderDashboard(){
       <h2 style="font-size:14px;margin-bottom:10px">📋 Was ansteht</h2>
       ${alertsHtml}
     </div>` : ''}
+
+    ${renderDashWaste()}
 
     ${(settings.ocrKiEnabled && settings.openrouterKey && totalReadings >= 2) ? `<div class="card" style="padding:12px">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -4956,6 +5449,7 @@ function mergeState(local, remote){
     appointments: mergeArr(local.appointments||[], remote.appointments||[]),
     documents: mergeArr(local.documents||[], remote.documents||[]),
     costs: mergeArr(local.costs||[], remote.costs||[]),
+    wasteSchedule: mergeArr(local.wasteSchedule||[], remote.wasteSchedule||[]),
   };
 }
 async function uploadDrive(isNew){
