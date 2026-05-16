@@ -494,6 +494,7 @@ canvas.chart{width:100%;height:200px}
       <h2>🏠 Grundstücke & Zähler</h2>
       <button class="btn" onclick="openPropertyModal()">+ Grundstück</button>
     </div>
+    <div id="deOverview"></div>
     <div id="propList"></div>
   </div>
 
@@ -706,6 +707,16 @@ canvas.chart{width:100%;height:200px}
         💾 JSON: Komplettes Backup zum Wiederherstellen.<br>
         Letzter Sync: <span id="lastBackup">–</span>
       </p>
+    </div>
+
+    <div class="card">
+      <h2>📊 Anzeige</h2>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="showDEToggle" onchange="settings.showDEOverview=this.checked;save();render()" style="width:auto">
+          <span>🇩🇪 <strong>Durchschnittswerte</strong> auf Grundstücke-Seite anzeigen</span>
+        </label>
+      </div>
     </div>
 
     <div class="card">
@@ -1242,6 +1253,7 @@ let settings = {
   openrouterKey: '',
   ocrModel: 'google/gemini-flash-1.5-8b',
   ocrAutoFallback: true,
+  showDEOverview: true,
   docCategories: [
     {id:'rechnung',    label:'Rechnung',              icon:'📋'},
     {id:'vertrag',     label:'Vertrag',               icon:'📜'},
@@ -1614,6 +1626,7 @@ function deleteProperty(){
 }
 
 function renderProperties(){
+  renderDEOverview();
   const c = document.getElementById('propList');
   if(!state.properties.length){
     c.innerHTML = `<div class="empty"><div class="ico">🏠</div><p>Noch keine Grundstücke.</p><p style="margin-top:10px"><button class="btn" onclick="openPropertyModal()">+ Erstes Grundstück anlegen</button></p></div>`;
@@ -2899,6 +2912,166 @@ async function runDECompareKI(){
   }catch(e){
     el.innerHTML = `<div style="color:var(--err);font-size:13px">❌ ${e.message}</div>`;
   }
+}
+
+/* ----- DE Durchschnitts-Übersicht ----- */
+const DE_PRICES = {
+  strom: {price: 0.35, unit: '€/kWh', label: 'Strom'},
+  gas: {price: 0.10, unit: '€/kWh', label: 'Gas'},
+  wasser: {price: 4.00, unit: '€/m³', label: 'Wasser'},
+  warmwasser: {price: 8.50, unit: '€/m³', label: 'Warmwasser'},
+  heizung: {price: 0.10, unit: '€/kWh', label: 'Heizung'}
+};
+
+function getDEStats(residents, area){
+  const r = Math.max(1, Math.min(residents || 2, 6));
+  const a = Math.max(30, area || 80);
+
+  const stats = [
+    {
+      type: 'strom', icon: '⚡', label: 'Strom',
+      yearly: BENCHMARKS.strom.perPerson[r] || r * BENCHMARKS.strom.perPersonFallback,
+      unit: 'kWh', basis: `${r} Personen`
+    },
+    {
+      type: 'gas', icon: '🔥', label: 'Gas (Heizung)',
+      yearly: BENCHMARKS.gas.perM2 * a,
+      unit: 'kWh', basis: `${a} m²`
+    },
+    {
+      type: 'wasser', icon: '💧', label: 'Wasser',
+      yearly: BENCHMARKS.wasser.perPerson[r] || r * BENCHMARKS.wasser.perPersonFallback,
+      unit: 'm³', basis: `${r} Personen`
+    },
+    {
+      type: 'warmwasser', icon: '🚿', label: 'Warmwasser',
+      yearly: BENCHMARKS.warmwasser.perPerson[r] || r * BENCHMARKS.warmwasser.perPersonFallback,
+      unit: 'm³', basis: `${r} Personen`
+    },
+    {
+      type: 'heizung', icon: '🌡️', label: 'Heizung (allg.)',
+      yearly: BENCHMARKS.heizung.perM2 * a,
+      unit: 'kWh', basis: `${a} m²`
+    }
+  ];
+
+  stats.forEach(s => {
+    const dp = DE_PRICES[s.type];
+    s.monthly = s.yearly / 12;
+    s.costYearly = dp ? s.yearly * dp.price : 0;
+    s.costMonthly = s.costYearly / 12;
+    s.priceInfo = dp ? `${dp.price.toFixed(2)} ${dp.unit}` : '';
+  });
+
+  return stats;
+}
+
+function renderDEOverview(){
+  const el = document.getElementById('deOverview');
+  if(!el) return;
+
+  if(settings.showDEOverview === false){
+    el.innerHTML = '';
+    return;
+  }
+
+  if(!state.properties.length){
+    el.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+
+  state.properties.forEach(p => {
+    if(!p.residents && !p.area) return;
+
+    const stats = getDEStats(p.residents, p.area);
+    const totalCostYearly = stats.reduce((s,x) => s + x.costYearly, 0);
+    const totalCostMonthly = totalCostYearly / 12;
+
+    // Eigene Verbrauchsdaten zum Vergleich
+    const ownData = {};
+    p.meters.forEach(m => {
+      const readings = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+      if(readings.length >= 2){
+        const days = daysBetween(readings[0].date, readings[readings.length-1].date);
+        const diff = readings[readings.length-1].value - readings[0].value;
+        if(days > 0) ownData[m.type] = diff * 365 / days;
+      }
+    });
+
+    html += `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">🇩🇪 Durchschnitt: ${escapeHtml(p.name)}</h2>
+        <span class="chip acc">👥 ${p.residents||'?'} · 📐 ${p.area||'?'} m²</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="de-table">
+          <tr>
+            <th></th>
+            <th>Bereich</th>
+            <th>Ø/Jahr</th>
+            <th>Ø/Monat</th>
+            <th>~Kosten/Jahr</th>
+            ${Object.keys(ownData).length ? '<th>Dein Wert</th><th>Vgl.</th>' : ''}
+          </tr>
+          ${stats.map(s => {
+            const own = ownData[s.type];
+            let ownCol = '';
+            let vglCol = '';
+            if(own !== undefined){
+              const pct = Math.round((own / s.yearly) * 100);
+              const color = pct <= 100 ? 'var(--ok)' : pct <= 120 ? 'var(--warn)' : 'var(--err)';
+              const rating = pct <= 70 ? '🌟' : pct <= 100 ? '✅' : pct <= 120 ? '⚠️' : '🔴';
+              ownCol = `<td class="de-val" style="color:${color}">${fmt(own,0)} ${s.unit}</td>`;
+              vglCol = `<td class="de-pct" style="color:${color}">${rating} ${pct}%</td>`;
+            } else if(Object.keys(ownData).length){
+              ownCol = '<td style="color:var(--muted);font-size:12px">—</td>';
+              vglCol = '<td></td>';
+            }
+            return `<tr>
+              <td class="de-icon">${s.icon}</td>
+              <td>
+                <div style="font-weight:500">${s.label}</div>
+                <div style="font-size:11px;color:var(--muted)">${s.basis} · ${s.priceInfo}</div>
+              </td>
+              <td style="font-weight:600">${fmt(s.yearly,0)} ${s.unit}</td>
+              <td style="color:var(--muted)">${fmt(s.monthly,1)} ${s.unit}</td>
+              <td style="color:var(--acc);font-weight:600">${fmtEur(s.costYearly)}</td>
+              ${ownCol}${vglCol}
+            </tr>`;
+          }).join('')}
+          <tr style="border-top:2px solid var(--border)">
+            <td></td>
+            <td style="font-weight:700">Gesamt geschätzt</td>
+            <td></td>
+            <td style="font-weight:700;color:var(--acc)">${fmtEur(totalCostMonthly)}/Mo</td>
+            <td style="font-weight:700;color:var(--acc)">${fmtEur(totalCostYearly)}</td>
+            ${Object.keys(ownData).length ? '<td></td><td></td>' : ''}
+          </tr>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">
+        📊 Statistische Durchschnittswerte deutscher Haushalte (BDEW, Statistisches Bundesamt, co2online 2024).<br>
+        💰 Kosten sind Richtwerte mit aktuellen Durchschnittspreisen. Tatsächliche Preise variieren je nach Anbieter und Region.<br>
+        ${Object.keys(ownData).length ? '📈 <strong>Dein Wert</strong> = Hochrechnung aus deinen bisherigen Ablesungen.' : '💡 Sobald du 2+ Ablesungen hast, erscheint hier auch dein eigener Verbrauch im Vergleich.'}
+      </div>
+    </div>`;
+  });
+
+  if(!html && state.properties.length){
+    html = `<div class="card" style="padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">🇩🇪</span>
+        <div>
+          <div style="font-weight:600;font-size:14px">Durchschnittswerte verfügbar</div>
+          <div style="font-size:12px;color:var(--muted)">Trage <strong>Bewohnerzahl</strong> und <strong>Wohnfläche</strong> bei deinem Grundstück ein, um statistische Vergleichswerte zu sehen.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
 }
 
 /* ----- KI Insights ----- */
@@ -4447,6 +4620,8 @@ function renderSettingsExtras(){
   if(settings.ocrKiEnabled && settings.openrouterKey){
     refreshModelList(false);
   }
+  const deToggle = document.getElementById('showDEToggle');
+  if(deToggle) deToggle.checked = settings.showDEOverview !== false;
   document.getElementById('gClientId').value = settings.gClientId||'';
   document.getElementById('lastBackup').textContent = settings.lastSync ? new Date(settings.lastSync).toLocaleString('de-DE') : 'lokal-only';
   document.getElementById('dataSize').textContent = humanSize(JSON.stringify(state).length);
