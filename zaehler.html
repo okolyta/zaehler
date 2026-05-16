@@ -685,6 +685,13 @@ canvas.chart{width:100%;height:200px}
           </label>
         </div>
         <div id="ocrModelInfo" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+        <div class="field" style="margin-top:10px">
+          <label>📄 Modell für Dokumentanalyse</label>
+          <select id="docModelSel" onchange="settings.docAnalysisModel=this.value;save()">
+            <option value="">— Gleich wie OCR —</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">💡 Für Rechnungen/Verträge empfohlen: Gemini Flash 1.5 oder GPT-4o Mini</div>
+        </div>
         <div style="margin-top:10px;padding:10px;background:var(--card2);border-radius:10px;border:1px solid var(--border)">
           <div style="font-size:13px;font-weight:600;margin-bottom:8px">🧪 Verbindungstest</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -947,6 +954,7 @@ canvas.chart{width:100%;height:200px}
           <button class="btn sm" type="button" onclick="openDocSource('camera')">📷 Kamera</button>
           <button class="btn sm ghost" type="button" onclick="openDocSource('file')">📁 Datei</button>
           <button class="btn sm ghost" type="button" onclick="openDocSource('clipboard')">📋 Einfügen</button>
+          <button class="btn sm" type="button" id="btnDocAnalyze" onclick="analyzeDocWithKI()" style="background:var(--acc2);display:none">🧠 KI analysieren</button>
         </div>
         <input type="file" id="docFileCamera" accept="image/*" capture="environment" style="display:none" onchange="handleDocFile(this)">
         <input type="file" id="docFileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none" onchange="handleDocFile(this)">
@@ -961,6 +969,7 @@ canvas.chart{width:100%;height:200px}
         <label>Notiz (optional)</label>
         <textarea id="docNote" rows="2"></textarea>
       </div>
+      <div id="docAnalysisResult" style="display:none;margin-top:10px;padding:12px;background:var(--card2);border-radius:10px;border:1px solid var(--border)"></div>
       <div id="docUploadStatus" style="display:none;font-size:13px;padding:8px;background:var(--card2);border-radius:8px;margin-top:8px;margin-bottom:8px"></div>
     </div>
     <div class="footer" style="flex-shrink:0;padding:14px 18px;border-top:1px solid var(--border);margin-top:0">
@@ -1069,6 +1078,7 @@ canvas.chart{width:100%;height:200px}
             <button class="btn sm" type="button" onclick="openCostDocSource('camera')">📷 Kamera</button>
             <button class="btn sm ghost" type="button" onclick="openCostDocSource('file')">📁 Datei</button>
             <button class="btn sm ghost" type="button" onclick="openCostDocSource('clipboard')">📋 Einfügen</button>
+          <button class="btn sm" type="button" id="btnCostDocAnalyze" onclick="analyzeCostDocWithKI()" style="background:var(--acc2);display:none">🧠 KI analysieren</button>
           </div>
           <input type="file" id="costDocCamera" accept="image/*" capture="environment" style="display:none" onchange="handleCostDoc(this)">
           <input type="file" id="costDocFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none" onchange="handleCostDoc(this)">
@@ -1382,6 +1392,7 @@ let settings = {
   ocrKiEnabled: false,
   openrouterKey: '',
   ocrModel: 'google/gemini-flash-1.5-8b',
+  docAnalysisModel: '',
   ocrAutoFallback: true,
   showDEOverview: true,
   docCategories: [
@@ -2705,6 +2716,11 @@ async function loadCostDocClipboard(){
 }
 
 async function uploadCostDocFile(file){
+  const costAnalyzeBtn = document.getElementById('btnCostDocAnalyze');
+  if(costAnalyzeBtn && settings.ocrKiEnabled && settings.openrouterKey){
+    costAnalyzeBtn.style.display = 'inline-flex';
+    costAnalyzeBtn._lastFile = file;
+  }
   const docEntry = {id:uid(), name:file.name, driveId:'', driveLink:'', date:today()};
 
   if(gIsSignedIn()){
@@ -3103,6 +3119,278 @@ async function runDECompareKI(){
   }catch(e){
     el.innerHTML = `<div style="color:var(--err);font-size:13px">❌ ${e.message}</div>`;
   }
+}
+
+/* ----- KI Cost-Doc Analyse ----- */
+async function analyzeCostDocWithKI(){
+  const btn = document.getElementById('btnCostDocAnalyze');
+  const file = btn?._lastFile || (costPendingDocs.length ? null : null);
+
+  if(!file && costPendingDocs.length){
+    toast('Bitte zuerst eine neue Datei anhängen','err');
+    return;
+  }
+  if(!file){ toast('Keine Datei zum Analysieren','err'); return; }
+  if(!settings.openrouterKey){ toast('API-Key fehlt','err'); return; }
+
+  toast('🧠 Analysiere Vertragsdokument...','');
+
+  try{
+    const dataUrl = await fileToDataUrl(file);
+    const model = settings.docAnalysisModel || settings.ocrModel || 'google/gemini-flash-1.5-8b';
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Authorization': `Bearer ${settings.openrouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'Zaehler-App CostDocAnalysis'
+      },
+      body: JSON.stringify({
+        model,
+        messages:[{
+          role:'user',
+          content:[
+            { type:'text', text:`Analysiere dieses Dokument (Vertrag, Rechnung, Bescheid) und gib NUR JSON zurück:
+{"anbieter":"","bezeichnung":"","betrag":0,"intervall":"monatlich|vierteljährlich|halbjährlich|jährlich|einmalig","kuendigungsfrist_monate":0,"vertragsende":"YYYY-MM-DD","kundennummer":"","zusammenfassung":""}
+Felder die nicht erkennbar: null. Betrag als Zahl mit Punkt.` },
+            { type:'image_url', image_url:{ url: dataUrl } }
+          ]
+        }],
+        max_tokens: 500,
+        temperature: 0.1
+      })
+    });
+
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const reply = (json.choices?.[0]?.message?.content||'').trim();
+    const match = reply.match(/\{[\s\S]*\}/);
+    if(!match) throw new Error('Kein JSON');
+    const data = JSON.parse(match[0]);
+
+    // Felder befüllen
+    if(data.bezeichnung){
+      const f = document.getElementById('costName');
+      if(f && !f.value) f.value = data.bezeichnung;
+    }
+    if(data.anbieter){
+      const f = document.getElementById('costProvider');
+      if(f) f.value = data.anbieter;
+    }
+    if(data.betrag){
+      const f = document.getElementById('costAmount');
+      if(f) f.value = data.betrag;
+    }
+    if(data.intervall){
+      const f = document.getElementById('costInterval');
+      const map = {monatlich:'monthly',vierteljährlich:'quarterly',halbjährlich:'semi',jährlich:'yearly',einmalig:'once'};
+      if(f && map[data.intervall]) f.value = map[data.intervall];
+    }
+    if(data.kuendigungsfrist_monate){
+      const f = document.getElementById('costCancelMonths');
+      if(f) f.value = data.kuendigungsfrist_monate;
+    }
+    if(data.vertragsende){
+      const f = document.getElementById('costEnd');
+      if(f) f.value = data.vertragsende;
+    }
+    if(data.zusammenfassung || data.kundennummer){
+      const f = document.getElementById('costNote');
+      const parts = [];
+      if(data.kundennummer) parts.push('Kundennr: ' + data.kundennummer);
+      if(data.zusammenfassung) parts.push(data.zusammenfassung);
+      if(f) f.value = (f.value ? f.value + '\n' : '') + '🧠 ' + parts.join(' · ');
+    }
+
+    toast('✅ Vertragsdaten aus Dokument übernommen','ok');
+  }catch(e){
+    console.error('Cost Doc Analysis:', e);
+    toast('❌ Analyse fehlgeschlagen: ' + e.message,'err');
+  }
+}
+
+/* ----- KI Dokumentanalyse ----- */
+async function analyzeDocWithKI(){
+  if(!docSelectedFile){ toast('Bitte zuerst Datei wählen','err'); return; }
+  if(!settings.openrouterKey){ toast('API-Key fehlt (Einstellungen → OCR)','err'); return; }
+
+  const resultEl = document.getElementById('docAnalysisResult');
+  if(!resultEl) return;
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted)">🧠 KI analysiert das Dokument...<br><span style="font-size:12px">Das kann 5-15 Sekunden dauern</span></div>';
+
+  try{
+    const dataUrl = await fileToDataUrl(docSelectedFile);
+    const model = settings.docAnalysisModel || settings.ocrModel || 'google/gemini-flash-1.5-8b';
+
+    const prompt = `Analysiere dieses Dokument (Rechnung, Vertrag, Bescheid o.ä.) und extrahiere folgende Informationen im JSON-Format. Antworte NUR mit dem JSON, keine Erklärung davor oder danach.
+
+{
+  "typ": "rechnung|vertrag|bescheid|versicherung|wartung|sonstiges",
+  "titel": "Kurzer beschreibender Titel",
+  "anbieter": "Name des Absenders/Anbieters",
+  "betrag": 123.45,
+  "betrag_intervall": "einmalig|monatlich|vierteljährlich|halbjährlich|jährlich",
+  "waehrung": "EUR",
+  "datum": "2026-01-15",
+  "zeitraum_von": "2025-01-01",
+  "zeitraum_bis": "2025-12-31",
+  "zaehlerstand": null,
+  "zaehlerstand_einheit": null,
+  "kundennummer": "falls vorhanden",
+  "vertragsnummer": "falls vorhanden",
+  "kuendigungsfrist": "z.B. 3 Monate",
+  "vertragsende": "2027-01-31",
+  "zahlungstermine": ["15.02","15.05","15.08","15.11"],
+  "zusammenfassung": "1-2 Sätze Zusammenfassung des Dokuments",
+  "kategorie_vorschlag": "rechnung|vertrag|grundsteuer|versicherung|wartung|schornstein|sonstiges"
+}
+
+Regeln:
+- Felder die nicht erkennbar sind: null setzen
+- Betrag immer als Zahl (Punkt als Dezimaltrenner)
+- Datum immer als YYYY-MM-DD
+- Antworte NUR mit dem JSON-Objekt`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Authorization': `Bearer ${settings.openrouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'Zaehler-App DocAnalysis'
+      },
+      body: JSON.stringify({
+        model,
+        messages:[{
+          role:'user',
+          content:[
+            { type:'text', text:prompt },
+            { type:'image_url', image_url:{ url: dataUrl } }
+          ]
+        }],
+        max_tokens: 800,
+        temperature: 0.1
+      })
+    });
+
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const reply = (json.choices?.[0]?.message?.content||'').trim();
+
+    // JSON extrahieren
+    let analysis;
+    try{
+      const jsonMatch = reply.match(/\{[\s\S]*\}/);
+      if(!jsonMatch) throw new Error('Kein JSON in Antwort');
+      analysis = JSON.parse(jsonMatch[0]);
+    }catch(e){
+      throw new Error('KI-Antwort konnte nicht gelesen werden: ' + reply.slice(0,100));
+    }
+
+    renderDocAnalysis(analysis, model);
+    toast('📄 Dokument analysiert ✅','ok');
+
+  }catch(e){
+    console.error('Doc Analysis:', e);
+    resultEl.innerHTML = `<div style="color:var(--err);font-size:13px;padding:8px">
+      ❌ Analyse fehlgeschlagen: ${e.message}<br>
+      <button class="btn sm ghost" style="margin-top:8px" onclick="analyzeDocWithKI()">🔄 Nochmal</button>
+    </div>`;
+    toast('Analyse fehlgeschlagen','err');
+  }
+}
+
+function fileToDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderDocAnalysis(a, model){
+  const resultEl = document.getElementById('docAnalysisResult');
+  if(!resultEl) return;
+
+  const fields = [];
+  if(a.titel) fields.push({icon:'📋',label:'Titel',value:a.titel,field:'docTitle'});
+  if(a.anbieter) fields.push({icon:'🏢',label:'Anbieter',value:a.anbieter});
+  if(a.betrag) fields.push({icon:'💰',label:'Betrag',value:fmtEur(a.betrag)+(a.betrag_intervall?' / '+a.betrag_intervall:'')});
+  if(a.datum) fields.push({icon:'📅',label:'Datum',value:formatDate(a.datum),field:'docDate'});
+  if(a.zeitraum_von && a.zeitraum_bis) fields.push({icon:'📆',label:'Zeitraum',value:formatDate(a.zeitraum_von)+' – '+formatDate(a.zeitraum_bis)});
+  if(a.zaehlerstand) fields.push({icon:'🔢',label:'Zählerstand',value:a.zaehlerstand+' '+(a.zaehlerstand_einheit||'')});
+  if(a.kundennummer) fields.push({icon:'🆔',label:'Kundennr.',value:a.kundennummer});
+  if(a.vertragsnummer) fields.push({icon:'📜',label:'Vertragsnr.',value:a.vertragsnummer});
+  if(a.kuendigungsfrist) fields.push({icon:'✂️',label:'Kündigungsfrist',value:a.kuendigungsfrist});
+  if(a.vertragsende) fields.push({icon:'📅',label:'Vertragsende',value:formatDate(a.vertragsende)});
+  if(a.zahlungstermine && a.zahlungstermine.length) fields.push({icon:'💳',label:'Zahlungstermine',value:a.zahlungstermine.join(', ')});
+  if(a.zusammenfassung) fields.push({icon:'📝',label:'Zusammenfassung',value:a.zusammenfassung});
+
+  const catMap = {
+    rechnung:'rechnung', vertrag:'vertrag', bescheid:'grundsteuer',
+    grundsteuer:'grundsteuer', versicherung:'versicherung',
+    wartung:'wartung', schornstein:'schornstein', sonstiges:'sonstiges'
+  };
+
+  resultEl.innerHTML = `
+    <div style="font-weight:600;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span>🧠 KI-Analyse</span>
+      <span style="font-size:11px;color:var(--muted);font-weight:400">${model.split('/').pop()}</span>
+    </div>
+    ${fields.map(f => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--muted)">${f.icon} ${f.label}</span>
+        <span style="font-weight:500;text-align:right;max-width:60%">${escapeHtml(f.value+'')}</span>
+      </div>
+    `).join('')}
+    <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn sm ok" onclick="applyDocAnalysis(${escapeHtml(JSON.stringify(a).replace(/"/g,'&quot;'))})">✅ Daten übernehmen</button>
+      <button class="btn sm ghost" onclick="analyzeDocWithKI()">🔄 Nochmal</button>
+    </div>
+  `;
+}
+
+function applyDocAnalysis(a){
+  if(typeof a === 'string') a = JSON.parse(a);
+
+  if(a.titel){
+    const titleField = document.getElementById('docTitle');
+    if(titleField){ titleField.value = a.titel; titleField.dataset.custom = '1'; }
+  }
+
+  if(a.datum){
+    const dateField = document.getElementById('docDate');
+    if(dateField) dateField.value = a.datum;
+  }
+
+  if(a.kategorie_vorschlag){
+    const catField = document.getElementById('docCat');
+    if(catField){
+      const cats = getDocCategories();
+      const match = cats.find(c => c.id === a.kategorie_vorschlag || c.label.toLowerCase().includes(a.kategorie_vorschlag.toLowerCase()));
+      if(match) catField.value = match.id;
+    }
+  }
+
+  // Auch in Kosten-Tab nutzbar machen
+  if(a.betrag && a.anbieter){
+    const note = document.getElementById('docNote');
+    const parts = [];
+    if(a.anbieter) parts.push('Anbieter: ' + a.anbieter);
+    if(a.betrag) parts.push('Betrag: ' + fmtEur(a.betrag) + (a.betrag_intervall ? ' / ' + a.betrag_intervall : ''));
+    if(a.kundennummer) parts.push('Kundennr: ' + a.kundennummer);
+    if(a.vertragsnummer) parts.push('Vertragsnr: ' + a.vertragsnummer);
+    if(a.kuendigungsfrist) parts.push('Kündigungsfrist: ' + a.kuendigungsfrist);
+    if(a.zaehlerstand) parts.push('Zählerstand: ' + a.zaehlerstand + ' ' + (a.zaehlerstand_einheit||''));
+    if(note) note.value = (note.value ? note.value + '\n\n' : '') + '🧠 KI-Analyse:\n' + parts.join('\n');
+  }
+
+  toast('Daten aus KI-Analyse übernommen ✅','ok');
+  document.getElementById('docAnalysisResult').style.display = 'none';
 }
 
 /* ----- Zählerwechsel ----- */
@@ -4201,6 +4489,10 @@ function showDocFilePreview(file){
   const name = document.getElementById('docFileName');
   const icon = document.getElementById('docFileIcon');
   if(!preview||!name||!icon) return;
+  const analyzeBtn = document.getElementById('btnDocAnalyze');
+  if(analyzeBtn && settings.ocrKiEnabled && settings.openrouterKey){
+    analyzeBtn.style.display = 'inline-flex';
+  }
   const icons = {
     'application/pdf':'📕',
     'image/':'🖼️',
@@ -4222,6 +4514,10 @@ function clearDocFile(){
   docSelectedFile = null;
   const preview = document.getElementById('docFilePreview');
   if(preview) preview.style.display = 'none';
+  const analyzeBtn = document.getElementById('btnDocAnalyze');
+  if(analyzeBtn) analyzeBtn.style.display = 'none';
+  const resultEl = document.getElementById('docAnalysisResult');
+  if(resultEl) resultEl.style.display = 'none';
 }
 
 /* ----- Documents ----- */
@@ -5307,6 +5603,16 @@ function renderSettingsExtras(){
   if(settings.ocrKiEnabled && settings.openrouterKey){
     refreshModelList(false);
   }
+  setTimeout(()=>{
+    const docSel = document.getElementById('docModelSel');
+    if(docSel && cachedVisionModels.length){
+      docSel.innerHTML = '<option value="">— Gleich wie OCR —</option>' +
+        cachedVisionModels.map(m => {
+          const priceStr = m.price > 0 ? `${(m.price*1000000).toFixed(2)}/1M tok` : 'gratis';
+          return `<option value="${m.id}" ${settings.docAnalysisModel===m.id?'selected':''}>${m.name} (${priceStr})</option>`;
+        }).join('');
+    }
+  }, 1500);
   const deToggle = document.getElementById('showDEToggle');
   if(deToggle) deToggle.checked = settings.showDEOverview !== false;
   document.getElementById('gClientId').value = settings.gClientId||'';
