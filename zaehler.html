@@ -1093,6 +1093,51 @@ canvas.chart{width:100%;height:200px}
   </div>
 </div>
 
+<!-- ZÄHLERWECHSEL MODAL -->
+<div class="modal-bg" id="meterSwapModal">
+  <div class="modal">
+    <h2>🔄 Zählerwechsel</h2>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Alter Zähler wird abgeschlossen und ein neuer Zähler eingetragen.
+    </div>
+    <div class="card" style="background:var(--card2);padding:12px;margin-bottom:12px">
+      <h3 style="color:var(--err)">📤 Alter Zähler (Ausbau)</h3>
+      <div id="swapOldInfo" style="font-size:13px;color:var(--muted);margin:6px 0"></div>
+      <div class="row">
+        <div class="field">
+          <label>Letzter Stand *</label>
+          <input type="number" id="swapOldValue" step="0.001" inputmode="decimal" placeholder="Endstand">
+        </div>
+        <div class="field">
+          <label>Ausbau-Datum *</label>
+          <input type="date" id="swapDate">
+        </div>
+      </div>
+    </div>
+    <div class="card" style="background:var(--card2);padding:12px">
+      <h3 style="color:var(--ok)">📥 Neuer Zähler (Einbau)</h3>
+      <div class="row">
+        <div class="field">
+          <label>Neue Zählernummer</label>
+          <input type="text" id="swapNewNumber" placeholder="z.B. 98765432">
+        </div>
+        <div class="field">
+          <label>Anfangsstand</label>
+          <input type="number" id="swapNewValue" step="0.001" inputmode="decimal" placeholder="meist 0" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Notiz (optional)</label>
+      <textarea id="swapNote" rows="2" placeholder="z.B. Wechsel durch Stadtwerke, Protokoll-Nr..."></textarea>
+    </div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('meterSwapModal')">Abbrechen</button>
+      <button class="btn ok" onclick="executeMeterSwap()">🔄 Wechsel durchführen</button>
+    </div>
+  </div>
+</div>
+
 <!-- WASTE MANUAL MODAL -->
 <div class="modal-bg" id="wasteModal">
   <div class="modal">
@@ -1748,12 +1793,7 @@ function renderMeterCard(p, m){
   const prediction = predictNextReading(mainOnly);
   const lastDays = last ? daysBetween(last.date, today()) : null;
   
-  let currentYearly = null;
-  if(all.length >= 2){
-    const days = daysBetween(all[0].date, all[all.length-1].date);
-    const valDiff = all[all.length-1].value - all[0].value;
-    if(days > 0) currentYearly = valDiff * 365 / days;
-  }
+  let currentYearly = calcYearlyConsumption(p.id, m.id);
   
   let expectComp = '';
   if(m.expectedYearly && m.expectedYearly > 0){
@@ -1836,6 +1876,7 @@ function renderMeterCard(p, m){
       <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
       <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${all.length})</button>
       ${last?`<button class="btn sm err" onclick="deleteLastReading('${last.id}','${p.id}','${m.id}')">🗑️ Letzten</button>`:''}
+      <button class="btn sm ghost" onclick="openMeterSwap('${p.id}','${m.id}')">🔄 Wechsel</button>
     </div>
   </div>`;
 }
@@ -1868,14 +1909,76 @@ function renderBenchmarkBox(meter, property, currentYearly){
 
 function findYearAgo(readings, current){
   if(!current || readings.length<2) return null;
+  // Bei Zählerwechsel: nur Readings nach dem letzten Wechsel-Einbau
+  const safeReadings = getReadingsAfterLastSwap(readings);
   const target = new Date(current.date); target.setFullYear(target.getFullYear()-1);
   let best=null, bestDiff=Infinity;
-  for(const r of readings){
+  for(const r of safeReadings){
     if(r.id===current.id) continue;
     const d = Math.abs(new Date(r.date)-target);
     if(d<bestDiff && d < 90*86400000){ best=r; bestDiff=d; }
   }
   return best;
+}
+
+function getReadingsAfterLastSwap(readings){
+  const sorted = [...readings].sort((a,b)=>a.date.localeCompare(b.date));
+  let lastSwapIdx = -1;
+  sorted.forEach((r,i) => {
+    if(r.meterSwap === 'in') lastSwapIdx = i;
+  });
+  return lastSwapIdx >= 0 ? sorted.slice(lastSwapIdx) : sorted;
+}
+
+function calcYearlyConsumption(propId, meterId){
+  const all = state.readings.filter(r=>r.propId===propId && r.meterId===meterId)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  if(all.length < 2) return null;
+
+  // Zählerwechsel finden
+  const swapOuts = all.filter(r=>r.meterSwap==='out');
+  const swapIns = all.filter(r=>r.meterSwap==='in');
+
+  if(!swapOuts.length){
+    // Kein Wechsel: einfache Berechnung
+    const days = daysBetween(all[0].date, all[all.length-1].date);
+    const diff = all[all.length-1].value - all[0].value;
+    return days > 0 ? diff * 365 / days : null;
+  }
+
+  // Mit Wechsel: Phasen addieren
+  let totalConsumption = 0;
+  let totalDays = 0;
+
+  // Gruppen bilden: Readings zwischen Swaps
+  let phases = [];
+  let currentPhase = [];
+
+  all.forEach(r => {
+    if(r.meterSwap === 'out'){
+      currentPhase.push(r);
+      if(currentPhase.length >= 2) phases.push([...currentPhase]);
+      currentPhase = [];
+    } else if(r.meterSwap === 'in'){
+      currentPhase = [r];
+    } else {
+      currentPhase.push(r);
+    }
+  });
+  if(currentPhase.length >= 2) phases.push(currentPhase);
+
+  phases.forEach(phase => {
+    const first = phase[0];
+    const last = phase[phase.length-1];
+    const days = daysBetween(first.date, last.date);
+    const diff = last.value - first.value;
+    if(days > 0 && diff >= 0){
+      totalConsumption += diff;
+      totalDays += days;
+    }
+  });
+
+  return totalDays > 0 ? totalConsumption * 365 / totalDays : null;
 }
 function predictNextReading(readings){
   if(readings.length<2) return null;
@@ -2135,7 +2238,9 @@ function renderHistContent(){
     const next = readings[i+1];
     const diff = next ? (r.value-next.value) : null;
     const days = next ? daysBetween(next.date, r.date) : null;
-    const badge = r.isMain ? '<span class="read-badge main">⭐</span>' : '<span class="read-badge sub">📝</span>';
+    const swapBadge = r.meterSwap === 'out' ? '<span class="read-badge" style="background:var(--err);color:white">📤 AUSBAU</span>'
+      : r.meterSwap === 'in' ? '<span class="read-badge" style="background:var(--ok);color:white">📥 EINBAU</span>' : '';
+    const badge = swapBadge || (r.isMain ? '<span class="read-badge main">⭐</span>' : '<span class="read-badge sub">📝</span>');
     const costInfo = (diff && m.pricePerUnit) ? ` · ≈ ${fmtEur(diff * m.pricePerUnit)}` : '';
     return `<div class="history-item">
       <div>
@@ -2998,6 +3103,93 @@ async function runDECompareKI(){
   }catch(e){
     el.innerHTML = `<div style="color:var(--err);font-size:13px">❌ ${e.message}</div>`;
   }
+}
+
+/* ----- Zählerwechsel ----- */
+let swapContext = null;
+
+function openMeterSwap(propId, meterId){
+  const p = state.properties.find(x=>x.id===propId);
+  const m = p?.meters.find(x=>x.id===meterId);
+  if(!p||!m) return;
+
+  const t = METER_TYPES[m.type]||METER_TYPES.strom;
+  const readings = state.readings.filter(r=>r.propId===propId&&r.meterId===meterId).sort((a,b)=>b.date.localeCompare(a.date));
+  const last = readings[0];
+
+  swapContext = {propId, meterId, meter:m, prop:p, type:t};
+
+  const info = document.getElementById('swapOldInfo');
+  info.innerHTML = `${t.icon} <strong>${t.label}</strong> · Nr: ${escapeHtml(m.number||'–')}` +
+    (last ? `<br>Letzter Stand: <strong>${fmt(last.value,3)} ${t.unit}</strong> (${formatDate(last.date)})` : '<br>Noch keine Ablesung');
+
+  document.getElementById('swapOldValue').value = last ? last.value : '';
+  document.getElementById('swapDate').value = today();
+  document.getElementById('swapNewNumber').value = '';
+  document.getElementById('swapNewValue').value = '0';
+  document.getElementById('swapNote').value = '';
+
+  document.getElementById('meterSwapModal').classList.add('show');
+}
+
+function executeMeterSwap(){
+  if(!swapContext) return;
+  const {propId, meterId, meter, prop, type} = swapContext;
+
+  const oldValue = parseFloat(document.getElementById('swapOldValue').value);
+  const swapDate = document.getElementById('swapDate').value;
+  const newNumber = document.getElementById('swapNewNumber').value.trim();
+  const newValue = parseFloat(document.getElementById('swapNewValue').value) || 0;
+  const note = document.getElementById('swapNote').value.trim();
+
+  if(isNaN(oldValue)){ toast('Bitte Endstand des alten Zählers eingeben','err'); return; }
+  if(!swapDate){ toast('Bitte Wechsel-Datum eingeben','err'); return; }
+
+  // 1. Letzte Ablesung alter Zähler (Endstand)
+  state.readings.push({
+    id: uid(),
+    propId,
+    meterId,
+    date: swapDate,
+    value: oldValue,
+    isMain: true,
+    note: `🔄 Zählerwechsel AUSBAU · Endstand${note?' · '+note:''}`,
+    photo: null,
+    meterSwap: 'out',
+    meterSwapGroup: swapDate + '_' + meterId
+  });
+
+  // 2. Erste Ablesung neuer Zähler (Anfangsstand)
+  state.readings.push({
+    id: uid(),
+    propId,
+    meterId,
+    date: swapDate,
+    value: newValue,
+    isMain: true,
+    note: `🔄 Zählerwechsel EINBAU · Anfangsstand${newNumber?' · Neue Nr: '+newNumber:''}${note?' · '+note:''}`,
+    photo: null,
+    meterSwap: 'in',
+    meterSwapGroup: swapDate + '_' + meterId
+  });
+
+  // 3. Zählernummer aktualisieren
+  const m = prop.meters.find(x=>x.id===meterId);
+  if(m){
+    if(!m.previousNumbers) m.previousNumbers = [];
+    m.previousNumbers.push({
+      number: m.number,
+      until: swapDate,
+      endValue: oldValue
+    });
+    if(newNumber) m.number = newNumber;
+  }
+
+  save();
+  closeModal('meterSwapModal');
+  render();
+  toast(`🔄 Zählerwechsel durchgeführt!${newNumber?' Neue Nr: '+newNumber:''}`, 'ok');
+  swapContext = null;
 }
 
 /* ----- Dashboard Waste Widget ----- */
