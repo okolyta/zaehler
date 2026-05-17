@@ -789,6 +789,33 @@ canvas.chart{width:100%;height:200px}
             <span>✍️ Manuelle Überweisungen</span>
           </label></div>
         </div>
+        <div style="margin:12px 0;padding:12px;background:var(--card2);border-radius:10px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">🖥️ Dieses Gerät</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button class="btn sm" id="btnModeMobile" onclick="setDeviceMode('mobile')">📱 Mobil</button>
+            <button class="btn sm ghost" id="btnModeServer" onclick="setDeviceMode('server')">🖥️ Server (24/7)</button>
+          </div>
+          <div id="serverModeSettings" style="display:none">
+            <div class="row" style="gap:8px">
+              <div class="field" style="margin:0">
+                <label style="font-size:11px">⏰ Vorabend</label>
+                <input type="time" id="notifyEvening" value="18:00" onchange="settings.notifyEveningTime=this.value;save()" style="padding:6px">
+              </div>
+              <div class="field" style="margin:0">
+                <label style="font-size:11px">⏰ Morgen-Check</label>
+                <input type="time" id="notifyMorning" value="08:00" onchange="settings.notifyMorningTime=this.value;save()" style="padding:6px">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px">
+              🖥️ Bot antwortet 24/7 · Erinnerungen werden zeitgesteuert gesendet<br>
+              ⚠️ Browser-Tab muss offen bleiben (darf im Hintergrund sein)
+            </div>
+          </div>
+          <div id="mobileModeInfo" style="font-size:11px;color:var(--muted)">
+            📱 Erinnerungen werden beim Öffnen der App gesendet. Bot-Abfragen inaktiv.
+          </div>
+          <div style="font-size:11px;color:var(--warn);margin-top:6px">⚠️ Diese Einstellung gilt NUR für dieses Gerät.</div>
+        </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <button class="btn sm ok" onclick="testTelegram()">▶️ Test senden</button>
           <button class="btn sm ghost" onclick="sendAllDueNotifications(true)">📤 Alle fälligen jetzt senden</button>
@@ -1463,6 +1490,9 @@ let settings = {
   notifyKuendigung: true,
   notifyUeberweisung: true,
   lastNotifyCheck: 0,
+  telegramPollEnabled: true,
+  notifyMorningTime: '08:00',
+  notifyEveningTime: '18:00',
   docCategories: [
     {id:'rechnung',    label:'Rechnung',              icon:'📋'},
     {id:'vertrag',     label:'Vertrag',               icon:'📜'},
@@ -3357,6 +3387,330 @@ async function sendAllDueNotifications(manual){
   } else if(manual){
     toast('Senden fehlgeschlagen','err');
   }
+}
+
+/* ----- Device Mode ----- */
+const DEVICE_MODE_KEY = 'zaehler_device_mode';
+
+function getDeviceMode(){
+  return localStorage.getItem(DEVICE_MODE_KEY) || 'mobile';
+}
+
+function setDeviceMode(mode){
+  localStorage.setItem(DEVICE_MODE_KEY, mode);
+  updateDeviceModeUI();
+  if(mode === 'server'){
+    startTelegramPolling();
+    startScheduledNotifications();
+    toast('🖥️ Server-Modus aktiviert — Bot läuft dauerhaft','ok');
+  } else {
+    stopTelegramPolling();
+    stopScheduledNotifications();
+    toast('📱 Mobil-Modus — Bot gestoppt','ok');
+  }
+}
+
+function updateDeviceModeUI(){
+  const mode = getDeviceMode();
+  const btnMobile = document.getElementById('btnModeMobile');
+  const btnServer = document.getElementById('btnModeServer');
+  const serverSettings = document.getElementById('serverModeSettings');
+  const mobileInfo = document.getElementById('mobileModeInfo');
+  if(!btnMobile) return;
+
+  if(mode === 'server'){
+    btnMobile.className = 'btn sm ghost';
+    btnServer.className = 'btn sm';
+    serverSettings.style.display = 'block';
+    mobileInfo.style.display = 'none';
+  } else {
+    btnMobile.className = 'btn sm';
+    btnServer.className = 'btn sm ghost';
+    serverSettings.style.display = 'none';
+    mobileInfo.style.display = 'block';
+  }
+
+  const evTime = document.getElementById('notifyEvening');
+  if(evTime) evTime.value = settings.notifyEveningTime || '18:00';
+  const moTime = document.getElementById('notifyMorning');
+  if(moTime) moTime.value = settings.notifyMorningTime || '08:00';
+}
+
+/* ----- Telegram Bot Commands ----- */
+let tgLastUpdateId = 0;
+let tgPollTimer = null;
+let tgScheduleTimer = null;
+
+function startTelegramPolling(){
+  if(tgPollTimer) clearInterval(tgPollTimer);
+  if(!settings.notifyTelegram || !settings.telegramBotToken) return;
+  if(getDeviceMode() !== 'server') return;
+  tgPollTimer = setInterval(pollTelegramUpdates, 15000);
+  setTimeout(pollTelegramUpdates, 3000);
+  console.log('🤖 Telegram Bot Polling gestartet (Server-Modus)');
+}
+
+function stopTelegramPolling(){
+  if(tgPollTimer){ clearInterval(tgPollTimer); tgPollTimer = null; }
+  console.log('🤖 Telegram Bot Polling gestoppt');
+}
+
+function startScheduledNotifications(){
+  if(tgScheduleTimer) clearInterval(tgScheduleTimer);
+  if(getDeviceMode() !== 'server') return;
+  tgScheduleTimer = setInterval(checkScheduledNotifications, 60000);
+  console.log('⏰ Zeitgesteuerte Erinnerungen aktiv');
+}
+
+function stopScheduledNotifications(){
+  if(tgScheduleTimer){ clearInterval(tgScheduleTimer); tgScheduleTimer = null; }
+}
+
+function checkScheduledNotifications(){
+  if(!settings.notifyTelegram || !settings.telegramBotToken || !settings.telegramChatId) return;
+  if(getDeviceMode() !== 'server') return;
+
+  const now = new Date();
+  const timeStr = now.toTimeString().slice(0,5);
+  const todayStr = today();
+
+  const eveningTime = settings.notifyEveningTime || '18:00';
+  const morningTime = settings.notifyMorningTime || '08:00';
+
+  const eveningKey = 'zaehler_notify_evening_' + todayStr;
+  const morningKey = 'zaehler_notify_morning_' + todayStr;
+
+  // Vorabend-Check
+  if(timeStr >= eveningTime && timeStr < addMinutesToTime(eveningTime, 2)){
+    if(!localStorage.getItem(eveningKey)){
+      localStorage.setItem(eveningKey, '1');
+      sendEveningNotifications();
+    }
+  }
+
+  // Morgen-Check
+  if(timeStr >= morningTime && timeStr < addMinutesToTime(morningTime, 2)){
+    if(!localStorage.getItem(morningKey)){
+      localStorage.setItem(morningKey, '1');
+      sendMorningNotifications();
+    }
+  }
+}
+
+function addMinutesToTime(timeStr, mins){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m + mins);
+  return d.toTimeString().slice(0,5);
+}
+
+async function sendEveningNotifications(){
+  const tomorrowStr = dateAdd(today(), 1);
+  let messages = [];
+
+  // Müll morgen
+  if(settings.notifyMuell !== false && state.wasteSchedule){
+    const wasteNext = getNextWasteDates(10);
+    wasteNext.forEach(w => {
+      if(w.daysUntil === 1 && w.reminder){
+        messages.push(`${w.icon} <b>Morgen:</b> ${w.label} rausstellen!`);
+      }
+    });
+  }
+
+  // Termine morgen
+  if(settings.notifyTermine !== false){
+    state.appointments.forEach(a => {
+      if(a.date === tomorrowStr){
+        const icon = APPT_ICONS[a.cat]||'📌';
+        messages.push(`${icon} <b>Morgen:</b> ${a.title}${a.time?' um '+a.time:''}`);
+      }
+    });
+  }
+
+  if(messages.length){
+    await sendTelegram(`🌙 <b>Vorabend-Erinnerung</b>\n📅 ${formatDate(today())}\n\n${messages.join('\n\n')}`);
+  }
+}
+
+async function sendMorningNotifications(){
+  const todayStr = today();
+  let messages = [];
+
+  // Müll heute
+  if(settings.notifyMuell !== false && state.wasteSchedule){
+    const wasteNext = getNextWasteDates(10);
+    wasteNext.forEach(w => {
+      if(w.daysUntil === 0){
+        messages.push(`🔴 ${w.icon} <b>HEUTE:</b> ${w.label} wird abgeholt!`);
+      }
+    });
+  }
+
+  // Termine heute
+  if(settings.notifyTermine !== false){
+    state.appointments.forEach(a => {
+      if(a.date === todayStr){
+        const icon = APPT_ICONS[a.cat]||'📌';
+        messages.push(`🔴 ${icon} <b>HEUTE:</b> ${a.title}${a.time?' um '+a.time:''}`);
+      }
+    });
+  }
+
+  // Fällige Ablesungen
+  if(settings.notifyAblesungen !== false){
+    state.properties.forEach(p => {
+      p.meters.forEach(m => {
+        const t = METER_TYPES[m.type]||METER_TYPES.strom;
+        const readings = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id&&r.isMain).sort((a,b)=>a.date.localeCompare(b.date));
+        if(readings.length < 2) return;
+        const pred = predictNextReading(readings);
+        if(pred && daysBetween(todayStr, pred.date) <= 0){
+          messages.push(`📝 <b>Ablesung fällig:</b> ${t.icon} ${t.label} · ${p.name}`);
+        }
+      });
+    });
+  }
+
+  // Kündigungsfristen
+  if(settings.notifyKuendigung !== false && state.costs){
+    state.costs.forEach(c => {
+      if(!c.active || !c.contractEnd || !c.cancelMonths) return;
+      const cancelDate = dateAdd(c.contractEnd, -c.cancelMonths * 30);
+      const cancelDays = daysBetween(todayStr, cancelDate);
+      if(cancelDays === 14 || cancelDays === 7 || cancelDays === 3 || cancelDays === 1 || cancelDays === 0){
+        messages.push(`✂️ <b>Kündigungsfrist:</b> ${c.name}\n${cancelDays === 0 ? '⚠️ HEUTE letzte Chance!' : `Noch ${cancelDays} Tage`}`);
+      }
+    });
+  }
+
+  if(messages.length){
+    await sendTelegram(`☀️ <b>Morgen-Check</b>\n📅 ${formatDate(todayStr)}\n\n${messages.join('\n\n')}`);
+  }
+}
+
+async function pollTelegramUpdates(){
+  if(!settings.telegramBotToken || getDeviceMode() !== 'server') return;
+  try{
+    const res = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/getUpdates?offset=${tgLastUpdateId+1}&timeout=1`);
+    if(!res.ok) return;
+    const json = await res.json();
+    if(!json.ok || !json.result?.length) return;
+
+    for(const update of json.result){
+      tgLastUpdateId = update.update_id;
+      const msg = update.message;
+      if(!msg || !msg.text) continue;
+      if(msg.chat.id.toString() !== settings.telegramChatId) continue;
+
+      const text = msg.text.trim().toLowerCase();
+      let reply = await handleTelegramCommand(text);
+      if(reply) await sendTelegram(reply);
+    }
+  }catch(e){
+    console.warn('Telegram poll:', e);
+  }
+}
+
+async function handleTelegramCommand(text){
+  if(text === '/start' || text === '/hilfe' || text === '/help'){
+    return `⚡ <b>Zaehler-App Bot</b>\n\n` +
+      `Befehle:\n` +
+      `/status — Übersicht\n` +
+      `/muell — Nächste Mülltermine\n` +
+      `/strom — Stromverbrauch\n` +
+      `/gas — Gasverbrauch\n` +
+      `/wasser — Wasserverbrauch\n` +
+      `/termine — Anstehende Termine\n` +
+      `/kosten — Kostenübersicht\n` +
+      `/kuendigung — Kündigungsfristen\n\n` +
+      `💬 Oder stell eine freie Frage!`;
+  }
+
+  if(text === '/status'){
+    const totalMeters = state.properties.reduce((s,p)=>s+p.meters.length,0);
+    return `📊 <b>Status</b>\n\n` +
+      `🏠 ${state.properties.length} Grundstücke · 🔢 ${totalMeters} Zähler\n` +
+      `📝 ${state.readings.length} Einträge · 📅 ${state.appointments.length} Termine\n` +
+      `📄 ${(state.documents||[]).length} Dokumente · 💰 ${(state.costs||[]).length} Verträge`;
+  }
+
+  if(text === '/muell'){
+    if(!state.wasteSchedule?.length) return '🗑️ Keine Mülltermine.';
+    const next = getNextWasteDates(6);
+    if(!next.length) return '🗑️ Keine anstehenden Termine.';
+    return `🗑️ <b>Mülltermine</b>\n\n` +
+      next.map(w => {
+        const tag = w.daysUntil===0?'🔴 HEUTE':w.daysUntil===1?'⚠️ MORGEN':`in ${w.daysUntil}T`;
+        return `${w.icon} ${w.label}: <b>${tag}</b>`;
+      }).join('\n');
+  }
+
+  if(text === '/termine'){
+    const upcoming = [...state.appointments].filter(a=>daysBetween(today(),a.date)>=0).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8);
+    if(!upcoming.length) return '📅 Keine Termine.';
+    return `📅 <b>Termine</b>\n\n` +
+      upcoming.map(a => `${APPT_ICONS[a.cat]||'📌'} ${a.title}: in ${daysBetween(today(),a.date)}T`).join('\n');
+  }
+
+  if(text === '/kosten'){
+    if(!state.costs?.length) return '💰 Keine Verträge.';
+    const active = state.costs.filter(c=>c.active);
+    const total = active.reduce((s,c)=>s+getCostYearly(c),0);
+    return `💰 <b>Kosten</b>\n\nGesamt: <b>${fmtEur(total)}/Jahr</b> · ${fmtEur(total/12)}/Monat\n${active.length} aktive Verträge`;
+  }
+
+  if(text === '/kuendigung'){
+    const withEnd = (state.costs||[]).filter(c=>c.active&&c.contractEnd);
+    if(!withEnd.length) return '✂️ Keine Fristen.';
+    return `✂️ <b>Kündigungsfristen</b>\n\n` +
+      withEnd.sort((a,b)=>a.contractEnd.localeCompare(b.contractEnd)).map(c => {
+        const d = daysBetween(today(),c.contractEnd);
+        return `📄 ${c.name}: ${d>0?'in '+d+'T':'ABGELAUFEN'}`;
+      }).join('\n');
+  }
+
+  if(text.startsWith('/strom')||text.startsWith('/gas')||text.startsWith('/wasser')){
+    const typeMap = {'/strom':'strom','/gas':'gas','/wasser':'wasser'};
+    const mType = typeMap[text.split(' ')[0]];
+    const t = METER_TYPES[mType]; if(!t) return '❓ Unbekannt.';
+    let lines = [`${t.icon} <b>${t.label}</b>\n`];
+    state.properties.forEach(p=>{
+      p.meters.filter(m=>m.type===mType).forEach(m=>{
+        const rs = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+        if(rs.length<2) return;
+        const days=daysBetween(rs[0].date,rs[rs.length-1].date);
+        const diff=rs[rs.length-1].value-rs[0].value;
+        if(days>0){ const y=diff*365/days; lines.push(`🏠 ${p.name}: ~${fmt(y,0)} ${t.unit}/Jahr`); }
+      });
+    });
+    return lines.length>1 ? lines.join('\n') : `${t.icon} Noch nicht genug Daten.`;
+  }
+
+  // Freie Frage → KI
+  if(settings.ocrKiEnabled && settings.openrouterKey){
+    return await handleTelegramKIQuestion(text);
+  }
+  return `❓ Unbekannt. /hilfe für Befehle.`;
+}
+
+async function handleTelegramKIQuestion(question){
+  try{
+    let ctx = 'DATEN:\n';
+    state.properties.forEach(p=>{
+      ctx += `${p.name} (${p.residents||'?'} Pers, ${p.area||'?'}m²)\n`;
+      p.meters.forEach(m=>{
+        const t=METER_TYPES[m.type]||METER_TYPES.strom;
+        const rs=state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+        if(rs.length>=2){const d=daysBetween(rs[0].date,rs[rs.length-1].date);const v=rs[rs.length-1].value-rs[0].value;if(d>0)ctx+=`  ${t.label}: ~${(v*365/d).toFixed(0)} ${t.unit}/J\n`;}
+      });
+    });
+    const model=settings.ocrModel||'google/gemini-flash-1.5-8b';
+    const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${settings.openrouterKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify({model,messages:[{role:'system',content:'Kurz antworten, deutsch, Emojis, max 150 Wörter.'},{role:'user',content:ctx+'\nFrage: '+question}],max_tokens:300,temperature:0.3})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const j=await res.json();
+    return j.choices?.[0]?.message?.content||'🤷 Keine Antwort.';
+  }catch(e){return `❌ KI-Fehler: ${e.message}`;}
 }
 
 /* ----- KI Cost-Doc Analyse ----- */
@@ -6313,7 +6667,14 @@ load();
 gInit();
 render();
 initVersionBadge();
-setTimeout(()=>sendAllDueNotifications(false), 5000);
+setTimeout(()=>{
+  sendAllDueNotifications(false);
+  updateDeviceModeUI();
+  if(getDeviceMode()==='server'){
+    startTelegramPolling();
+    startScheduledNotifications();
+  }
+}, 5000);
 setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
 if('serviceWorker' in navigator){
@@ -6333,7 +6694,12 @@ window.addEventListener('beforeunload', () => {
   if(pendingChanges && gIsSignedIn()){ try{ autoSync(); }catch(_){} }
 });
 document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible' && pendingChanges && gIsSignedIn()) autoSync();
+  if(document.visibilityState === 'visible'){
+    if(pendingChanges && gIsSignedIn()) autoSync();
+    if(getDeviceMode()==='server') startTelegramPolling();
+  } else {
+    if(getDeviceMode()!=='server') stopTelegramPolling();
+  }
 });
 window.addEventListener('online', () => {
   if(pendingChanges && gIsSignedIn()) autoSync();
