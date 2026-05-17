@@ -750,6 +750,65 @@ canvas.chart{width:100%;height:200px}
     </div>
 
     <div class="card">
+      <h2>🔔 Benachrichtigungen</h2>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="notifyTelegramToggle" onchange="settings.notifyTelegram=this.checked;save();document.getElementById('telegramSettings').style.display=this.checked?'block':'none'" style="width:auto">
+          <span>💬 <strong>Telegram-Benachrichtigungen</strong></span>
+        </label>
+      </div>
+      <div id="telegramSettings" style="display:none">
+        <div class="field">
+          <label>Bot-Token</label>
+          <input type="password" id="telegramToken" placeholder="123456:ABC-DEF..." onchange="settings.telegramBotToken=this.value.trim();save()">
+        </div>
+        <div class="field">
+          <label>Chat-ID <button class="btn sm ghost" onclick="getTelegramChatId()" style="margin-left:8px">🔍 Auto-Erkennung</button></label>
+          <input type="text" id="telegramChatId" placeholder="z.B. 123456789" onchange="settings.telegramChatId=this.value.trim();save()">
+        </div>
+        <div style="margin:10px 0;padding:10px;background:var(--card2);border-radius:10px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">🔔 Was soll gemeldet werden?</div>
+          <div class="field" style="margin:4px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="notTermine" checked onchange="settings.notifyTermine=this.checked;save()" style="width:auto">
+            <span>📅 Termine (1 Tag vorher)</span>
+          </label></div>
+          <div class="field" style="margin:4px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="notMuell" checked onchange="settings.notifyMuell=this.checked;save()" style="width:auto">
+            <span>🗑️ Müllabholung (Vorabend)</span>
+          </label></div>
+          <div class="field" style="margin:4px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="notAblesungen" checked onchange="settings.notifyAblesungen=this.checked;save()" style="width:auto">
+            <span>📝 Fällige Ablesungen</span>
+          </label></div>
+          <div class="field" style="margin:4px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="notKuendigung" checked onchange="settings.notifyKuendigung=this.checked;save()" style="width:auto">
+            <span>✂️ Kündigungsfristen</span>
+          </label></div>
+          <div class="field" style="margin:4px 0"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="notUeberweisung" checked onchange="settings.notifyUeberweisung=this.checked;save()" style="width:auto">
+            <span>✍️ Manuelle Überweisungen</span>
+          </label></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn sm ok" onclick="testTelegram()">▶️ Test senden</button>
+          <button class="btn sm ghost" onclick="sendAllDueNotifications(true)">📤 Alle fälligen jetzt senden</button>
+        </div>
+        <div id="telegramTestResult" style="margin-top:8px;font-size:12px"></div>
+        <details style="margin-top:10px">
+          <summary style="font-size:12px;color:var(--muted);cursor:pointer">📋 Telegram Bot einrichten (Anleitung)</summary>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8">
+            <strong>Schritt 1:</strong> Telegram öffnen → <code>@BotFather</code> suchen → anschreiben<br>
+            <strong>Schritt 2:</strong> <code>/newbot</code> senden → Name eingeben (z.B. "Zähler Reminder")<br>
+            <strong>Schritt 3:</strong> Bot-Token kopieren → hier einfügen<br>
+            <strong>Schritt 4:</strong> Deinen neuen Bot in Telegram suchen → <code>/start</code> senden<br>
+            <strong>Schritt 5:</strong> Hier auf "🔍 Auto-Erkennung" klicken → Chat-ID wird gefunden<br>
+            <strong>Fertig!</strong> Klick auf "▶️ Test senden" zum Prüfen.
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>📊 Anzeige</h2>
       <div class="field">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -1395,6 +1454,15 @@ let settings = {
   docAnalysisModel: '',
   ocrAutoFallback: true,
   showDEOverview: true,
+  telegramBotToken: '',
+  telegramChatId: '',
+  notifyTelegram: false,
+  notifyTermine: true,
+  notifyMuell: true,
+  notifyAblesungen: true,
+  notifyKuendigung: true,
+  notifyUeberweisung: true,
+  lastNotifyCheck: 0,
   docCategories: [
     {id:'rechnung',    label:'Rechnung',              icon:'📋'},
     {id:'vertrag',     label:'Vertrag',               icon:'📜'},
@@ -3118,6 +3186,176 @@ async function runDECompareKI(){
     el.innerHTML = `<div class="ki-text"><p>${html}</p></div><div style="font-size:11px;color:var(--muted);margin-top:6px">🤖 ${model.split('/').pop()}</div>`;
   }catch(e){
     el.innerHTML = `<div style="color:var(--err);font-size:13px">❌ ${e.message}</div>`;
+  }
+}
+
+/* ----- Telegram Notifications ----- */
+async function sendTelegram(text){
+  if(!settings.telegramBotToken || !settings.telegramChatId) return false;
+  try{
+    const res = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        chat_id: settings.telegramChatId,
+        text,
+        parse_mode: 'HTML'
+      })
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      console.error('Telegram:', err);
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.error('Telegram send:', e);
+    return false;
+  }
+}
+
+async function getTelegramChatId(){
+  const token = settings.telegramBotToken || document.getElementById('telegramToken').value.trim();
+  if(!token){ toast('Bitte zuerst Bot-Token eintragen','err'); return; }
+  const resultEl = document.getElementById('telegramTestResult');
+  resultEl.innerHTML = '⏳ Suche Chat-ID... (hast du dem Bot /start geschrieben?)';
+  try{
+    const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if(!json.ok || !json.result?.length){
+      resultEl.innerHTML = '<span style="color:var(--warn)">⚠️ Keine Nachrichten gefunden. Bitte erst dem Bot <code>/start</code> schreiben, dann nochmal klicken.</span>';
+      return;
+    }
+    const chatId = json.result[json.result.length-1]?.message?.chat?.id;
+    if(chatId){
+      settings.telegramChatId = chatId.toString();
+      document.getElementById('telegramChatId').value = settings.telegramChatId;
+      save();
+      resultEl.innerHTML = `<span style="color:var(--ok)">✅ Chat-ID gefunden: ${chatId}</span>`;
+    } else {
+      resultEl.innerHTML = '<span style="color:var(--err)">❌ Keine Chat-ID in Updates</span>';
+    }
+  }catch(e){
+    resultEl.innerHTML = `<span style="color:var(--err)">❌ Fehler: ${e.message}</span>`;
+  }
+}
+
+async function testTelegram(){
+  const resultEl = document.getElementById('telegramTestResult');
+  resultEl.innerHTML = '⏳ Sende Test...';
+  const now = new Date().toLocaleString('de-DE');
+  const ok = await sendTelegram(
+    `🧪 <b>Zaehler-App Test</b>\n\n` +
+    `✅ Verbindung funktioniert!\n` +
+    `📅 ${now}\n\n` +
+    `Du bekommst hier Erinnerungen für:\n` +
+    `${settings.notifyTermine!==false?'✅':'⬜'} Termine\n` +
+    `${settings.notifyMuell!==false?'✅':'⬜'} Müllabholung\n` +
+    `${settings.notifyAblesungen!==false?'✅':'⬜'} Fällige Ablesungen\n` +
+    `${settings.notifyKuendigung!==false?'✅':'⬜'} Kündigungsfristen\n` +
+    `${settings.notifyUeberweisung!==false?'✅':'⬜'} Überweisungen`
+  );
+  resultEl.innerHTML = ok
+    ? '<span style="color:var(--ok)">✅ Test erfolgreich! Schau in Telegram.</span>'
+    : '<span style="color:var(--err)">❌ Senden fehlgeschlagen. Token + Chat-ID prüfen.</span>';
+  if(ok) toast('Telegram Test gesendet ✅','ok');
+}
+
+async function sendAllDueNotifications(manual){
+  if(!settings.notifyTelegram || !settings.telegramBotToken || !settings.telegramChatId) return;
+
+  const todayStr = today();
+  const tomorrowStr = dateAdd(todayStr, 1);
+  const checkKey = 'zaehler_last_notify_' + todayStr;
+
+  if(!manual && localStorage.getItem(checkKey)) return;
+
+  let messages = [];
+
+  // 1. Termine morgen
+  if(settings.notifyTermine !== false){
+    state.appointments.forEach(a => {
+      if(a.date === tomorrowStr){
+        const icon = APPT_ICONS[a.cat]||'📌';
+        messages.push(`${icon} <b>Morgen:</b> ${a.title}${a.time?' um '+a.time:''}${a.note?' – '+a.note:''}`);
+      }
+      if(a.date === todayStr){
+        const icon = APPT_ICONS[a.cat]||'📌';
+        messages.push(`🔴 <b>HEUTE:</b> ${a.title}${a.time?' um '+a.time:''}`);
+      }
+    });
+  }
+
+  // 2. Müll morgen
+  if(settings.notifyMuell !== false && state.wasteSchedule){
+    const wasteNext = getNextWasteDates(10);
+    wasteNext.forEach(w => {
+      if(w.daysUntil === 1 && w.reminder){
+        messages.push(`${w.icon} <b>Morgen:</b> ${w.label} rausstellen!`);
+      }
+      if(w.daysUntil === 0){
+        messages.push(`🔴 ${w.icon} <b>HEUTE:</b> ${w.label} wird abgeholt!`);
+      }
+    });
+  }
+
+  // 3. Fällige Ablesungen
+  if(settings.notifyAblesungen !== false){
+    state.properties.forEach(p => {
+      p.meters.forEach(m => {
+        const t = METER_TYPES[m.type]||METER_TYPES.strom;
+        const readings = state.readings.filter(r=>r.propId===p.id&&r.meterId===m.id&&r.isMain).sort((a,b)=>a.date.localeCompare(b.date));
+        if(readings.length < 2) return;
+        const pred = predictNextReading(readings);
+        if(pred){
+          const daysUntil = daysBetween(todayStr, pred.date);
+          if(daysUntil <= 0){
+            messages.push(`📝 <b>Ablesung fällig:</b> ${t.icon} ${t.label} · ${p.name}\nLetzte: ${formatDate(readings[readings.length-1].date)}`);
+          } else if(daysUntil <= 3){
+            messages.push(`📝 <b>Ablesung bald fällig:</b> ${t.icon} ${t.label} · ${p.name} (in ${daysUntil}T)`);
+          }
+        }
+      });
+    });
+  }
+
+  // 4. Kündigungsfristen
+  if(settings.notifyKuendigung !== false && state.costs){
+    state.costs.forEach(c => {
+      if(!c.active || !c.contractEnd || !c.cancelMonths) return;
+      const cancelDate = dateAdd(c.contractEnd, -c.cancelMonths * 30);
+      const cancelDays = daysBetween(todayStr, cancelDate);
+      if(cancelDays >= 0 && cancelDays <= 14){
+        messages.push(`✂️ <b>Kündigungsfrist:</b> ${c.name}\n${cancelDays === 0 ? 'HEUTE letzte Chance!' : `Noch ${cancelDays} Tage bis ${formatDate(cancelDate)}`}`);
+      }
+    });
+  }
+
+  // 5. Manuelle Überweisungen
+  if(settings.notifyUeberweisung !== false && state.costs){
+    state.costs.forEach(c => {
+      if(!c.active || c.paymentMethod !== 'ueberweisung') return;
+      const ct = COST_TYPES[c.type];
+      messages.push(`✍️ <b>Überweisung:</b> ${c.name} · ${fmtEur(c.amount)}${c.provider?' an '+c.provider:''}`);
+    });
+  }
+
+  if(!messages.length){
+    if(manual) toast('Keine fälligen Benachrichtigungen','');
+    return;
+  }
+
+  const fullMessage = `⚡ <b>Zaehler-App Erinnerungen</b>\n📅 ${formatDate(todayStr)}\n\n${messages.join('\n\n')}`;
+
+  const ok = await sendTelegram(fullMessage);
+  if(ok){
+    localStorage.setItem(checkKey, '1');
+    settings.lastNotifyCheck = Date.now();
+    save();
+    if(manual) toast(`✅ ${messages.length} Erinnerung${messages.length!==1?'en':''} gesendet`,'ok');
+  } else if(manual){
+    toast('Senden fehlgeschlagen','err');
   }
 }
 
@@ -5613,6 +5851,24 @@ function renderSettingsExtras(){
         }).join('');
     }
   }, 1500);
+  const tgToggle = document.getElementById('notifyTelegramToggle');
+  if(tgToggle) tgToggle.checked = !!settings.notifyTelegram;
+  const tgSettings = document.getElementById('telegramSettings');
+  if(tgSettings) tgSettings.style.display = settings.notifyTelegram ? 'block' : 'none';
+  const tgToken = document.getElementById('telegramToken');
+  if(tgToken) tgToken.value = settings.telegramBotToken||'';
+  const tgChat = document.getElementById('telegramChatId');
+  if(tgChat) tgChat.value = settings.telegramChatId||'';
+  const notT = document.getElementById('notTermine');
+  if(notT) notT.checked = settings.notifyTermine !== false;
+  const notM = document.getElementById('notMuell');
+  if(notM) notM.checked = settings.notifyMuell !== false;
+  const notA = document.getElementById('notAblesungen');
+  if(notA) notA.checked = settings.notifyAblesungen !== false;
+  const notK = document.getElementById('notKuendigung');
+  if(notK) notK.checked = settings.notifyKuendigung !== false;
+  const notU = document.getElementById('notUeberweisung');
+  if(notU) notU.checked = settings.notifyUeberweisung !== false;
   const deToggle = document.getElementById('showDEToggle');
   if(deToggle) deToggle.checked = settings.showDEOverview !== false;
   document.getElementById('gClientId').value = settings.gClientId||'';
@@ -6057,6 +6313,7 @@ load();
 gInit();
 render();
 initVersionBadge();
+setTimeout(()=>sendAllDueNotifications(false), 5000);
 setInterval(()=>{ if(gIsSignedIn() && pendingChanges) autoSync(); }, 5*60*1000);
 
 if('serviceWorker' in navigator){
