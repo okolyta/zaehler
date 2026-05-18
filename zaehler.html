@@ -5277,7 +5277,7 @@ async function saveDoc(){
 }
 
 function deleteDoc(){
-  if(!editingDocId) return;
+  if(!editingDocId){ toast('Bug: editingDocId ist leer!','err'); console.error('deleteDoc: editingDocId=',editingDocId); return; }
   const doc = state.documents.find(d=>d.id===editingDocId);
   if(!doc||!confirm(`"${doc.title}" wirklich löschen?`)) return;
   state.documents = state.documents.filter(d=>d.id!==editingDocId);
