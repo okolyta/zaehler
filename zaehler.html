@@ -150,6 +150,7 @@ header .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-con
 .meter-card.strom{border-left:4px solid #ffd60a}
 .meter-card.wasser{border-left:4px solid #5ac8fa}
 .meter-card.warmwasser{border-left:4px solid #ff453a}
+.meter-card.abwasser{border-left:4px solid #7c3aed}
 .meter-card.heizung{border-left:4px solid #ff9500}
 .meter-card .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
 .meter-card .title{font-size:15px;font-weight:600}
@@ -1247,6 +1248,7 @@ canvas.chart{width:100%;height:200px}
         <option value="bio">🌱 Biomüll</option>
         <option value="glas">🫙 Glasmüll</option>
         <option value="sperr">🛋️ Sperrmüll</option>
+        <option value="abwasser">🚽 Abwasser/Grube</option>
         <option value="sonstiges">📌 Sonstiges</option>
       </select>
     </div>
@@ -1327,6 +1329,7 @@ const METER_TYPES = {
   gas:        {label:'Gas',           unit:'m³',   icon:'🔥', color:'#ff9f0a'},
   wasser:     {label:'Wasser (kalt)', unit:'m³',   icon:'💧', color:'#5ac8fa'},
   warmwasser: {label:'Warmwasser',    unit:'m³',   icon:'🚿', color:'#ff453a'},
+  abwasser:   {label:'Abwasser/Grube',unit:'m³',   icon:'🚽', color:'#7c3aed'},
   heizung:    {label:'Heizung',       unit:'kWh',  icon:'🌡️', color:'#ff9500'},
   oel:        {label:'Öl',            unit:'L',    icon:'🛢️', color:'#854d0e'},
   pellets:    {label:'Pellets',       unit:'kg',   icon:'🪵', color:'#92400e'},
@@ -1430,6 +1433,7 @@ const COST_TYPES = {
   gebaeudevers: {label:'Gebäudeversicherung', icon:'🏗️', group:'grundstueck'},
   schornstein: {label:'Schornsteinfeger', icon:'🧹', group:'grundstueck'},
   heizungswartung: {label:'Heizungswartung', icon:'🔧', group:'grundstueck'},
+  abwasser: {label:'Abwasser/Grubenentl.', icon:'🚽', group:'grundstueck'},
   garten: {label:'Garten/Außenanlage', icon:'🌳', group:'grundstueck'},
   // Allgemein
   handy: {label:'Handy/Mobilfunk', icon:'📱', group:'allgemein'},
@@ -1980,7 +1984,12 @@ function renderMeterCard(p, m){
     ${costBox}
     ${renderBenchmarkBox(m, p, currentYearly)}
     ${anomaly}
-    ${prediction?`<div style="font-size:12px;color:var(--muted);margin-top:6px">🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong></div>`:''}
+    ${prediction?`<div style="font-size:12px;margin-top:6px;${prediction.isOverdue?'color:var(--warn)':'color:var(--muted)'}">
+      ${prediction.isOverdue
+        ? `⚠️ Ablesung überfällig (${prediction.daysSinceLast}T her) · nächster Termin: <strong>${formatDate(prediction.date)}</strong>`
+        : `🔮 Nächste Ablesung ~ <strong>${formatDate(prediction.date)}</strong> (in ${prediction.daysUntil}T)`
+      }
+    </div>`:''}
     <div class="actions">
       <button class="btn sm" onclick="quickReadFor('${p.id}','${m.id}')">+ Stand</button>
       <button class="btn sm ghost" onclick="showHistory('${p.id}','${m.id}')">📜 Verlauf (${all.length})</button>
@@ -2100,7 +2109,20 @@ function predictNextReading(readings){
   intervals.sort((a,b)=>a-b);
   const median = intervals[Math.floor(intervals.length/2)];
   const last = readings[readings.length-1];
-  return { date: dateAdd(last.date, median), days: median };
+  let nextDate = dateAdd(last.date, median);
+
+  const todayStr = today();
+  let attempts = 0;
+  while(nextDate < todayStr && attempts < 50){
+    nextDate = dateAdd(nextDate, median);
+    attempts++;
+  }
+
+  const daysUntil = daysBetween(todayStr, nextDate);
+  const daysSinceLast = daysBetween(last.date, todayStr);
+  const isOverdue = daysSinceLast > median;
+
+  return { date: nextDate, days: median, daysUntil, daysSinceLast, isOverdue };
 }
 function detectAnomaly(readings){
   if(readings.length < 3) return null;
@@ -4115,6 +4137,7 @@ const WASTE_TYPES = {
   bio: {label:'Biomüll', icon:'🌱', color:'#22c55e'},
   glas: {label:'Glasmüll', icon:'🫙', color:'#8b5cf6'},
   sperr: {label:'Sperrmüll', icon:'🛋️', color:'#f97316'},
+  abwasser: {label:'Abwasser/Grube', icon:'🚽', color:'#7c3aed'},
   sonstiges: {label:'Sonstiges', icon:'📌', color:'#6b7280'}
 };
 
@@ -4136,6 +4159,7 @@ function detectWasteType(text){
   if(t.includes('bio') || t.includes('grün') || t.includes('kompost') || t.includes('braun')) return 'bio';
   if(t.includes('glas')) return 'glas';
   if(t.includes('sperr') || t.includes('groß')) return 'sperr';
+  if(t.includes('abwasser') || t.includes('grube') || t.includes('fäkal') || t.includes('kanal')) return 'abwasser';
   return 'sonstiges';
 }
 
