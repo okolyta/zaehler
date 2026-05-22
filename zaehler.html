@@ -1335,6 +1335,18 @@ button, .btn, input[type="button"], input[type="submit"]{
   </div>
 </div>
 
+<!-- WASTE IMPORT PREVIEW MODAL -->
+<div class="modal-bg" id="wasteImportModal">
+  <div class="modal">
+    <h2>📅 Import Vorschau</h2>
+    <div id="wasteImportInfo" style="font-size:14px; margin-bottom:12px;"></div>
+    <div class="footer">
+      <button class="btn ghost" onclick="closeModal('wasteImportModal')">✖ Abbrechen</button>
+      <button class="btn ok" id="wasteImportConfirmBtn">💾 Importieren</button>
+    </div>
+  </div>
+</div>
+
 <!-- FAB AUSWAHL MODAL -->
 <div class="modal-bg" id="fabModal">
   <div class="modal" style="max-width:320px;text-align:center">
@@ -1369,7 +1381,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.8';
+const APP_VERSION = '2.9';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -4266,6 +4278,61 @@ function parseICS(text){
   return events;
 }
 
+let pendingWasteImport = null;
+
+function previewWasteImport(events, fileName) {
+  const grouped = {};
+  let newCount = 0;
+  let dupCount = 0;
+
+  events.forEach(ev => {
+    const type = detectWasteType(ev._summary);
+    const key = type + '::' + ev._summary;
+    if(!grouped[key]) grouped[key] = { type, summary: ev._summary, dates: [] };
+    grouped[key].dates.push(ev._date);
+  });
+
+  const todayStr = today();
+  Object.values(grouped).forEach(g => {
+    g.dates.sort();
+    const futureDates = g.dates.filter(d => d >= todayStr);
+    const allDates = futureDates.length ? futureDates : g.dates.slice(-5);
+    allDates.forEach(d => {
+      const exists = state.wasteSchedule.some(w => w.type === g.type && w.date === d);
+      if(!exists) newCount++;
+      else dupCount++;
+    });
+  });
+
+  if(newCount === 0) {
+    toast(dupCount > 0 ? 'Alle Termine existieren bereits.' : 'Keine gültigen Termine gefunden.', 'ok');
+    return;
+  }
+
+  const infoEl = document.getElementById('wasteImportInfo');
+  const typesHtml = Object.values(grouped).map(g => {
+    const wt = WASTE_TYPES[g.type] || WASTE_TYPES.sonstiges;
+    return `<span class="chip" style="margin-right:4px; margin-bottom:4px; display:inline-block;">${wt.icon} ${escapeHtml(g.summary)}</span>`;
+  }).join('');
+
+  infoEl.innerHTML = `
+    <p style="margin-bottom:10px;">Möchtest du <strong>${newCount} neue Termine</strong> importieren?</p>
+    <div style="margin-bottom:10px;">${typesHtml}</div>
+    ${dupCount > 0 ? `<p style="font-size:12px;color:var(--warn)">(${dupCount} Termine existieren bereits und werden übersprungen)</p>` : ''}
+  `;
+
+  pendingWasteImport = { events, fileName };
+  document.getElementById('wasteImportConfirmBtn').onclick = () => {
+    closeModal('wasteImportModal');
+    if(pendingWasteImport) {
+      processICSEvents(pendingWasteImport.events, pendingWasteImport.fileName);
+      pendingWasteImport = null;
+    }
+  };
+
+  openModal('wasteImportModal');
+}
+
 async function importWasteFile(input){
   const file = input.files[0];
   if(!file) return;
@@ -4277,7 +4344,7 @@ async function importWasteFile(input){
       try{
         const events = parseICS(e.target.result);
         if(!events.length){ toast('Keine Termine in der ICS-Datei gefunden','err'); return; }
-        processICSEvents(events, file.name);
+        previewWasteImport(events, file.name);
       }catch(err){ toast('Fehler beim Lesen der ICS-Datei','err'); }
     };
     reader.readAsText(file);
@@ -4305,7 +4372,7 @@ async function importWasteFile(input){
           toast('Keine gültigen Termine in der Tabelle gefunden','err');
           return;
         }
-        processICSEvents(events, file.name);
+        previewWasteImport(events, file.name);
       } catch(err) {
         console.error('Tabelle Parse Error:', err);
         toast('Fehler beim Lesen der Tabelle','err');
