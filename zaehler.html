@@ -620,11 +620,11 @@ button, .btn, input[type="button"], input[type="submit"]{
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <h2 style="margin:0">🗑️ Müllkalender</h2>
         <div style="display:flex;gap:6px">
-          <button class="btn sm" onclick="document.getElementById('icsFileInput').click()">📅 ICS importieren</button>
+          <button class="btn sm" onclick="document.getElementById('icsFileInput').click()">📅 Import (ICS/CSV/Excel)</button>
           <button class="btn sm ghost" onclick="openWasteManual()">+ Manuell</button>
         </div>
       </div>
-      <input type="file" id="icsFileInput" accept=".ics,.ical" style="display:none" onchange="importICSFile(this)">
+      <input type="file" id="icsFileInput" accept=".ics,.ical,.csv,.xlsx,.xls" style="display:none" onchange="importWasteFile(this)">
       <div id="wasteOverview"></div>
       <div id="wasteNextDates"></div>
     </div>
@@ -1369,7 +1369,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.7';
+const APP_VERSION = '2.8';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -4266,26 +4266,109 @@ function parseICS(text){
   return events;
 }
 
-function importICSFile(input){
+async function importWasteFile(input){
   const file = input.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const text = e.target.result;
-    try{
-      const events = parseICS(text);
-      if(!events.length){
-        toast('Keine Termine in der ICS-Datei gefunden','err');
-        return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  if(ext === 'ics' || ext === 'ical'){
+    const reader = new FileReader();
+    reader.onload = e => {
+      try{
+        const events = parseICS(e.target.result);
+        if(!events.length){ toast('Keine Termine in der ICS-Datei gefunden','err'); return; }
+        processICSEvents(events, file.name);
+      }catch(err){ toast('Fehler beim Lesen der ICS-Datei','err'); }
+    };
+    reader.readAsText(file);
+  } else if(['csv', 'xlsx', 'xls'].includes(ext)) {
+    toast('⏳ Analysiere Tabelle...', '');
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        if(typeof XLSX === 'undefined'){
+          toast('Lade Excel-Modul...', '');
+          await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+          });
+        }
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1, raw: false, dateNF: 'YYYY-MM-DD'});
+        
+        const events = extractEventsFromSheet(rows);
+        if(!events.length){
+          toast('Keine gültigen Termine in der Tabelle gefunden','err');
+          return;
+        }
+        processICSEvents(events, file.name);
+      } catch(err) {
+        console.error('Tabelle Parse Error:', err);
+        toast('Fehler beim Lesen der Tabelle','err');
       }
-      processICSEvents(events, file.name);
-    }catch(err){
-      console.error('ICS Parse Error:', err);
-      toast('ICS-Datei konnte nicht gelesen werden','err');
-    }
-  };
-  reader.readAsText(file);
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    toast('Dateiformat wird nicht unterstützt', 'err');
+  }
   input.value = '';
+}
+
+function extractEventsFromSheet(rows) {
+  const events = [];
+  for (let r = 0; r < rows.length; r++) {
+    let rowDates = [];
+    let rowTypes = [];
+    for (let c = 0; c < rows[r].length; c++) {
+      let val = String(rows[r][c] || '').trim();
+      if(!val) continue;
+      let dStr = parseGermanDate(val);
+      if(dStr) rowDates.push({c, date: dStr});
+      else if(isDefiniteWasteType(val)) rowTypes.push({c, raw: val});
+    }
+    
+    if (rowDates.length > 0 && rowTypes.length > 0) {
+      rowDates.forEach(d => {
+        rowTypes.forEach(t => events.push({ _summary: t.raw, _date: d.date }));
+      });
+    } else if (rowDates.length > 0) {
+      rowDates.forEach(d => {
+        for(let hr = 0; hr < Math.min(3, rows.length); hr++){
+           let header = String(rows[hr][d.c] || '');
+           if(isDefiniteWasteType(header)) {
+             events.push({ _summary: header, _date: d.date });
+             break;
+           }
+        }
+      });
+    }
+  }
+  return events;
+}
+
+function parseGermanDate(str) {
+  let m = str.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = str.match(/\b(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{2,4})\b/);
+  if(m) {
+    let y = m[3];
+    if(y.length === 2) y = '20' + y;
+    return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  return null;
+}
+
+function isDefiniteWasteType(text) {
+  const t = text.toLowerCase();
+  return (t.includes('rest') || t.includes('hausmüll') || t.includes('schwarz') ||
+          t.includes('gelb') || t.includes('wertstoff') || t.includes('lvp') || t.includes('sack') ||
+          t.includes('papier') || t.includes('pappe') || t.includes('blau') ||
+          t.includes('bio') || t.includes('grün') || t.includes('kompost') || t.includes('braun') ||
+          t.includes('glas') || t.includes('sperr') || t.includes('abwasser'));
 }
 
 function processICSEvents(events, fileName){
@@ -4464,7 +4547,7 @@ function renderWasteOverview(){
       <div class="ico" style="font-size:36px">📅</div>
       <p>Noch keine Mülltermine.</p>
       <p style="font-size:13px;color:var(--muted);margin-top:6px">
-        Importiere eine <strong>.ics Datei</strong> von deinem Entsorger<br>
+        Importiere eine <strong>.ics / .csv / .xlsx Datei</strong> von deinem Entsorger<br>
         oder lege Termine <strong>manuell</strong> an.
       </p>
     </div>`;
