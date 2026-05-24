@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.15';
+const APP_VERSION = '2.16';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5749,6 +5749,184 @@ function renderVehicles() {
       </div>
     </div>`;
   }).join('');
+}
+
+// --- KFZ Fahrtenbuch Logik (Etappe 3) ---
+let currentLogVehId = null;
+
+function initVehLogModal() {
+  const html = `
+  <div id="vehLogModal" class="modal">
+    <div class="modal-content" style="max-width:500px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 id="vehLogTitle" style="margin:0;">Fahrtenbuch</h3>
+        <span class="close" onclick="closeModal('vehLogModal')" style="font-size:24px;cursor:pointer;">&times;</span>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <h4 style="margin-top:0;margin-bottom:8px;">Neuer Eintrag</h4>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px;display:block;margin-bottom:2px;">Datum</label>
+            <input type="date" id="vehLogDate" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px;display:block;margin-bottom:2px;">Art</label>
+            <select id="vehLogType" onchange="updateVehLogUI()" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+              <option value="tanken">Tanken</option>
+              <option value="laden">Laden</option>
+              <option value="wartung">Wartung/Insp.</option>
+              <option value="reparatur">Reparatur</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px;display:block;margin-bottom:2px;">KM-Stand</label>
+            <input type="number" id="vehLogMileage" placeholder="z.B. 55000" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+          </div>
+          <div style="flex:1;" id="vehLogAmountCol">
+            <label id="vehLogAmountLbl" style="font-size:11px;display:block;margin-bottom:2px;">Menge (L)</label>
+            <input type="number" step="0.01" id="vehLogAmount" placeholder="z.B. 40.5" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px;display:block;margin-bottom:2px;">Kosten (€)</label>
+            <input type="number" step="0.01" id="vehLogCost" placeholder="0.00" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px;display:block;margin-bottom:2px;">Notiz</label>
+            <input type="text" id="vehLogNotes" placeholder="Optional" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);box-sizing:border-box;">
+          </div>
+        </div>
+        <button class="btn" onclick="saveVehLog()" style="width:100%;background:var(--acc);color:#fff;border:none;padding:8px;border-radius:4px;cursor:pointer;margin-top:4px;">Speichern</button>
+      </div>
+      
+      <div class="card">
+        <h4 style="margin-top:0;margin-bottom:8px;">Historie</h4>
+        <div id="vehLogList" style="max-height:350px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px;"></div>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function openVehicleLog(vehId) {
+  currentLogVehId = vehId;
+  const v = state.vehicles.find(x => x.id === vehId);
+  if(!v) return;
+
+  if(!document.getElementById('vehLogModal')) {
+    initVehLogModal();
+  }
+
+  document.getElementById('vehLogTitle').innerText = 'Fahrtenbuch: ' + (v.licensePlate || v.brand);
+  document.getElementById('vehLogDate').value = new Date().toISOString().split('T')[0];
+  
+  const isEV = v.type && v.type.toLowerCase() === 'elektro';
+  document.getElementById('vehLogType').value = isEV ? 'laden' : 'tanken';
+  
+  document.getElementById('vehLogMileage').value = '';
+  document.getElementById('vehLogAmount').value = '';
+  document.getElementById('vehLogCost').value = '';
+  document.getElementById('vehLogNotes').value = '';
+  
+  updateVehLogUI();
+  renderVehLogs();
+  openModal('vehLogModal');
+}
+
+function updateVehLogUI() {
+  const t = document.getElementById('vehLogType').value;
+  const col = document.getElementById('vehLogAmountCol');
+  const lbl = document.getElementById('vehLogAmountLbl');
+  if(t === 'tanken') { col.style.display='block'; lbl.innerText='Menge (L)'; }
+  else if(t === 'laden') { col.style.display='block'; lbl.innerText='Menge (kWh)'; }
+  else { col.style.display='none'; }
+}
+
+async function saveVehLog() {
+  const date = document.getElementById('vehLogDate').value;
+  const type = document.getElementById('vehLogType').value;
+  const mileage = parseInt(document.getElementById('vehLogMileage').value, 10);
+  const amount = parseFloat(document.getElementById('vehLogAmount').value) || 0;
+  const cost = parseFloat(document.getElementById('vehLogCost').value) || 0;
+  const notes = document.getElementById('vehLogNotes').value.trim();
+
+  if(!date || !type || isNaN(mileage)) {
+    toast('Datum, Art und KM-Stand benötigt', 'warn');
+    return;
+  }
+
+  if(!state.vehicleLogs) state.vehicleLogs = [];
+  state.vehicleLogs.push({
+    id: uid(),
+    vehId: currentLogVehId,
+    date, type, mileage, amount, cost, notes,
+    timestamp: Date.now()
+  });
+
+  if(typeof saveData === 'function') await saveData();
+  toast('Eintrag gespeichert');
+  
+  document.getElementById('vehLogAmount').value = '';
+  document.getElementById('vehLogCost').value = '';
+  document.getElementById('vehLogNotes').value = '';
+  
+  renderVehLogs();
+}
+
+function renderVehLogs() {
+  const list = document.getElementById('vehLogList');
+  if(!state.vehicleLogs) state.vehicleLogs = [];
+  const logs = state.vehicleLogs.filter(x => x.vehId === currentLogVehId).sort((a,b) => new Date(b.date) - new Date(a.date) || b.mileage - a.mileage);
+  
+  if(logs.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);">Noch keine Einträge.</div>';
+    return;
+  }
+
+  let html = '';
+  logs.forEach((l, i) => {
+    let consStr = '';
+    if((l.type==='tanken'||l.type==='laden') && l.amount>0) {
+      const prev = logs.slice(i+1).find(x => x.type===l.type && x.mileage < l.mileage);
+      if(prev) {
+        const dist = l.mileage - prev.mileage;
+        if(dist > 0) {
+          const cons = (l.amount / dist) * 100;
+          const unit = l.type==='tanken' ? 'L/100km' : 'kWh/100km';
+          consStr = `<span style="color:var(--acc);font-weight:bold;font-size:11px;margin-left:8px;">Ø ${cons.toFixed(1)} ${unit}</span>`;
+        }
+      }
+    }
+    
+    let icon = '📝';
+    if(l.type==='tanken') icon='⛽';
+    if(l.type==='laden') icon='⚡';
+    if(l.type==='wartung') icon='🔧';
+    if(l.type==='reparatur') icon='🛠️';
+
+    let amountStr = (l.type==='tanken'||l.type==='laden') && l.amount ? ` | ${l.amount}${l.type==='tanken'?'L':'kWh'}` : '';
+    
+    html += `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:8px;font-size:12px;position:relative;margin-bottom:4px;">
+      <span style="position:absolute;top:6px;right:6px;color:var(--danger);font-size:14px;cursor:pointer;" onclick="deleteVehLog('${l.id}')">🗑️</span>
+      <div style="font-weight:bold;margin-bottom:4px;font-size:13px;">${icon} ${l.date} - ${l.type.toUpperCase()}</div>
+      <div style="margin-bottom:2px;">KM: ${l.mileage}${amountStr} | ${l.cost ? l.cost.toFixed(2)+'€' : '0.00€'} ${consStr}</div>
+      ${l.notes ? `<div style="color:var(--muted);font-style:italic;">${l.notes}</div>` : ''}
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+async function deleteVehLog(id) {
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  state.vehicleLogs = state.vehicleLogs.filter(x => x.id !== id);
+  if(typeof saveData === 'function') await saveData();
+  toast('Eintrag gelöscht');
+  renderVehLogs();
 }
 
 let editingVehId = null;
