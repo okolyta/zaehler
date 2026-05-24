@@ -1356,6 +1356,88 @@ button, .btn, input[type="button"], input[type="submit"]{
   </div>
 </div>
 
+<!-- VEHICLE MODAL -->
+<div class="modal-bg" id="vehicleModal">
+  <div class="modal" style="display:flex;flex-direction:column;max-height:90vh;padding:0">
+    <div style="padding:18px 18px 0;flex-shrink:0">
+      <h2 id="vehicleModalTitle">Fahrzeug bearbeiten</h2>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:0 18px">
+      
+      <div style="background:var(--card2);padding:12px;border-radius:10px;margin-top:10px;margin-bottom:14px;border:1px dashed var(--acc)">
+        <h3 style="margin-bottom:8px;font-size:14px;color:var(--acc)">🪄 KI-Fahrzeugschein-Scanner</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn sm" onclick="document.getElementById('vehDocCamera').click()">📷 Foto machen</button>
+          <button class="btn sm ghost" onclick="document.getElementById('vehDocFile').click()">📁 Datei wählen</button>
+        </div>
+        <input type="file" id="vehDocCamera" accept="image/*" capture="environment" style="display:none" onchange="handleVehDoc(this)">
+        <input type="file" id="vehDocFile" accept="image/*,.pdf" style="display:none" onchange="handleVehDoc(this)">
+        <div id="vehDocPreview" style="display:none;margin-top:8px">
+          <span id="vehDocName" style="font-size:12px;color:var(--muted)"></span>
+          <button class="btn sm" id="btnVehAnalyze" onclick="scanVehicleDocWithKI()" style="background:var(--acc2);margin-top:6px;width:100%">🧠 Schein analysieren</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Art</label>
+          <select id="vehType">
+            <option value="car">🚗 Auto</option>
+            <option value="motorcycle">🏍️ Motorrad</option>
+            <option value="trailer">🚐 Anhänger</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Kennzeichen</label>
+          <input type="text" id="vehPlate" placeholder="z.B. B-XX 1234">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Marke</label><input type="text" id="vehBrand" placeholder="z.B. VW"></div>
+        <div class="field"><label>Modell</label><input type="text" id="vehModel" placeholder="z.B. Golf"></div>
+      </div>
+      <div class="field">
+        <label>Fahrgestellnummer (VIN)</label>
+        <input type="text" id="vehVin" style="font-family:monospace;text-transform:uppercase">
+      </div>
+      <div class="row">
+        <div class="field"><label>HSN / TSN</label><input type="text" id="vehHsnTsn" placeholder="z.B. 0603 / ABC"></div>
+        <div class="field"><label>Erstzulassung</label><input type="date" id="vehEz"></div>
+      </div>
+      
+      <div class="field">
+        <label>Nächster TÜV / HU</label>
+        <input type="date" id="vehTuev">
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Legt automatisch eine Erinnerung an</div>
+      </div>
+
+      <details style="margin:10px 0">
+        <summary style="cursor:pointer;font-size:14px;font-weight:500;color:var(--acc)">🛞 Reifen & Bereifung</summary>
+        <div style="margin-top:10px">
+          <div class="field"><label>Zulässige Reifengrößen</label><textarea id="vehTires" rows="2" placeholder="z.B. 205/55 R16 91V"></textarea></div>
+        </div>
+      </details>
+
+      <details style="margin:10px 0">
+        <summary style="cursor:pointer;font-size:14px;font-weight:500;color:var(--acc)">🛡️ Versicherung & ADAC</summary>
+        <div style="margin-top:10px">
+          <div class="field"><label>Anbieter (z.B. ADAC, HUK)</label><input type="text" id="vehInsName"></div>
+          <div class="field"><label>Vertrags- / Mitgliedsnummer</label><input type="text" id="vehInsPolicy"></div>
+          <div class="field"><label>Notfall-Telefonnummer</label><input type="tel" id="vehInsPhone" placeholder="+49..."></div>
+          <div class="field"><label>Kündigungsfrist / Wechsel möglich bis</label><input type="date" id="vehInsCancel"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:-8px;margin-bottom:12px">Legt automatisch eine Kündigungs-Erinnerung an</div>
+        </div>
+      </details>
+
+    </div>
+    <div class="footer" style="flex-shrink:0;padding:14px 18px;border-top:1px solid var(--border);margin-top:0">
+      <button class="btn ghost" onclick="closeModal('vehicleModal')">✖ Abbrechen</button>
+      <button class="btn err" id="vehDelBtn" onclick="deleteVehicle()" style="display:none">🗑️ Löschen</button>
+      <button class="btn ok" onclick="saveVehicle()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- FAB AUSWAHL MODAL -->
 <div class="modal-bg" id="fabModal">
   <div class="modal" style="max-width:320px;text-align:center">
@@ -1390,7 +1472,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.10';
+const APP_VERSION = '2.11';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5657,8 +5739,158 @@ function renderVehicles() {
   }).join('');
 }
 
+let editingVehId = null;
+let vehSelectedFile = null;
+
 function openVehicleModal(id) {
-  toast('Fahrzeug-Dialog kommt in Etappe 2!', 'ok');
+  editingVehId = id || null;
+  document.getElementById('vehicleModalTitle').textContent = id ? 'Fahrzeug bearbeiten' : 'Neues Fahrzeug';
+  document.getElementById('vehDelBtn').style.display = id ? 'inline-flex' : 'none';
+  
+  const v = state.vehicles.find(x => x.id === id) || {};
+  
+  document.getElementById('vehType').value = v.type || 'car';
+  document.getElementById('vehPlate').value = v.licensePlate || '';
+  document.getElementById('vehBrand').value = v.brand || '';
+  document.getElementById('vehModel').value = v.model || '';
+  document.getElementById('vehVin').value = v.vin || '';
+  document.getElementById('vehHsnTsn').value = v.hsnTsn || '';
+  document.getElementById('vehEz').value = v.ezDate || '';
+  document.getElementById('vehTuev').value = v.tuevDate || '';
+  document.getElementById('vehTires').value = v.tires || '';
+  
+  document.getElementById('vehInsName').value = v.insName || '';
+  document.getElementById('vehInsPolicy').value = v.insPolicy || '';
+  document.getElementById('vehInsPhone').value = v.insPhone || '';
+  document.getElementById('vehInsCancel').value = v.insCancel || '';
+  
+  vehSelectedFile = null;
+  document.getElementById('vehDocPreview').style.display = 'none';
+  
+  openModal('vehicleModal');
+}
+
+function saveVehicle() {
+  const brand = document.getElementById('vehBrand').value.trim();
+  const plate = document.getElementById('vehPlate').value.trim();
+  if(!brand) { toast('Marke fehlt', 'err'); return; }
+
+  const v = {
+    type: document.getElementById('vehType').value,
+    licensePlate: plate,
+    brand: brand,
+    model: document.getElementById('vehModel').value.trim(),
+    vin: document.getElementById('vehVin').value.trim(),
+    hsnTsn: document.getElementById('vehHsnTsn').value.trim(),
+    ezDate: document.getElementById('vehEz').value,
+    tuevDate: document.getElementById('vehTuev').value,
+    tires: document.getElementById('vehTires').value.trim(),
+    insName: document.getElementById('vehInsName').value.trim(),
+    insPolicy: document.getElementById('vehInsPolicy').value.trim(),
+    insPhone: document.getElementById('vehInsPhone').value.trim(),
+    insCancel: document.getElementById('vehInsCancel').value
+  };
+
+  if(editingVehId) {
+    const idx = state.vehicles.findIndex(x => x.id === editingVehId);
+    if(idx >= 0) state.vehicles[idx] = { ...state.vehicles[idx], ...v };
+  } else {
+    state.vehicles.push({ id: uid(), ...v });
+  }
+
+  // Auto-Termin TÜV
+  if(v.tuevDate) {
+    const exists = state.appointments.some(a => a.title.includes('TÜV') && a.title.includes(plate || brand));
+    if(!exists) {
+      state.appointments.push({
+        id: uid(), title: 'TÜV / HU: ' + (plate || brand), cat: 'sonstiges', propId: '',
+        date: v.tuevDate, time: '', repeat: 'none', note: 'Automatisch aus Kfz erstellt', reminders: [30, 14, 7], calId: ''
+      });
+    }
+  }
+  // Auto-Termin Versicherung
+  if(v.insCancel) {
+    const exists = state.appointments.some(a => a.title.includes('Kündigungsfrist Kfz') && a.title.includes(plate || brand));
+    if(!exists) {
+      state.appointments.push({
+        id: uid(), title: 'Kündigungsfrist Kfz: ' + (plate || brand), cat: 'versicherung', propId: '',
+        date: v.insCancel, time: '', repeat: 'none', note: 'Wechsel möglich / ' + v.insName, reminders: [14, 7, 1], calId: ''
+      });
+    }
+  }
+
+  save();
+  closeModal('vehicleModal');
+  renderVehicles();
+  toast('Fahrzeug gespeichert ✓', 'ok');
+}
+
+function deleteVehicle() {
+  if(!confirm('Fahrzeug komplett löschen? (Logbuch-Einträge bleiben vorerst erhalten)')) return;
+  state.vehicles = state.vehicles.filter(x => x.id !== editingVehId);
+  save();
+  closeModal('vehicleModal');
+  renderVehicles();
+  toast('Fahrzeug gelöscht', 'ok');
+}
+
+function handleVehDoc(input) {
+  const f = input.files[0];
+  if(!f) return;
+  vehSelectedFile = f;
+  document.getElementById('vehDocName').textContent = '📄 ' + f.name;
+  document.getElementById('vehDocPreview').style.display = 'block';
+  input.value = '';
+}
+
+async function scanVehicleDocWithKI() {
+  if(!vehSelectedFile) return;
+  if(!settings.openrouterKey) { toast('Kein OpenRouter API-Key hinterlegt!', 'err'); return; }
+  
+  const btn = document.getElementById('btnVehAnalyze');
+  btn.textContent = '⏳ Analysiere Fahrzeugschein...';
+  btn.disabled = true;
+
+  try {
+    const dataUrl = await fileToDataUrl(vehSelectedFile);
+    const model = settings.docAnalysisModel || settings.ocrModel || 'google/gemini-flash-1.5-8b';
+    
+    const prompt = 'Du liest eine deutsche Zulassungsbescheinigung Teil I (Fahrzeugschein). Extrahiere diese Daten exakt und antworte NUR mit validem JSON:\\n{"kennzeichen":"z.B. B-AB 123","marke":"","modell":"","vin":"","hsn":"Feld 2.1","tsn":"Feld 2.2","ez":"Feld B (YYYY-MM-DD)"}\\nFalls etwas nicht erkennbar ist, setze es null.';
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{'Authorization': `Bearer ${settings.openrouterKey}`,'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model,
+        messages:[{ role:'user', content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:dataUrl}}] }],
+        max_tokens: 300, temperature: 0.1
+      })
+    });
+
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const reply = (json.choices?.[0]?.message?.content||'').trim();
+    const match = reply.match(/\{[\s\S]*\}/);
+    if(!match) throw new Error('Kein JSON gefunden');
+    
+    const data = JSON.parse(match[0]);
+    
+    if(data.kennzeichen) document.getElementById('vehPlate').value = data.kennzeichen;
+    if(data.marke) document.getElementById('vehBrand').value = data.marke;
+    if(data.modell) document.getElementById('vehModel').value = data.modell;
+    if(data.vin) document.getElementById('vehVin').value = data.vin;
+    if(data.hsn && data.tsn) document.getElementById('vehHsnTsn').value = data.hsn + ' / ' + data.tsn;
+    else if(data.hsn) document.getElementById('vehHsnTsn').value = data.hsn;
+    if(data.ez) document.getElementById('vehEz').value = data.ez;
+
+    toast('Fahrzeugschein erfolgreich gelesen! ✅', 'ok');
+  } catch(e) {
+    toast('Fehler beim KI-Scan: ' + e.message, 'err');
+    console.error(e);
+  } finally {
+    btn.textContent = '🧠 Schein analysieren';
+    btn.disabled = false;
+  }
 }
 
 function openVehicleLog(id) {
