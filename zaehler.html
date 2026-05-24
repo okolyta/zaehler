@@ -545,6 +545,7 @@ button, .btn, input[type="button"], input[type="submit"]{
   <div class="tab" data-tab="appointments">📅 Termine</div>
   <div class="tab" data-tab="stats">📈 Statistik</div>
   <div class="tab" data-tab="costs">💰 Kosten</div>
+  <div class="tab" data-tab="vehicles">🚗 Kfz</div>
   <div class="tab" data-tab="docs">📄 Dokumente</div>
   <div class="tab" data-tab="settings">⚙️ Einstellungen</div>
 </div>
@@ -656,6 +657,14 @@ button, .btn, input[type="button"], input[type="submit"]{
     </div>
     <div id="costSummary"></div>
     <div id="costList"></div>
+  </div>
+
+  <div class="page" id="page-vehicles" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>🚗 Fahrzeuge & Kfz</h2>
+      <button class="btn" onclick="openVehicleModal()">+ Fahrzeug</button>
+    </div>
+    <div id="vehicleList"></div>
   </div>
 
   <div class="page" id="page-docs" style="display:none">
@@ -1381,7 +1390,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.9';
+const APP_VERSION = '2.10';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1533,7 +1542,7 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [] };
+let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [] };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
@@ -1613,6 +1622,8 @@ function load(){
   if(!state.documents) state.documents=[];
   if(!state.costs) state.costs=[];
   if(!state.wasteSchedule) state.wasteSchedule=[];
+  if(!state.vehicles) state.vehicles=[];
+  if(!state.vehicleLogs) state.vehicleLogs=[];
   if(!settings.docCategories || !settings.docCategories.length){
     settings.docCategories=[
       {id:'rechnung',    label:'Rechnung',             icon:'📋'},
@@ -5616,6 +5627,44 @@ function deleteDocCategory(index){
   toast('Kategorie gelöscht','ok');
 }
 
+/* ----- Kfz / Vehicles ----- */
+function renderVehicles() {
+  const c = document.getElementById('vehicleList');
+  if(!c) return;
+  if(!state.vehicles || !state.vehicles.length) {
+    c.innerHTML = `<div class="empty"><div class="ico">🚗</div>
+      <p>Noch keine Fahrzeuge angelegt.</p>
+      <p style="margin-top:10px;font-size:13px">Verwalte Autos, Motorräder oder Anhänger inkl. TÜV, Tanken, Kosten & Rechnungen.</p>
+      <p style="margin-top:10px"><button class="btn" onclick="openVehicleModal()">+ Erstes Fahrzeug anlegen</button></p>
+    </div>`;
+    return;
+  }
+  
+  c.innerHTML = state.vehicles.map(v => {
+    const icon = v.type === 'motorcycle' ? '🏍️' : v.type === 'trailer' ? '🚐' : '🚗';
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2>${icon} ${escapeHtml(v.brand)} ${escapeHtml(v.model)}</h2>
+          <div style="font-size:13px;color:var(--muted)">Kennzeichen: <strong>${escapeHtml(v.licensePlate || '—')}</strong></div>
+        </div>
+        <button class="btn sm ghost" onclick="openVehicleModal('${v.id}')">✏️ Bearbeiten</button>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:6px">
+        <button class="btn sm ghost" onclick="openVehicleLog('${v.id}')">📊 Logbuch & Tanken</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openVehicleModal(id) {
+  toast('Fahrzeug-Dialog kommt in Etappe 2!', 'ok');
+}
+
+function openVehicleLog(id) {
+  toast('Logbuch kommt in Etappe 3!', 'ok');
+}
+
 /* ----- Photo Sources ----- */
 function openPhotoSource(source){
   if(source==='camera') document.getElementById('readPhotoCamera').click();
@@ -6395,6 +6444,7 @@ function render(tab){
   else if(tab==='appointments') renderAppointments();
   else if(tab==='stats') renderStats();
   else if(tab==='costs') renderCosts();
+  else if(tab==='vehicles') renderVehicles();
   else if(tab==='docs') renderDocuments();
   else if(tab==='settings') renderSettingsExtras();
   const ds = document.getElementById('dataSize');
@@ -6781,6 +6831,8 @@ function mergeState(local, remote){
     documents: mergeArr(local.documents||[], remote.documents||[]),
     costs: mergeArr(local.costs||[], remote.costs||[]),
     wasteSchedule: mergeArr(local.wasteSchedule||[], remote.wasteSchedule||[]),
+    vehicles: mergeArr(local.vehicles||[], remote.vehicles||[]),
+    vehicleLogs: mergeArr(local.vehicleLogs||[], remote.vehicleLogs||[]),
   };
 }
 async function uploadDrive(isNew){
@@ -6871,8 +6923,8 @@ document.addEventListener('keydown', e => {
   }
   if(inField) return;
   if(e.key === '?'){ openShortcutHelp(); e.preventDefault(); return; }
-  if(['1','2','3','4','5','6','7','8'].includes(e.key)){
-    const tabs = ['dashboard','properties','readings','appointments','stats','costs','docs','settings'];
+  if(['1','2','3','4','5','6','7','8','9'].includes(e.key)){
+    const tabs = ['dashboard','properties','readings','appointments','stats','costs','vehicles','docs','settings'];
     switchTab(tabs[parseInt(e.key)-1]); e.preventDefault(); return;
   }
   if(e.ctrlKey || e.metaKey){
