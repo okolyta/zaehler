@@ -1401,7 +1401,11 @@ button, .btn, input[type="button"], input[type="submit"]{
         <input type="text" id="vehVin" style="font-family:monospace;text-transform:uppercase">
       </div>
       <div class="row">
-        <div class="field"><label>HSN / TSN</label><input type="text" id="vehHsnTsn" placeholder="z.B. 0603 / ABC"></div>
+        <div class="field">
+          <label>HSN / TSN</label>
+          <input type="text" id="vehHsnTsn" placeholder="z.B. 0603 / ABC" oninput="updateHsnTsnLink()">
+          <div id="vehHsnLink" style="margin-top:4px;display:none"></div>
+        </div>
         <div class="field"><label>Erstzulassung</label><input type="date" id="vehEz"></div>
       </div>
       
@@ -1472,7 +1476,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.11';
+const APP_VERSION = '2.12';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5761,6 +5765,8 @@ function openVehicleModal(id) {
   
   document.getElementById('vehInsName').value = v.insName || '';
   document.getElementById('vehInsPolicy').value = v.insPolicy || '';
+  
+  updateHsnTsnLink();
   document.getElementById('vehInsPhone').value = v.insPhone || '';
   document.getElementById('vehInsCancel').value = v.insCancel || '';
   
@@ -5855,7 +5861,13 @@ async function scanVehicleDocWithKI() {
     const dataUrl = await fileToDataUrl(vehSelectedFile);
     const model = settings.docAnalysisModel || settings.ocrModel || 'google/gemini-flash-1.5-8b';
     
-    const prompt = 'Du liest eine deutsche Zulassungsbescheinigung Teil I (Fahrzeugschein). Extrahiere diese Daten exakt und antworte NUR mit validem JSON:\\n{"kennzeichen":"z.B. B-AB 123","marke":"","modell":"","vin":"","hsn":"Feld 2.1","tsn":"Feld 2.2","ez":"Feld B (YYYY-MM-DD)"}\\nFalls etwas nicht erkennbar ist, setze es null.';
+    const prompt = `Lies die deutsche Zulassungsbescheinigung Teil I exakt aus. ACHTE AUF FOLGENDE FELDER:
+- "kennzeichen": Steht ganz links unter 'A Amtliches Kennzeichen' (z.B. B KT 2580 E).
+- "hsn": EXAKT Feld 2.1 (oben mittig, genau 4 Ziffern). Benutze NIEMALS Feld V.9!
+- "tsn": EXAKT Feld 2.2 (rechts neben 2.1). Benutze NIEMALS Feld V.9!
+- "reifen": Kombiniere Feld 15.1 und 15.2 (rechts unten, z.B. 165/65 R15 ...).
+Antworte NUR mit folgendem JSON:
+{"kennzeichen":"","marke":"Feld 2","modell":"Feld D.3","vin":"Feld E","hsn":"","tsn":"","ez":"Feld B (YYYY-MM-DD)","reifen":""}`;
 
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method:'POST',
@@ -5882,7 +5894,9 @@ async function scanVehicleDocWithKI() {
     if(data.hsn && data.tsn) document.getElementById('vehHsnTsn').value = data.hsn + ' / ' + data.tsn;
     else if(data.hsn) document.getElementById('vehHsnTsn').value = data.hsn;
     if(data.ez) document.getElementById('vehEz').value = data.ez;
+    if(data.reifen) document.getElementById('vehTires').value = data.reifen;
 
+    updateHsnTsnLink(); // Smart-Link sofort einblenden
     toast('Fahrzeugschein erfolgreich gelesen! ✅', 'ok');
   } catch(e) {
     toast('Fehler beim KI-Scan: ' + e.message, 'err');
@@ -5890,6 +5904,25 @@ async function scanVehicleDocWithKI() {
   } finally {
     btn.textContent = '🧠 Schein analysieren';
     btn.disabled = false;
+  }
+}
+
+function updateHsnTsnLink() {
+  const val = document.getElementById('vehHsnTsn').value.replace(/\s/g, '').replace('/', '');
+  const linkEl = document.getElementById('vehHsnLink');
+  
+  // HSN hat 4 Stellen, TSN meist 3 (wir brauchen mind. 7 Zeichen)
+  if(val.length >= 7) {
+    const hsn = val.substring(0, 4);
+    const tsn = val.substring(4, 7);
+    const searchUrl = `https://www.google.com/search?q=Typklasse+Versicherung+HSN+${hsn}+TSN+${tsn}`;
+    
+    linkEl.innerHTML = `<a href="${searchUrl}" target="_blank" style="font-size:11px;color:var(--acc);text-decoration:none;display:flex;align-items:center;gap:4px;">
+      🔍 Typklasse & Fahrzeugdaten abrufen
+    </a>`;
+    linkEl.style.display = 'block';
+  } else {
+    linkEl.style.display = 'none';
   }
 }
 
