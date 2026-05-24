@@ -1376,6 +1376,7 @@ button, .btn, input[type="button"], input[type="submit"]{
           <span id="vehDocName" style="font-size:12px;color:var(--muted)"></span>
           <button class="btn sm" id="btnVehAnalyze" onclick="scanVehicleDocWithKI()" style="background:var(--acc2);margin-top:6px;width:100%">🧠 Schein analysieren</button>
         </div>
+        <div id="vehExistingDoc" style="margin-top:8px;font-size:12px;display:none"></div>
       </div>
 
       <div class="row">
@@ -1482,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.14';
+const APP_VERSION = '2.15';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5742,8 +5743,9 @@ function renderVehicles() {
         </div>
         <button class="btn sm ghost" onclick="openVehicleModal('${v.id}')">✏️ Bearbeiten</button>
       </div>
-      <div style="margin-top:12px;display:flex;gap:6px">
+      <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn sm ghost" onclick="openVehicleLog('${v.id}')">📊 Logbuch & Tanken</button>
+        ${v.docDriveLink ? `<a href="${v.docDriveLink}" target="_blank" class="btn sm ghost" style="text-decoration:none">📄 Schein ansehen</a>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -5779,10 +5781,18 @@ function openVehicleModal(id) {
   vehSelectedFile = null;
   document.getElementById('vehDocPreview').style.display = 'none';
   
+  const exDoc = document.getElementById('vehExistingDoc');
+  if(v.docDriveLink) {
+    exDoc.innerHTML = `✅ Gespeichert: <a href="${v.docDriveLink}" target="_blank" style="color:var(--acc);text-decoration:none">📄 Fahrzeugschein öffnen</a>`;
+    exDoc.style.display = 'block';
+  } else {
+    exDoc.style.display = 'none';
+  }
+  
   openModal('vehicleModal');
 }
 
-function saveVehicle() {
+async function saveVehicle() {
   const brand = document.getElementById('vehBrand').value.trim();
   const plate = document.getElementById('vehPlate').value.trim();
   if(!brand) { toast('Marke fehlt', 'err'); return; }
@@ -5803,11 +5813,51 @@ function saveVehicle() {
     insCancel: document.getElementById('vehInsCancel').value
   };
 
+  const isNew = !editingVehId;
+  const targetId = isNew ? uid() : editingVehId;
+
+  if(vehSelectedFile && gIsSignedIn()) {
+    toast('⏳ Lade Dokument in Google Drive hoch...', '');
+    try {
+      if(!driveKfzFolderId) await ensureDriveStructure();
+      const folderName = plate || brand || 'Unbekannt';
+      const safeFolder = folderName.replace(/[\\/:*?"<>|]/g,'_');
+      const targetFolderId = await getOrCreateCachedFolder(safeFolder, driveKfzFolderId);
+      
+      const res = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const base64 = e.target.result.split(',')[1];
+            const meta = {name: vehSelectedFile.name, parents:[targetFolderId]};
+            const boundary = '-------veh_doc';
+            const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${vehSelectedFile.type||'application/octet-stream'}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64}\r\n--${boundary}--`;
+            const r = await gapi.client.request({path:'/upload/drive/v3/files',method:'POST',params:{uploadType:'multipart',fields:'id,webViewLink'},headers:{'Content-Type':'multipart/related; boundary='+boundary},body});
+            resolve(r.result);
+          }catch(err){reject(err);}
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(vehSelectedFile);
+      });
+      v.docDriveId = res.id;
+      v.docDriveLink = res.webViewLink;
+    } catch(err) {
+      console.error('Kfz Doc Upload Error:', err);
+      toast('⚠️ Upload fehlgeschlagen', 'warn');
+    }
+  }
+
   if(editingVehId) {
     const idx = state.vehicles.findIndex(x => x.id === editingVehId);
-    if(idx >= 0) state.vehicles[idx] = { ...state.vehicles[idx], ...v };
+    if(idx >= 0) {
+      if(!v.docDriveLink && state.vehicles[idx].docDriveLink) {
+        v.docDriveId = state.vehicles[idx].docDriveId;
+        v.docDriveLink = state.vehicles[idx].docDriveLink;
+      }
+      state.vehicles[idx] = { ...state.vehicles[idx], ...v };
+    }
   } else {
-    state.vehicles.push({ id: uid(), ...v });
+    state.vehicles.push({ id: targetId, ...v });
   }
 
   // Auto-Termin TÜV
@@ -6865,6 +6915,7 @@ let driveRootFolderId = null;
 let drivePhotoFolderId = null;
 let driveDocFolderId = null;
 let driveCostFolderId = null;
+let driveKfzFolderId = null;
 let driveFolderCache = {};
 const DRIVE_FILE_NAME = 'zaehler-data.json';
 const DRIVE_ROOT_FOLDER = 'Zaehler-App';
@@ -7013,7 +7064,9 @@ async function ensureDriveStructure(){
   driveDocFolderId = docs.id;
   const costs = await findOrCreateDriveFolder('Kosten', driveRootFolderId);
   driveCostFolderId = costs.id;
-  return { rootId: driveRootFolderId, photoId: drivePhotoFolderId, docId: driveDocFolderId, costId: driveCostFolderId };
+  const kfz = await findOrCreateDriveFolder('Kfz', driveRootFolderId);
+  driveKfzFolderId = kfz.id;
+  return { rootId: driveRootFolderId, photoId: drivePhotoFolderId, docId: driveDocFolderId, costId: driveCostFolderId, kfzId: driveKfzFolderId };
 }
 
 async function getOrCreateCachedFolder(name, parentId){
