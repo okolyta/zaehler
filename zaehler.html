@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.23';
+const APP_VERSION = '2.24';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -7923,13 +7923,39 @@ function openQuickKfzPick() {
 function ensureDashboardKfzBtn() {
     if(!state.vehicles || state.vehicles.length === 0) return;
 
-    // 1. Aggressives Aufräumen von falschen Buttons (stellt Navigation wieder her)
-    ['quickKfzBtn', 'dashKfzBtn', 'dashKfzTopBtn'].forEach(id => {
+    // Alles radikal bereinigen, was wir in vorherigen Versuchen gebaut haben
+    ['quickKfzBtn', 'dashKfzBtn', 'dashKfzTopBtn', 'dashKfzTopBtnSafe', 'fabKfzBtnSafe', 'fabKfzBtnFinal', 'dashKfzTopBtnFinal'].forEach(id => {
         const el = document.getElementById(id);
         if(el) el.remove();
     });
 
-    // 2. Plus-Menü Fix (Inline-Events verhindern das "Sync"-Formular-Absenden)
+    // 100% bombensichere, global erreichbare Funktion
+    window.openQuickKfzPick = function(e) {
+        if(e) { e.preventDefault(); e.stopPropagation(); }
+        // Alle Menüs schließen
+        document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+        
+        if(!state.vehicles || state.vehicles.length === 0) return;
+        
+        if(state.vehicles.length === 1) {
+            if(typeof openVehLogModalNew === 'function') {
+                openVehLogModalNew(state.vehicles[0].id);
+            } else {
+                alert('Fehler: Fahrtenbuch-Funktion nicht gefunden!');
+            }
+        } else {
+            let pickHtml = state.vehicles.map(v => `<div class="btn" style="width:100%;margin-bottom:8px;padding:12px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:14px;border-radius:6px;text-align:center;cursor:pointer;" onclick="document.getElementById('kfzPickModal').style.display='none'; openVehLogModalNew('${v.id}')">${v.brand} - ${v.licensePlate || 'Ohne Kennzeichen'}</div>`).join('');
+            let pickModal = document.getElementById('kfzPickModal');
+            if(!pickModal) {
+                document.body.insertAdjacentHTML('beforeend', `<div id="kfzPickModal" class="modal" style="z-index:99999;"><div class="modal-content" style="max-width:400px;"><span class="close" onclick="document.getElementById('kfzPickModal').style.display='none'">&times;</span><h3 style="margin-top:0;">Fahrzeug wählen</h3><div id="kfzPickList"></div></div></div>`);
+                pickModal = document.getElementById('kfzPickModal');
+            }
+            document.getElementById('kfzPickList').innerHTML = pickHtml;
+            pickModal.style.display = 'block';
+        }
+    };
+
+    // 1. Plus-Menü -> Wir nutzen ein <div>, KEINEN <button>, um Formular-Sync-Bugs zu killen!
     const allBtns = document.querySelectorAll('button, .btn, div.btn');
     let addEntryBtn = null;
     for(let b of allBtns) {
@@ -7939,36 +7965,27 @@ function ensureDashboardKfzBtn() {
         }
     }
     
-    if(addEntryBtn && addEntryBtn.parentElement && !document.getElementById('fabKfzBtnSafe')) {
-        const oldFab = document.getElementById('fabKfzBtn'); if(oldFab) oldFab.remove();
+    if(addEntryBtn && addEntryBtn.parentElement && !document.getElementById('fabKfzBtnFinal')) {
+        const divBtn = document.createElement('div');
+        divBtn.id = 'fabKfzBtnFinal';
+        divBtn.className = 'btn';
+        divBtn.style.cssText = 'width:100%; padding:14px; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; border-radius:8px; font-size:16px; font-weight:bold; margin-top:10px; margin-bottom:5px; cursor:pointer; text-align:center; box-sizing:border-box; display:block;';
+        divBtn.innerHTML = '⛽ Tanken / Laden (Logbuch)';
+        divBtn.onclick = window.openQuickKfzPick;
+        addEntryBtn.parentElement.insertBefore(divBtn, addEntryBtn.nextSibling);
+    }
+
+    // 2. Dashboard -> Ganz nach oben, als echtes Block-Element isoliert!
+    const dashTab = document.getElementById('dashboard-content') || document.querySelector('.dashboard-container') || document.getElementById('tab-dashboard');
+    if(dashTab && !document.getElementById('dashKfzTopBtnFinal')) {
+        const wrapper = document.createElement('div');
+        wrapper.id = 'dashKfzTopBtnFinal';
+        wrapper.style.cssText = 'width:100%; padding: 15px; box-sizing:border-box; display:block; clear:both; margin-bottom: 5px;';
         
-        // Button als pures HTML mit Inline-JS injizieren
-        addEntryBtn.insertAdjacentHTML('afterend', 
-            `<button id="fabKfzBtnSafe" class="btn" style="width:100%; padding:14px; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; border:none; border-radius:8px; font-size:16px; font-weight:bold; margin-top:10px; margin-bottom:5px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:8px;" 
-            onclick="event.preventDefault(); event.stopPropagation(); document.querySelectorAll('.modal').forEach(m=>m.style.display='none'); setTimeout(openQuickKfzPick, 100); return false;">
-            ⛽ Tanken / Laden (Logbuch)
-            </button>`
-        );
-    }
-
-    // 3. Dashboard Top Button Fix (Suche nach "Hallo!", um exakt den Content-Bereich zu treffen, NICHT die Tab-Leiste)
-    const texts = document.querySelectorAll('h2, h3, div, span');
-    let halloEl = null;
-    for(let el of texts) {
-        if(el.textContent && el.textContent.includes('Hallo!') && el.children.length === 0) {
-            halloEl = el;
-            break;
-        }
-    }
-
-    if(halloEl && halloEl.parentElement && !document.getElementById('dashKfzTopBtnSafe')) {
-        // Fügt den Button DIREKT über dem "Hallo!" Text ein
-        halloEl.insertAdjacentHTML('beforebegin', 
-            `<button id="dashKfzTopBtnSafe" style="width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; margin-bottom:20px; padding:15px; border-radius:12px; font-weight:bold; border:none; cursor:pointer; font-size:16px; display:flex; justify-content:center; align-items:center; gap:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" 
-            onclick="event.preventDefault(); event.stopPropagation(); openQuickKfzPick(); return false;">
-            ⛽ Schnelleintrag: Tanken / Laden
-            </button>`
-        );
+        wrapper.innerHTML = `<div class="btn" style="width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; padding:16px; border-radius:12px; font-weight:bold; cursor:pointer; font-size:16px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); box-sizing:border-box;" onclick="window.openQuickKfzPick(event)">⛽ Schnelleintrag: Tanken / Laden</div>`;
+        
+        // Füge es als erstes Kind des Containers ein
+        dashTab.insertBefore(wrapper, dashTab.firstChild);
     }
 }
 // Überwacht das Menü permanent
