@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.26';
+const APP_VERSION = '2.27';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -8180,7 +8180,14 @@ function _openQe(){
 function _autoT(){
   var id=document.getElementById('qeV3').value,v=null;
   for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===id){v=state.vehicles[i];break;}}
-  var ev=v&&v.type&&v.type.toLowerCase().indexOf('elektr')>=0;
+  if(!v){_updF();return;}
+  // Prüfe 4 Indikatoren für Elektrofahrzeug:
+  var s=(v.type||'')+' '+(v.kraftstoff||'')+' '+(v.brand||'')+' '+(v.model||'')+' '+(v.licensePlate||'');
+  s=s.toLowerCase();
+  var ev = s.indexOf('elektr')>=0 || s.indexOf('electric')>=0 || s.indexOf(' eq ')>=0 || s.indexOf(' eq')>=0 || s.indexOf('e-')>=0 || s.indexOf(' bev')>=0;
+  // Deutsches E-Kennzeichen endet mit E (z.B. "B KT 2580 E")
+  var plate=(v.licensePlate||'').trim();
+  if(plate.length>2 && plate.charAt(plate.length-1).toUpperCase()==='E' && plate.charAt(plate.length-2)===' ') ev=true;
   document.getElementById('qeT3').value=ev?'laden':'tanken';
   _updF();
 }
