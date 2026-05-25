@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.25';
+const APP_VERSION = '2.26';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -8106,6 +8106,170 @@ window.openQuickKfzPick = function(e) {
     if(!state.vehicles || state.vehicles.length === 0) return;
     openQuickEntry();
 };
+// === SCHNELLEINGABE v3 ===
+(function(){
+var s=document.createElement('style');
+s.textContent='#fabKfzBtnFinal,#dashKfzTopBtnFinal,#fabKfzBtnSafe,#dashKfzTopBtnSafe,#fabKfzNew,#fabKfzNew2,#dashKfzNew,#dashKfzNew2,#quickKfzBtn,#dashKfzBtn,#dashKfzTopBtn,#fabKfzBtnNew,#fabKfzBtnNew2,#dashQeBtn3,#dashKfzTopBtnSafe{display:none!important}';
+document.head.appendChild(s);
+
+var _qeOv=null;
+
+function _buildQe(){
+  if(_qeOv)return;
+  _qeOv=document.createElement('div');
+  _qeOv.id='qeOverlay3';
+  _qeOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:none;justify-content:center;align-items:flex-start;padding-top:6vh;overflow-y:auto;';
+  _qeOv.addEventListener('click',function(ev){if(ev.target===_qeOv)_qeOv.style.display='none';});
+  var h=[];
+  h.push('<div style="background:linear-gradient(180deg,#1e1e2f,#151525);border-radius:20px;padding:28px;width:calc(100% - 32px);max-width:440px;margin:0 auto 40px;box-shadow:0 24px 80px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.06);">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">');
+  h.push('<div style="display:flex;align-items:center;gap:10px;">');
+  h.push('<div style="width:42px;height:42px;background:linear-gradient(135deg,#17a2b8,#117a8b);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;">⛽</div>');
+  h.push('<h3 style="margin:0;color:#fff;font-size:19px;">Schnelleintrag</h3>');
+  h.push('</div>');
+  h.push('<div id="qeX3" style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#aaa;">✕</div>');
+  h.push('</div>');
+  h.push('<div style="margin-bottom:18px;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Fahrzeug</label>');
+  h.push('<select id="qeV3" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;box-sizing:border-box;"></select></div>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:18px;">');
+  h.push('<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Datum</label>');
+  h.push('<input type="date" id="qeD3" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;"></div>');
+  h.push('<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Art</label>');
+  h.push('<select id="qeT3" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">');
+  h.push('<option value="tanken">⛽ Tanken</option><option value="laden">⚡ Laden</option><option value="wartung">🔧 Wartung</option><option value="reparatur">🛠️ Reparatur</option><option value="sonstiges">📝 Sonstiges</option>');
+  h.push('</select></div></div>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:18px;">');
+  h.push('<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">KM-Stand</label>');
+  h.push('<input type="number" id="qeK3" placeholder="z.B. 55000" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;"></div>');
+  h.push('<div style="flex:1;" id="qeAW3"><label id="qeAL3" style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Menge (Liter)</label>');
+  h.push('<input type="number" step="0.01" id="qeA3" placeholder="z.B. 40.5" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;"></div></div>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:10px;">');
+  h.push('<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Kosten (€)</label>');
+  h.push('<input type="number" step="0.01" id="qeC3" placeholder="0.00" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;"></div>');
+  h.push('<div style="flex:1;"><label style="font-size:12px;color:#888;display:block;margin-bottom:6px;font-weight:600;">Notiz</label>');
+  h.push('<input type="text" id="qeN3" placeholder="Optional" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;"></div></div>');
+  h.push('<div id="qeP3" style="text-align:right;font-size:13px;color:#17a2b8;font-weight:bold;min-height:22px;margin-bottom:22px;"></div>');
+  h.push('<div id="qeS3" style="width:100%;padding:16px;background:linear-gradient(135deg,#17a2b8,#0d8a9e);color:#fff;border-radius:14px;font-size:17px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 6px 20px rgba(23,162,184,0.4);">💾 Eintrag speichern</div>');
+  h.push('</div>');
+  _qeOv.innerHTML=h.join('');
+  document.body.appendChild(_qeOv);
+  document.getElementById('qeX3').addEventListener('click',function(){_qeOv.style.display='none';});
+  document.getElementById('qeV3').addEventListener('change',_autoT);
+  document.getElementById('qeT3').addEventListener('change',_updF);
+  document.getElementById('qeA3').addEventListener('input',_ppu);
+  document.getElementById('qeC3').addEventListener('input',_ppu);
+  document.getElementById('qeS3').addEventListener('click',_doSave);
+}
+
+function _openQe(){
+  if(!state.vehicles||state.vehicles.length===0)return;
+  _buildQe();
+  var sel=document.getElementById('qeV3'),o='';
+  for(var i=0;i<state.vehicles.length;i++){var v=state.vehicles[i];o+='<option value="'+v.id+'">'+(v.brand||'')+' '+(v.model||'')+' - '+(v.licensePlate||'')+'</option>';}
+  sel.innerHTML=o;
+  document.getElementById('qeD3').value=new Date().toISOString().split('T')[0];
+  document.getElementById('qeK3').value='';
+  document.getElementById('qeA3').value='';
+  document.getElementById('qeC3').value='';
+  document.getElementById('qeN3').value='';
+  document.getElementById('qeP3').innerText='';
+  _autoT();
+  _qeOv.style.display='flex';
+}
+
+function _autoT(){
+  var id=document.getElementById('qeV3').value,v=null;
+  for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===id){v=state.vehicles[i];break;}}
+  var ev=v&&v.type&&v.type.toLowerCase().indexOf('elektr')>=0;
+  document.getElementById('qeT3').value=ev?'laden':'tanken';
+  _updF();
+}
+
+function _updF(){
+  var t=document.getElementById('qeT3').value,w=document.getElementById('qeAW3'),l=document.getElementById('qeAL3');
+  if(t==='tanken'){w.style.display='block';l.innerText='Menge (Liter)';}
+  else if(t==='laden'){w.style.display='block';l.innerText='Menge (kWh)';}
+  else{w.style.display='none';}
+  _ppu();
+}
+
+function _ppu(){
+  var t=document.getElementById('qeT3').value,el=document.getElementById('qeP3');
+  if(t!=='tanken'&&t!=='laden'){el.innerText='';return;}
+  var a=parseFloat(document.getElementById('qeA3').value)||0,c=parseFloat(document.getElementById('qeC3').value)||0;
+  if(a>0&&c>0){el.innerText='Preis: '+(c/a).toFixed(3)+(t==='tanken'?' \u20AC/L':' \u20AC/kWh');}
+  else{el.innerText='';}
+}
+
+function _doSave(){
+  var vId=document.getElementById('qeV3').value,date=document.getElementById('qeD3').value;
+  var type=document.getElementById('qeT3').value,km=parseInt(document.getElementById('qeK3').value,10);
+  var amt=parseFloat(document.getElementById('qeA3').value)||0,cost=parseFloat(document.getElementById('qeC3').value)||0;
+  var note=document.getElementById('qeN3').value.trim();
+  if(!date||!type||isNaN(km)){if(typeof toast==='function')toast('Datum, Art und KM-Stand eingeben','warn');else alert('Bitte Datum, Art und KM-Stand eingeben.');return;}
+  if(!state.vehicleLogs)state.vehicleLogs=[];
+  state.vehicleLogs.push({id:typeof uid==='function'?uid():Date.now().toString(),vehId:vId,date:date,type:type,mileage:km,amount:amt,cost:cost,notes:note,timestamp:Date.now()});
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Eintrag gespeichert!');
+  _qeOv.style.display='none';
+}
+
+// Funktionen einfrieren (getter/setter verhindert Ueberschreibung durch alten setInterval)
+var _pick=function(e){if(e){e.preventDefault();e.stopPropagation();}document.querySelectorAll('.modal').forEach(function(m){m.style.display='none';});_openQe();};
+var _open=function(){_openQe();};
+try{
+  Object.defineProperty(window,'openQuickKfzPick',{get:function(){return _pick;},set:function(){},configurable:true});
+  Object.defineProperty(window,'openQuickEntry',{get:function(){return _open;},set:function(){},configurable:true});
+}catch(ex){window.openQuickKfzPick=_pick;window.openQuickEntry=_open;}
+
+// Plus-Menu Button via Event Capturing
+document.addEventListener('click',function(){
+  setTimeout(function(){
+    if(!state.vehicles||state.vehicles.length===0)return;
+    var ms=document.querySelectorAll('.modal,[class*="modal"]');
+    for(var i=0;i<ms.length;i++){
+      var m=ms[i];
+      if(m.id==='qeOverlay3')continue;
+      if(m.style.display==='none')continue;
+      if(!m.offsetParent&&m.style.display!=='flex'&&m.style.display!=='block')continue;
+      var bs=m.querySelectorAll('button,.btn');
+      for(var j=0;j<bs.length;j++){
+        if(bs[j].textContent&&bs[j].textContent.indexOf('hlerstand eintragen')>=0&&!m.querySelector('#qeFab3')){
+          var d=document.createElement('div');
+          d.id='qeFab3';
+          d.style.cssText='width:100%;padding:15px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:12px;font-size:16px;font-weight:bold;margin-top:10px;cursor:pointer;text-align:center;box-sizing:border-box;';
+          d.textContent='\u26FD Tanken / Laden';
+          (function(modal){d.addEventListener('click',function(ev){ev.preventDefault();ev.stopPropagation();modal.style.display='none';setTimeout(_openQe,100);});})(m);
+          bs[j].parentElement.insertBefore(d,bs[j].nextSibling);
+          break;
+        }
+      }
+    }
+  },300);
+},true);
+
+// Dashboard Button (prueft periodisch, ob er noch existiert)
+setInterval(function(){
+  if(!state.vehicles||state.vehicles.length===0)return;
+  var ex=document.getElementById('dashQe3');
+  if(ex&&ex.parentElement)return;
+  if(ex)ex.remove();
+  var cs=document.querySelectorAll('.card,div.card');
+  for(var i=0;i<cs.length;i++){
+    var c=cs[i];
+    if(c.textContent&&c.textContent.indexOf('Hallo!')>=0&&c.textContent.indexOf('Objekte')>=0){
+      var b=document.createElement('div');
+      b.id='dashQe3';
+      b.style.cssText='padding:16px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:14px;font-weight:bold;cursor:pointer;font-size:16px;text-align:center;box-shadow:0 4px 15px rgba(23,162,184,0.35);box-sizing:border-box;margin-bottom:16px;';
+      b.textContent='\u26FD Schnelleintrag: Tanken / Laden';
+      b.addEventListener('click',function(){_openQe();});
+      c.parentElement.insertBefore(b,c);
+      break;
+    }
+  }
+},2000);
+
+})();
 </script>
 </body>
                                                              </html>
