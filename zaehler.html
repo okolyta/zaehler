@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.20';
+const APP_VERSION = '2.21';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -7884,7 +7884,8 @@ function openVehDetails(id) {
   addRow('Nächster TÜV', v.tuevDate ? v.tuevDate.split('-').reverse().join('.') : '');
   
   if(v.tires) {
-     const tArr = v.tires.split(/[,\n/]+/).map(t => t.trim()).filter(t => t.length > 0);
+     // Teilt nur bei Komma oder Zeilenumbruch, NICHT bei Schrägstrich!
+     const tArr = v.tires.split(/,|\n/).map(t => t.trim()).filter(t => t.length > 0);
      tArr.forEach((t, idx) => {
          addRow(tArr.length > 1 ? `Reifengröße ${idx+1}` : 'Reifengröße', t);
      });
@@ -7920,32 +7921,58 @@ function openQuickKfzPick() {
 }
 
 function ensureDashboardKfzBtn() {
-    // Globales Plus-Menü (FAB) Integration
-    const modals = document.querySelectorAll('.modal');
-    modals.forEach(m => {
-        if(m.innerText.includes('Was möchtest du hinzufügen?')) {
-            const content = m.querySelector('.modal-content');
-            if(content && !document.getElementById('fabKfzBtn') && state.vehicles && state.vehicles.length > 0) {
-                const cancelBtn = Array.from(content.querySelectorAll('button, .btn')).find(b => b.innerText.includes('Abbrechen'));
-                const btn = document.createElement('button');
-                btn.id = 'fabKfzBtn';
-                btn.className = 'btn';
-                btn.style.cssText = 'width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; margin-bottom:10px; padding:15px; border-radius:12px; font-weight:bold; border:none; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; gap:10px;';
-                btn.innerHTML = '⛽ Tanken / Laden (Logbuch)';
-                btn.onclick = () => {
-                    m.style.display = 'none'; // Menü schließen
-                    openQuickKfzPick();
-                };
-                if(cancelBtn) {
-                    cancelBtn.parentElement.insertBefore(btn, cancelBtn);
-                } else {
-                    content.appendChild(btn);
-                }
-            }
+    if(!state.vehicles || state.vehicles.length === 0) return;
+
+    // 1. Plus-Menü Scanner
+    const allBtns = document.querySelectorAll('button, .btn, div.btn');
+    let addEntryBtn = null;
+    for(let b of allBtns) {
+        if(b.innerText && b.innerText.includes('Zählerstand eintragen') && !b.innerText.includes('Tanken')) {
+            addEntryBtn = b;
+            break;
         }
-    });
+    }
+    
+    if(addEntryBtn && addEntryBtn.parentElement && !document.getElementById('fabKfzBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'fabKfzBtn';
+        btn.className = addEntryBtn.className; 
+        btn.style.cssText = addEntryBtn.style.cssText; // Übernimmt den originalen Button-Style der App
+        btn.style.background = 'linear-gradient(135deg, #17a2b8, #117a8b)';
+        btn.style.color = '#fff';
+        btn.style.marginTop = '10px';
+        btn.style.marginBottom = '10px';
+        btn.innerHTML = '⛽ Tanken / Laden (Logbuch)';
+        btn.onclick = () => {
+            const modal = btn.closest('.modal');
+            if(modal) modal.style.display = 'none';
+            openQuickKfzPick();
+        };
+        // Direkt unter "Zählerstand eintragen" einfügen
+        addEntryBtn.parentElement.insertBefore(btn, addEntryBtn.nextSibling);
+    }
+
+    // 2. Dashboard Scanner ("Was ansteht")
+    const allElements = document.querySelectorAll('div, h2, h3, h4');
+    let wasAnstehtHeader = null;
+    for(let el of allElements) {
+        if(el.innerText && el.innerText.includes('Was ansteht') && el.children.length <= 1) {
+            wasAnstehtHeader = el;
+            break;
+        }
+    }
+    
+    if(wasAnstehtHeader && wasAnstehtHeader.parentElement && !document.getElementById('dashKfzBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'dashKfzBtn';
+        btn.style.cssText = 'width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; margin-top:10px; margin-bottom:15px; padding:15px; border-radius:12px; font-weight:bold; border:none; cursor:pointer; font-size:16px; display:flex; justify-content:center; align-items:center; gap:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+        btn.innerHTML = '⛽ Schnelleintrag: Tanken / Laden';
+        btn.onclick = openQuickKfzPick;
+        // Direkt unter "Was ansteht" einfügen
+        wasAnstehtHeader.parentElement.insertBefore(btn, wasAnstehtHeader.nextSibling);
+    }
 }
-// Überwacht das Menü permanent
+// Überwacht das Menü permanent, unabhängig von Ladezeiten
 setInterval(ensureDashboardKfzBtn, 1000);
 </script>
 </body>
