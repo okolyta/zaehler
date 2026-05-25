@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.21';
+const APP_VERSION = '2.22';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -7923,6 +7923,10 @@ function openQuickKfzPick() {
 function ensureDashboardKfzBtn() {
     if(!state.vehicles || state.vehicles.length === 0) return;
 
+    // Alte Buttons aus vorherigen Patches aufräumen
+    const old1 = document.getElementById('quickKfzBtn'); if(old1) old1.remove();
+    const old2 = document.getElementById('dashKfzBtn');  if(old2) old2.remove();
+
     // 1. Plus-Menü Scanner
     const allBtns = document.querySelectorAll('button, .btn, div.btn');
     let addEntryBtn = null;
@@ -7935,44 +7939,47 @@ function ensureDashboardKfzBtn() {
     
     if(addEntryBtn && addEntryBtn.parentElement && !document.getElementById('fabKfzBtn')) {
         const btn = document.createElement('button');
+        btn.type = 'button'; // Verhindert das Absenden des Formulars (Sync-Bug)
         btn.id = 'fabKfzBtn';
         btn.className = addEntryBtn.className; 
-        btn.style.cssText = addEntryBtn.style.cssText; // Übernimmt den originalen Button-Style der App
+        btn.style.cssText = addEntryBtn.style.cssText;
         btn.style.background = 'linear-gradient(135deg, #17a2b8, #117a8b)';
         btn.style.color = '#fff';
         btn.style.marginTop = '10px';
         btn.style.marginBottom = '10px';
         btn.innerHTML = '⛽ Tanken / Laden (Logbuch)';
-        btn.onclick = () => {
+        btn.onclick = (e) => {
+            e.preventDefault(); // Stoppt alle Hintergrund-Events
+            e.stopPropagation();
             const modal = btn.closest('.modal');
             if(modal) modal.style.display = 'none';
             openQuickKfzPick();
         };
-        // Direkt unter "Zählerstand eintragen" einfügen
         addEntryBtn.parentElement.insertBefore(btn, addEntryBtn.nextSibling);
     }
 
-    // 2. Dashboard Scanner ("Was ansteht")
-    const allElements = document.querySelectorAll('div, h2, h3, h4');
-    let wasAnstehtHeader = null;
-    for(let el of allElements) {
-        if(el.innerText && el.innerText.includes('Was ansteht') && el.children.length <= 1) {
-            wasAnstehtHeader = el;
-            break;
+    // 2. Dashboard Top Button
+    const dashTab = document.getElementById('tab-dashboard');
+    if(dashTab && !document.getElementById('dashKfzTopBtn')) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'dashKfzTopBtn';
+        btn.style.cssText = 'width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; margin-bottom:20px; padding:15px; border-radius:12px; font-weight:bold; border:none; cursor:pointer; font-size:16px; display:flex; justify-content:center; align-items:center; gap:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+        btn.innerHTML = '⛽ Schnelleintrag: Tanken / Laden';
+        btn.onclick = (e) => {
+            e.preventDefault();
+            openQuickKfzPick();
+        };
+        
+        // Fügt den Button GANZ OBEN im Dashboard ein (als erstes Element)
+        if (dashTab.firstChild) {
+            dashTab.insertBefore(btn, dashTab.firstChild);
+        } else {
+            dashTab.appendChild(btn);
         }
     }
-    
-    if(wasAnstehtHeader && wasAnstehtHeader.parentElement && !document.getElementById('dashKfzBtn')) {
-        const btn = document.createElement('button');
-        btn.id = 'dashKfzBtn';
-        btn.style.cssText = 'width:100%; background:linear-gradient(135deg, #17a2b8, #117a8b); color:#fff; margin-top:10px; margin-bottom:15px; padding:15px; border-radius:12px; font-weight:bold; border:none; cursor:pointer; font-size:16px; display:flex; justify-content:center; align-items:center; gap:8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
-        btn.innerHTML = '⛽ Schnelleintrag: Tanken / Laden';
-        btn.onclick = openQuickKfzPick;
-        // Direkt unter "Was ansteht" einfügen
-        wasAnstehtHeader.parentElement.insertBefore(btn, wasAnstehtHeader.nextSibling);
-    }
 }
-// Überwacht das Menü permanent, unabhängig von Ladezeiten
+// Überwacht das Menü permanent
 setInterval(ensureDashboardKfzBtn, 1000);
 </script>
 </body>
