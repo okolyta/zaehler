@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.24';
+const APP_VERSION = '2.25';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -7990,6 +7990,122 @@ function ensureDashboardKfzBtn() {
 }
 // Überwacht das Menü permanent
 setInterval(ensureDashboardKfzBtn, 1000);
+
+// === SCHNELLEINGABE MODAL (komplett eigenständig) ===
+function initQuickEntryModal() {
+    if(document.getElementById('quickEntryOverlay')) return;
+    const is = 'width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;box-sizing:border-box;font-size:14px;-webkit-appearance:none;';
+    const ls = 'font-size:11px;color:#999;display:block;margin-bottom:4px;';
+    document.body.insertAdjacentHTML('beforeend',
+    '<div id="quickEntryOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:99999;justify-content:center;align-items:center;" onclick="if(event.target===this)this.style.display=\'none\'">' +
+      '<div style="background:#1a1a2e;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:420px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.6);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+          '<h3 style="margin:0;color:#fff;font-size:18px;">⛽ Schnelleintrag</h3>' +
+          '<div style="width:32px;height:32px;background:rgba(255,255,255,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:#fff;" onclick="document.getElementById(\'quickEntryOverlay\').style.display=\'none\'">&times;</div>' +
+        '</div>' +
+        '<div style="margin-bottom:14px;">' +
+          '<label style="' + ls + '">Fahrzeug</label>' +
+          '<select id="qeVehicle" style="' + is + '" onchange="updateQeType()"></select>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
+          '<div style="flex:1;"><label style="' + ls + '">Datum</label><input type="date" id="qeDate" style="' + is + '"></div>' +
+          '<div style="flex:1;"><label style="' + ls + '">Art</label><select id="qeType" style="' + is + '" onchange="updateQeAmountLabel()"><option value="tanken">⛽ Tanken</option><option value="laden">⚡ Laden</option><option value="wartung">🔧 Wartung</option><option value="reparatur">🛠️ Reparatur</option><option value="sonstiges">📝 Sonstiges</option></select></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
+          '<div style="flex:1;"><label style="' + ls + '">KM-Stand</label><input type="number" id="qeMileage" placeholder="z.B. 55000" style="' + is + '"></div>' +
+          '<div style="flex:1;" id="qeAmountWrap"><label id="qeAmountLabel" style="' + ls + '">Menge (Liter)</label><input type="number" step="0.01" id="qeAmount" placeholder="z.B. 40.5" style="' + is + '" oninput="calcQePpu()"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-bottom:8px;">' +
+          '<div style="flex:1;"><label style="' + ls + '">Kosten (€)</label><input type="number" step="0.01" id="qeCost" placeholder="0.00" style="' + is + '" oninput="calcQePpu()"></div>' +
+          '<div style="flex:1;"><label style="' + ls + '">Notiz</label><input type="text" id="qeNotes" placeholder="Optional" style="' + is + '"></div>' +
+        '</div>' +
+        '<div id="qePpu" style="text-align:right;font-size:12px;color:#17a2b8;font-weight:bold;min-height:18px;margin-bottom:16px;"></div>' +
+        '<div style="cursor:pointer;width:100%;padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;font-size:16px;font-weight:bold;text-align:center;box-sizing:border-box;" onclick="saveQuickEntry()">💾 Eintrag speichern</div>' +
+      '</div>' +
+    '</div>');
+}
+
+function openQuickEntry() {
+    initQuickEntryModal();
+    var sel = document.getElementById('qeVehicle');
+    sel.innerHTML = state.vehicles.map(function(v) {
+        return '<option value="' + v.id + '">' + (v.brand||'') + ' ' + (v.model||'') + ' — ' + (v.licensePlate||'Ohne Kennzeichen') + '</option>';
+    }).join('');
+    document.getElementById('qeDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('qeMileage').value = '';
+    document.getElementById('qeAmount').value = '';
+    document.getElementById('qeCost').value = '';
+    document.getElementById('qeNotes').value = '';
+    document.getElementById('qePpu').innerText = '';
+    updateQeType();
+    document.getElementById('quickEntryOverlay').style.display = 'flex';
+}
+
+function updateQeType() {
+    var vId = document.getElementById('qeVehicle').value;
+    var v = state.vehicles.find(function(x) { return x.id === vId; });
+    var isEV = v && v.type && v.type.toLowerCase() === 'elektro';
+    document.getElementById('qeType').value = isEV ? 'laden' : 'tanken';
+    updateQeAmountLabel();
+}
+
+function updateQeAmountLabel() {
+    var t = document.getElementById('qeType').value;
+    var w = document.getElementById('qeAmountWrap');
+    var l = document.getElementById('qeAmountLabel');
+    if(t === 'tanken') { w.style.display = 'block'; l.innerText = 'Menge (Liter)'; }
+    else if(t === 'laden') { w.style.display = 'block'; l.innerText = 'Menge (kWh)'; }
+    else { w.style.display = 'none'; }
+    calcQePpu();
+}
+
+function calcQePpu() {
+    var t = document.getElementById('qeType').value;
+    var ppuEl = document.getElementById('qePpu');
+    if(t !== 'tanken' && t !== 'laden') { ppuEl.innerText = ''; return; }
+    var a = parseFloat(document.getElementById('qeAmount').value) || 0;
+    var c = parseFloat(document.getElementById('qeCost').value) || 0;
+    if(a > 0 && c > 0) {
+        var unit = t === 'tanken' ? '€/L' : '€/kWh';
+        ppuEl.innerText = 'Preis: ' + (c / a).toFixed(3) + ' ' + unit;
+    } else { ppuEl.innerText = ''; }
+}
+
+async function saveQuickEntry() {
+    var vehId = document.getElementById('qeVehicle').value;
+    var date = document.getElementById('qeDate').value;
+    var type = document.getElementById('qeType').value;
+    var mileage = parseInt(document.getElementById('qeMileage').value, 10);
+    var amount = parseFloat(document.getElementById('qeAmount').value) || 0;
+    var cost = parseFloat(document.getElementById('qeCost').value) || 0;
+    var notes = document.getElementById('qeNotes').value.trim();
+
+    if(!date || !type || isNaN(mileage)) {
+        if(typeof toast === 'function') toast('Datum, Art und KM-Stand benötigt', 'warn');
+        else alert('Bitte Datum, Art und KM-Stand eingeben.');
+        return;
+    }
+
+    if(!state.vehicleLogs) state.vehicleLogs = [];
+    state.vehicleLogs.push({
+        id: typeof uid === 'function' ? uid() : Date.now().toString(),
+        vehId: vehId,
+        date: date, type: type, mileage: mileage, amount: amount, cost: cost, notes: notes,
+        timestamp: Date.now()
+    });
+
+    if(typeof saveData === 'function') await saveData();
+    if(typeof toast === 'function') toast('Eintrag gespeichert!');
+    document.getElementById('quickEntryOverlay').style.display = 'none';
+}
+
+// Überschreibt die Funktion, die von Dashboard und Plus-Menü aufgerufen wird
+window.openQuickKfzPick = function(e) {
+    if(e) { e.preventDefault(); e.stopPropagation(); }
+    document.querySelectorAll('.modal').forEach(function(m) { m.style.display = 'none'; });
+    if(!state.vehicles || state.vehicles.length === 0) return;
+    openQuickEntry();
+};
 </script>
 </body>
                                                              </html>
