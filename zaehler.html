@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.33';
+const APP_VERSION = '2.34';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -8847,6 +8847,7 @@ var petListOv=null,petEditOv=null,petDetailOv=null,editingPetId=null,petPhotoDat
 var _pw=setInterval(function(){
   if(typeof state==='undefined')return;
   clearInterval(_pw);
+  try{var _lp=localStorage.getItem('zaehler_app_pets2');if(_lp){state.pets=JSON.parse(_lp);}}catch(x){}
   if(!state.pets)state.pets=[];
   _petSetup();
 },500);
@@ -9237,7 +9238,8 @@ window.savePetData=function(){
     state.pets.push(d);
   }
 
-  if(typeof saveData==='function')saveData();
+  try{localStorage.setItem('zaehler_app_pets2',JSON.stringify(state.pets));}catch(x){}
+  try{if(typeof saveData==='function')saveData();}catch(x){}
   if(typeof toast==='function')toast(editingPetId?'Tier aktualisiert!':'Tier hinzugefügt!');
   petEditOv.style.display='none';
   _renderPetList();
@@ -9246,7 +9248,8 @@ window.savePetData=function(){
 window.deletePetData=function(id){
   if(!confirm('Dieses Tier wirklich löschen?'))return;
   state.pets=state.pets.filter(function(p){return p.id!==id;});
-  if(typeof saveData==='function')saveData();
+  try{localStorage.setItem('zaehler_app_pets2',JSON.stringify(state.pets));}catch(x){}
+  try{if(typeof saveData==='function')saveData();}catch(x){}
   if(typeof toast==='function')toast('Tier gelöscht');
   if(petDetailOv)petDetailOv.style.display='none';
   if(petEditOv)petEditOv.style.display='none';
@@ -9696,6 +9699,56 @@ setInterval(function(){
       }
     },5000);
   },500);
+})();
+// === PERSISTENZ v2 (Aggressiv) ===
+(function(){
+  var K='zaehler_app_pets2',EK='zaehler_app_emerg2',PK='zaehler_app_park2';
+  var lastHash='';
+
+  function _saveAll(){
+    if(typeof state==='undefined'||!state)return;
+    try{
+      var j=JSON.stringify(state.pets||[]);
+      if(j!==lastHash){localStorage.setItem(K,j);lastHash=j;}
+      if(state.emergencyInfo&&Object.keys(state.emergencyInfo).length>0)localStorage.setItem(EK,JSON.stringify(state.emergencyInfo));
+      if(state.parking)localStorage.setItem(PK,JSON.stringify(state.parking));
+    }catch(x){}
+  }
+
+  function _loadAll(){
+    if(typeof state==='undefined'||!state)return;
+    try{
+      var p=localStorage.getItem(K);
+      if(p){var arr=JSON.parse(p);if(arr&&arr.length>0)state.pets=arr;}
+      var e=localStorage.getItem(EK);
+      if(e){state.emergencyInfo=JSON.parse(e);}
+      var pk=localStorage.getItem(PK);
+      if(pk){state.parking=JSON.parse(pk);}
+    }catch(x){}
+    if(!state.pets)state.pets=[];
+    if(!state.emergencyInfo)state.emergencyInfo={};
+  }
+
+  // Load beim Start
+  var _w=setInterval(function(){
+    if(typeof state==='undefined'||!state)return;
+    clearInterval(_w);
+    _loadAll();
+  },400);
+
+  // Auto-Save alle 2 Sekunden
+  setInterval(_saveAll,2000);
+
+  // Schutz gegen Drive-Sync Ueberschreibung
+  var _lc=0;
+  setInterval(function(){
+    if(typeof state==='undefined'||!state)return;
+    if(state.pets&&state.pets.length>0){_lc=state.pets.length;}
+    else if(_lc>0){
+      _loadAll();
+      _lc=state.pets?state.pets.length:0;
+    }
+  },3000);
 })();
 </script>
 </body>
