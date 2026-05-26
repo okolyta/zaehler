@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.35';
+const APP_VERSION = '2.36';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5757,6 +5757,7 @@ function renderVehicles() {
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
         <div style="width:100%;padding:14px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(220,53,69,0.3);" onclick="openEmergencyCard('${v.id}')">🆘 Notfall- & Unfallhilfe</div>
         <div style="width:100%;padding:14px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(13,110,253,0.3);" onclick="openParkingMode('${v.id}')">${state.parking&&state.parking.active&&state.parking.vehId===v.id?'🅿️ Geparktes Auto anzeigen':'🅿️ Parkplatz merken'}</div>
+        <div style="width:100%;padding:14px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(230,126,34,0.3);" onclick="openAutoTCO('${v.id}')">💰 Gesamtkosten-Rechner</div>
         <button class="btn" style="width:100%; background:var(--acc); color:#fff; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;" onclick="openVehDetails('${v.id}')">ℹ️ Fahrzeug-Details anzeigen</button>
         
         <div style="display:flex; gap:6px; width:100%;">
@@ -9753,6 +9754,426 @@ setInterval(function(){
       _lc=state.pets?state.pets.length:0;
     }
   },3000);
+})();
+// === HAUSTIER ETAPPE 3+4 + AUTO TCO ===
+(function(){
+var _fp3=function(id){for(var i=0;i<state.pets.length;i++){if(state.pets[i].id===id)return state.pets[i];}return null;};
+var _e3=function(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'):''};
+
+var VACCINES=[
+  {name:'Tollwut',days:1095},
+  {name:'Staupe (SHPPi)',days:1095},
+  {name:'Parvovirose',days:1095},
+  {name:'Leptospirose',days:365},
+  {name:'Zwingerhusten',days:365},
+  {name:'Borreliose',days:365}
+];
+
+var TOXIC=[
+  {cat:'Sehr giftig (lebensbedrohlich!)',color:'#dc3545',items:[
+    {n:'Schokolade',d:'Theobromin → Herzrhythmusstörungen, Krämpfe, Tod. Dunkle Schokolade am gefährlichsten!'},
+    {n:'Xylit / Xylitol',d:'In Kaugummi, Zahnpasta, Süßigkeiten → Leberschäden, Unterzuckerung, Tod!'},
+    {n:'Trauben & Rosinen',d:'Schon kleine Mengen → akutes Nierenversagen!'},
+    {n:'Zwiebeln & Knoblauch',d:'Zerstören rote Blutkörperchen → Blutarmut'},
+    {n:'Macadamia-Nüsse',d:'Lähmungen, Erbrechen, Fieber'},
+    {n:'Alkohol',d:'Schon geringe Mengen → Leberschäden, Koma'},
+    {n:'Koffein',d:'Kaffee, Tee, Energy Drinks → Herzrasen, Krämpfe'},
+    {n:'Avocado',d:'Persin → Herzmuskelschäden'}
+  ]},
+  {cat:'Giftig',color:'#ffc107',items:[
+    {n:'Rohes Schweinefleisch',d:'Aujeszky-Virus → immer tödlich für Hunde!'},
+    {n:'Steinobstkerne',d:'Blausäure! Kirsche, Pflaume, Pfirsich'},
+    {n:'Rohe Kartoffeln',d:'Solanin → Erbrechen, Durchfall, Krämpfe'},
+    {n:'Muskatnuss',d:'Halluzinationen, Krämpfe, Leberschäden'},
+    {n:'Hopfen',d:'Maligne Hyperthermie → lebensbedrohlich'},
+    {n:'Tabak / Nikotin',d:'Erbrechen, Zittern, Herzstillstand'}
+  ]},
+  {cat:'Vorsicht',color:'#17a2b8',items:[
+    {n:'Milch / Laktose',d:'Die meisten Hunde sind laktoseintolerant → Durchfall'},
+    {n:'Gekochte Knochen',d:'Splittern! → Darmverletzungen, Erstickung'},
+    {n:'Salz (große Mengen)',d:'Nierenschäden, Vergiftung'},
+    {n:'Rohes Eiklar',d:'Avidin hemmt Biotin-Aufnahme'},
+    {n:'Leber (große Mengen)',d:'Vitamin-A-Überdosis → Knochenschäden'}
+  ]},
+  {cat:'Giftige Pflanzen',color:'#6f42c1',items:[
+    {n:'Oleander',d:'Herzglykoside → Herzstillstand'},
+    {n:'Efeu',d:'Erbrechen, Durchfall, Krämpfe'},
+    {n:'Weihnachtsstern',d:'Schleimhautreizung, Erbrechen'},
+    {n:'Maiglöckchen',d:'Herzrhythmusstörungen'},
+    {n:'Eibe',d:'Alle Teile hochgiftig → Herzstillstand'},
+    {n:'Herbstzeitlose',d:'Organversagen → oft tödlich'}
+  ]},
+  {cat:'Gefährliche Substanzen',color:'#e83e8c',items:[
+    {n:'Frostschutzmittel',d:'Ethylenglykol schmeckt süß! → Nierenversagen'},
+    {n:'Rattengift',d:'Innere Blutungen → sofort zum Tierarzt!'},
+    {n:'Schneckenkorn',d:'Metaldehyd → Krämpfe, Tod'},
+    {n:'Ibuprofen / Paracetamol',d:'Menschenmedikamente sind für Hunde giftig!'},
+    {n:'Düngemittel',d:'Erbrechen, Durchfall, Organschäden'}
+  ]}
+];
+
+// Override openPetDetail for E3+E4 injection
+var _origPD3=window.openPetDetail;
+window.openPetDetail=function(id){_origPD3(id);setTimeout(function(){_injectE34(id);},300);};
+
+function _injectE34(id){
+  var ov=document.getElementById('petDetailOv');if(!ov)return;
+  var old=document.getElementById('petE34');if(old)old.remove();
+  var p=_fp3(id);if(!p)return;
+  if(!p.vaccinations)p.vaccinations=[];
+  if(!p.vetVisits)p.vetVisits=[];
+  if(!p.weights)p.weights=[];
+  if(!p.petCosts)p.petCosts=[];
+  var inner=ov.querySelector('div[style*="max-width"]');if(!inner)return;
+  var blk=document.createElement('div');blk.id='petE34';
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=[];
+
+  // IMPFPASS
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">💉 Impfpass</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openVaccModal(\''+id+'\')">+ Impfung</div>');
+  h.push('</div>');
+  if(p.vaccinations.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Impfungen eingetragen.</div>');
+  }else{
+    var vs=p.vaccinations.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    for(var vi=0;vi<vs.length;vi++){
+      var vc=vs[vi],nxt=vc.nextDue?new Date(vc.nextDue):null;
+      var rem=nxt?Math.round((nxt-new Date())/86400000):null;
+      var col=rem===null?'#888':rem<0?'#dc3545':rem<30?'#ffc107':'#28a745';
+      var rStr=rem===null?'':rem<0?'⚠️ Überfällig seit '+Math.abs(rem)+' Tagen!':rem<30?'⏰ In '+rem+' Tagen fällig':'✅ Noch '+rem+' Tage';
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid '+col+';">');
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">💉 '+_e3(vc.name)+'</div>');
+      h.push('<div style="padding:4px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteVacc(\''+id+'\',\''+vc.id+'\')">🗑️</div>');
+      h.push('</div>');
+      h.push('<div style="color:#999;font-size:12px;margin-top:4px;">Geimpft: '+vc.date.split('-').reverse().join('.')+(vc.vet?' | '+_e3(vc.vet):'')+'</div>');
+      if(rStr)h.push('<div style="color:'+col+';font-size:12px;margin-top:4px;font-weight:600;">'+rStr+'</div>');
+      if(nxt)h.push('<div style="color:#666;font-size:11px;margin-top:2px;">Auffrischung: '+vc.nextDue.split('-').reverse().join('.')+'</div>');
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+
+  // VET VISITS
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">🏥 Tierarzt-Besuche</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openVetVisitModal(\''+id+'\')">+ Besuch</div>');
+  h.push('</div>');
+  if(p.vetVisits.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Besuche dokumentiert.</div>');
+  }else{
+    var vvs=p.vetVisits.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    for(var vvi=0;vvi<vvs.length;vvi++){
+      var vv=vvs[vvi];
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;position:relative;">');
+      h.push('<div style="position:absolute;top:8px;right:8px;padding:4px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteVetVisit(\''+id+'\',\''+vv.id+'\')">🗑️</div>');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">'+vv.date.split('-').reverse().join('.')+'</div>');
+      if(vv.reason)h.push('<div style="color:#17a2b8;font-size:13px;margin-top:4px;">'+_e3(vv.reason)+'</div>');
+      if(vv.diagnosis)h.push('<div style="color:#ddd;font-size:12px;margin-top:4px;">Diagnose: '+_e3(vv.diagnosis)+'</div>');
+      if(vv.treatment)h.push('<div style="color:#999;font-size:12px;margin-top:2px;">Behandlung: '+_e3(vv.treatment)+'</div>');
+      if(vv.cost)h.push('<div style="color:#e67e22;font-size:12px;margin-top:4px;font-weight:600;">💰 '+parseFloat(vv.cost).toFixed(2)+' €</div>');
+      if(vv.notes)h.push('<div style="color:#666;font-size:11px;margin-top:4px;font-style:italic;">'+_e3(vv.notes)+'</div>');
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+
+  // GEWICHTSKURVE
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">⚖️ Gewichtsverlauf</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openWeightModal(\''+id+'\')">+ Wiegen</div>');
+  h.push('</div>');
+  if(p.weights.length>1)h.push('<div id="petWCWrap" style="height:160px;margin-bottom:12px;"><canvas id="petWChart"></canvas></div>');
+  if(p.weights.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Gewichtsdaten.</div>');
+  }else{
+    var ws=p.weights.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    for(var wi=0;wi<Math.min(ws.length,5);wi++){
+      var w=ws[wi],diff='';
+      if(wi<ws.length-1){var df=w.weight-ws[wi+1].weight;if(df>0)diff='<span style="color:#dc3545;font-size:11px;margin-left:6px;">▲+'+df.toFixed(1)+'</span>';else if(df<0)diff='<span style="color:#28a745;font-size:11px;margin-left:6px;">▼'+df.toFixed(1)+'</span>';}
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:4px;">');
+      h.push('<div style="color:#999;font-size:12px;">'+w.date.split('-').reverse().join('.')+'</div>');
+      h.push('<div style="color:#fff;font-weight:bold;">'+w.weight.toFixed(1)+' kg'+diff+'</div></div>');
+    }
+  }
+  h.push('</div>');
+
+  // KOSTEN-TRACKER
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">💰 Kosten-Tracker</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openPetCostModal(\''+id+'\')">+ Kosten</div>');
+  h.push('</div>');
+  if(p.petCosts.length>0){
+    var tot=0,tY=0,tM=0,now2=new Date(),ym2=now2.getFullYear()+'-'+String(now2.getMonth()+1).padStart(2,'0'),yy2=String(now2.getFullYear());
+    for(var ci=0;ci<p.petCosts.length;ci++){var ca=parseFloat(p.petCosts[ci].amount)||0;tot+=ca;if(p.petCosts[ci].date&&p.petCosts[ci].date.substring(0,4)===yy2)tY+=ca;if(p.petCosts[ci].date&&p.petCosts[ci].date.substring(0,7)===ym2)tM+=ca;}
+    h.push('<div style="display:flex;gap:8px;margin-bottom:14px;">');
+    h.push('<div style="flex:1;padding:10px;background:rgba(255,255,255,0.04);border-radius:10px;text-align:center;"><div style="color:#888;font-size:10px;">Gesamt</div><div style="color:#e67e22;font-weight:bold;">'+tot.toFixed(2)+' €</div></div>');
+    h.push('<div style="flex:1;padding:10px;background:rgba(255,255,255,0.04);border-radius:10px;text-align:center;"><div style="color:#888;font-size:10px;">Dieses Jahr</div><div style="color:#fff;font-weight:bold;">'+tY.toFixed(2)+' €</div></div>');
+    h.push('<div style="flex:1;padding:10px;background:rgba(255,255,255,0.04);border-radius:10px;text-align:center;"><div style="color:#888;font-size:10px;">Dieser Monat</div><div style="color:#fff;font-weight:bold;">'+tM.toFixed(2)+' €</div></div>');
+    h.push('</div>');
+    var pcs=p.petCosts.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    for(var pci=0;pci<Math.min(pcs.length,5);pci++){
+      var pc=pcs[pci],cIco=pc.category==='futter'?'🍖':pc.category==='tierarzt'?'🏥':pc.category==='medikamente'?'💊':pc.category==='versicherung'?'🛡️':pc.category==='zubehoer'?'🧸':'📌';
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:4px;">');
+      h.push('<div><div style="color:#fff;font-size:13px;">'+cIco+' '+_e3(pc.description||pc.category)+'</div><div style="color:#888;font-size:11px;">'+pc.date.split('-').reverse().join('.')+'</div></div>');
+      h.push('<div style="color:#e67e22;font-weight:bold;font-size:14px;">'+parseFloat(pc.amount).toFixed(2)+' €</div></div>');
+    }
+  }else{h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Kosten erfasst.</div>');}
+  h.push('</div>');
+
+  // KI GESUNDHEITSTIPPS
+  if(p.diseases){
+    h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.08),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.2);">');
+    h.push('<h4 style="margin:0 0 10px;color:#17a2b8;font-size:15px;">🤖 KI-Gesundheitstipps</h4>');
+    h.push('<div style="color:#999;font-size:12px;margin-bottom:12px;">Erkrankung: <strong style="color:#ddd;">'+_e3(p.diseases)+'</strong></div>');
+    h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;" onclick="getPetKiTips(\''+id+'\')">🤖 Tipps für '+_e3(p.name)+' abrufen</div>');
+    h.push('<div id="petKiTips_'+id+'" style="margin-top:12px;"></div>');
+    h.push('</div>');
+  }
+
+  // GIFT-ALARM Button
+  h.push('<div style="'+cs+'cursor:pointer;" onclick="openGiftAlarm()">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;">');
+  h.push('<div style="font-size:32px;">☠️</div>');
+  h.push('<div><div style="color:#dc3545;font-weight:bold;font-size:15px;">Gift-Alarm</div>');
+  h.push('<div style="color:#999;font-size:12px;">Was darf mein Hund auf keinen Fall fressen?</div></div>');
+  h.push('<div style="color:#555;font-size:22px;margin-left:auto;">›</div>');
+  h.push('</div></div>');
+
+  blk.innerHTML=h.join('');
+  var e2=document.getElementById('petE2X');
+  if(e2&&e2.nextSibling){inner.insertBefore(blk,e2.nextSibling);}
+  else{var ch2=inner.children,ref2=null;for(var c2=ch2.length-1;c2>=0;c2--){if((ch2[c2].textContent||'').indexOf('Bearbeiten')>=0&&(ch2[c2].textContent||'').indexOf('schen')>=0){ref2=ch2[c2];break;}}if(ref2)inner.insertBefore(blk,ref2);else inner.appendChild(blk);}
+  if(p.weights&&p.weights.length>1)setTimeout(function(){_drawPetWC(p);},200);
+}
+
+function _drawPetWC(p){
+  if(typeof Chart==='undefined'){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js';s.onload=function(){_drawPetWC(p);};document.head.appendChild(s);return;}
+  var cv=document.getElementById('petWChart');if(!cv)return;
+  var ws=p.weights.slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(window._petWCI)window._petWCI.destroy();
+  window._petWCI=new Chart(cv,{type:'line',data:{labels:ws.map(function(w){return w.date.split('-').slice(1).join('.');}),datasets:[{label:'kg',data:ws.map(function(w){return w.weight;}),borderColor:'#e67e22',backgroundColor:'rgba(230,126,34,0.15)',tension:0.3,fill:true,pointBackgroundColor:'#e67e22'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{color:'#888'},grid:{color:'rgba(255,255,255,0.06)'}},x:{ticks:{color:'#888'},grid:{color:'rgba(255,255,255,0.06)'}}}}});
+}
+
+// === MODALS ===
+var _mis='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+var _mls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+function _mOv(id2){var ov=document.getElementById(id2);if(!ov){ov=document.createElement('div');ov.id=id2;ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}return ov;}
+
+// IMPFUNG
+window.openVaccModal=function(petId){
+  var ov=_mOv('vaccMOv');
+  var ih=['<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">'];
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">💉 Impfung eintragen</h3>');
+  ih.push('<label style="'+_mls+'">Impfung</label><select id="vaccNm" onchange="if(this.value===\'custom\')document.getElementById(\'vaccCst\').style.display=\'block\';else document.getElementById(\'vaccCst\').style.display=\'none\'" style="'+_mis+'">');
+  for(var vi=0;vi<VACCINES.length;vi++)ih.push('<option value="'+VACCINES[vi].name+'" data-days="'+VACCINES[vi].days+'">'+VACCINES[vi].name+'</option>');
+  ih.push('<option value="custom">Andere...</option></select>');
+  ih.push('<input id="vaccCst" placeholder="Name der Impfung" style="'+_mis+'display:none;">');
+  ih.push('<label style="'+_mls+'">Datum</label><input type="date" id="vaccDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Auffrischung fällig</label><input type="date" id="vaccNxt" style="'+_mis+'">');
+  ih.push('<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">');
+  ih.push('<div style="padding:6px 10px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:6px;font-size:11px;cursor:pointer;" onclick="setVaccI(365)">1 Jahr</div>');
+  ih.push('<div style="padding:6px 10px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:6px;font-size:11px;cursor:pointer;" onclick="setVaccI(730)">2 Jahre</div>');
+  ih.push('<div style="padding:6px 10px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:6px;font-size:11px;cursor:pointer;" onclick="setVaccI(1095)">3 Jahre</div></div>');
+  ih.push('<label style="'+_mls+'">Tierarzt</label><input id="vaccVt" placeholder="Optional" style="'+_mis+'">');
+  ih.push('<input type="hidden" id="vaccPId" value="'+petId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveVacc()">💾 Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'vaccMOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  var sel=document.getElementById('vaccNm'),opt=sel.options[sel.selectedIndex],d=parseInt(opt.getAttribute('data-days'))||365;
+  setVaccI(d);
+  ov.style.display='flex';
+};
+window.setVaccI=function(days){var d=new Date(document.getElementById('vaccDt').value||new Date());d.setDate(d.getDate()+days);document.getElementById('vaccNxt').value=d.toISOString().split('T')[0];};
+window.saveVacc=function(){var pid=document.getElementById('vaccPId').value,p=_fp3(pid);if(!p)return;if(!p.vaccinations)p.vaccinations=[];var nm=document.getElementById('vaccNm').value;if(nm==='custom')nm=(document.getElementById('vaccCst').value||'').trim();if(!nm){toast('Name benötigt','warn');return;}p.vaccinations.push({id:uid(),name:nm,date:document.getElementById('vaccDt').value,nextDue:document.getElementById('vaccNxt').value,vet:(document.getElementById('vaccVt').value||'').trim()});save();toast('Impfung gespeichert!');document.getElementById('vaccMOv').style.display='none';window.openPetDetail(pid);};
+window.deleteVacc=function(pid,vid){if(!confirm('Impfung löschen?'))return;var p=_fp3(pid);if(!p)return;p.vaccinations=p.vaccinations.filter(function(v){return v.id!==vid;});save();toast('Gelöscht');window.openPetDetail(pid);};
+
+// TIERARZT-BESUCH
+window.openVetVisitModal=function(petId){
+  var ov=_mOv('vvMOv');
+  var ih=['<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">'];
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">🏥 Tierarztbesuch</h3>');
+  ih.push('<label style="'+_mls+'">Datum</label><input type="date" id="vvDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Grund</label><input id="vvRs" placeholder="z.B. Impfung, Durchfall" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Diagnose</label><input id="vvDg" placeholder="Optional" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Behandlung</label><input id="vvTr" placeholder="Optional" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Kosten (€)</label><input type="number" step="0.01" id="vvCo" placeholder="0.00" style="'+_mis+'">');
+  ih.push('<label style="'+_mls+'">Notizen</label><textarea id="vvNo" placeholder="Optional" style="'+_mis+'min-height:60px;resize:vertical;"></textarea>');
+  ih.push('<input type="hidden" id="vvPId" value="'+petId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveVV()">💾 Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'vvMOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');ov.style.display='flex';
+};
+window.saveVV=function(){var pid=document.getElementById('vvPId').value,p=_fp3(pid);if(!p)return;if(!p.vetVisits)p.vetVisits=[];p.vetVisits.push({id:uid(),date:document.getElementById('vvDt').value,reason:(document.getElementById('vvRs').value||'').trim(),diagnosis:(document.getElementById('vvDg').value||'').trim(),treatment:(document.getElementById('vvTr').value||'').trim(),cost:parseFloat(document.getElementById('vvCo').value)||0,notes:(document.getElementById('vvNo').value||'').trim()});save();toast('Besuch gespeichert!');document.getElementById('vvMOv').style.display='none';window.openPetDetail(pid);};
+window.deleteVetVisit=function(pid,vid){if(!confirm('Besuch löschen?'))return;var p=_fp3(pid);if(!p)return;p.vetVisits=p.vetVisits.filter(function(v){return v.id!==vid;});save();toast('Gelöscht');window.openPetDetail(pid);};
+
+// GEWICHT
+window.openWeightModal=function(petId){
+  var ov=_mOv('wMOv');
+  ov.innerHTML='<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()"><h3 style="margin:0 0 16px;color:#fff;">⚖️ Gewicht eintragen</h3><input type="date" id="wDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+_mis+'"><input type="number" step="0.1" id="wKg" placeholder="Gewicht in kg" style="'+_mis+'"><input type="hidden" id="wPId" value="'+petId+'"><div style="display:flex;gap:10px;margin-top:16px;"><div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveW()">💾 Speichern</div><div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'wMOv\').style.display=\'none\'">Abbrechen</div></div></div>';
+  ov.style.display='flex';
+};
+window.saveW=function(){var pid=document.getElementById('wPId').value,p=_fp3(pid);if(!p)return;if(!p.weights)p.weights=[];var kg=parseFloat(document.getElementById('wKg').value);if(!kg||kg<=0){toast('Gewicht eingeben','warn');return;}p.weights.push({date:document.getElementById('wDt').value,weight:kg});p.weight=kg;save();toast('Gewicht gespeichert!');document.getElementById('wMOv').style.display='none';window.openPetDetail(pid);};
+
+// KOSTEN
+window.openPetCostModal=function(petId){
+  var ov=_mOv('pcMOv');
+  ov.innerHTML='<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()"><h3 style="margin:0 0 16px;color:#fff;">💰 Kosten eintragen</h3><label style="'+_mls+'">Datum</label><input type="date" id="pcDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+_mis+'"><label style="'+_mls+'">Kategorie</label><select id="pcCt" style="'+_mis+'"><option value="futter">🍖 Futter</option><option value="tierarzt">🏥 Tierarzt</option><option value="medikamente">💊 Medikamente</option><option value="versicherung">🛡️ Versicherung</option><option value="zubehoer">🧸 Zubehör</option><option value="sonstiges">📌 Sonstiges</option></select><label style="'+_mls+'">Betrag (€)</label><input type="number" step="0.01" id="pcAm" placeholder="0.00" style="'+_mis+'"><label style="'+_mls+'">Beschreibung</label><input id="pcDs" placeholder="Optional" style="'+_mis+'"><input type="hidden" id="pcPId" value="'+petId+'"><div style="display:flex;gap:10px;margin-top:16px;"><div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="savePC()">💾 Speichern</div><div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'pcMOv\').style.display=\'none\'">Abbrechen</div></div></div>';
+  ov.style.display='flex';
+};
+window.savePC=function(){var pid=document.getElementById('pcPId').value,p=_fp3(pid);if(!p)return;if(!p.petCosts)p.petCosts=[];var am=parseFloat(document.getElementById('pcAm').value);if(!am){toast('Betrag eingeben','warn');return;}p.petCosts.push({id:uid(),date:document.getElementById('pcDt').value,category:document.getElementById('pcCt').value,amount:am,description:(document.getElementById('pcDs').value||'').trim()});save();toast('Kosten gespeichert!');document.getElementById('pcMOv').style.display='none';window.openPetDetail(pid);};
+
+// KI HEALTH TIPS
+window.getPetKiTips=function(petId){
+  var p=_fp3(petId);if(!p)return;
+  var el=document.getElementById('petKiTips_'+petId);if(!el)return;
+  if(!settings.openrouterKey){el.innerHTML='<div style="color:#dc3545;font-size:13px;padding:12px;background:rgba(220,53,69,0.08);border-radius:10px;">⚠️ OpenRouter API-Key in Einstellungen hinterlegen!</div>';return;}
+  el.innerHTML='<div style="text-align:center;padding:20px;"><div style="font-size:28px;">🔄</div><div style="color:#999;font-size:13px;">KI analysiert...</div></div>';
+  var age='';
+  if(p.birthDate){var bn=new Date(p.birthDate),nn=new Date();age=Math.floor((nn-bn)/31557600000)+' Jahre';}
+  var pr='Du bist ein erfahrener Tierarzt-Berater. Gib praktische Tipps für diesen Hund:\n\n';
+  pr+='Name: '+(p.name||'')+'\nRasse: '+(p.breed||'Unbekannt')+'\nGewicht: '+(p.weight||'?')+'kg\nAlter: '+(age||'?')+'\n';
+  pr+='Erkrankung: '+(p.diseases||'')+'\n';
+  if(p.allergies)pr+='Allergien: '+p.allergies+'\n';
+  if(p.medications&&p.medications.length>0)pr+='Medikamente: '+p.medications.map(function(m){return m.name;}).join(', ')+'\n';
+  pr+='\nGib 6-8 konkrete Tipps zu: Ernährung (was füttern/meiden), Bewegung, Pflege, Warnsignale, wann sofort zum Tierarzt.\nAntwort auf Deutsch, kurz, mit Emoji.';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.3,max_tokens:1500})}).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
+    t=t.replace(/\n/g,'<br>');
+    el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.15);"><div style="color:#17a2b8;font-size:11px;font-weight:bold;margin-bottom:8px;">🤖 KI-Empfehlung (kein Ersatz für den Tierarzt!)</div><div style="color:#ddd;font-size:13px;line-height:1.7;">'+t+'</div></div>';
+  }).catch(function(e){el.innerHTML='<div style="color:#dc3545;font-size:13px;padding:12px;background:rgba(220,53,69,0.08);border-radius:10px;">❌ '+e.message+'</div>';});
+};
+
+// GIFT-ALARM
+window.openGiftAlarm=function(){
+  var ov=document.getElementById('giftOv');
+  if(!ov){ov=document.createElement('div');ov.id='giftOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:100000;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(ov);}
+  var h=['<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">'];
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<h2 style="margin:0;color:#fff;font-size:20px;">☠️ Gift-Alarm</h2>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'giftOv\').style.display=\'none\'">✕</div></div>');
+  h.push('<div style="background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.2);border-radius:12px;padding:14px;margin-bottom:16px;">');
+  h.push('<div style="color:#dc3545;font-weight:bold;font-size:14px;margin-bottom:8px;">🚨 Gift-Notfall? Sofort handeln!</div>');
+  h.push('<a href="tel:055119240" style="display:block;padding:12px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:8px;text-align:center;font-weight:bold;text-decoration:none;font-size:15px;">☠️ Gift-Notruf: 0551 - 19240</a></div>');
+  for(var ti=0;ti<TOXIC.length;ti++){
+    var cat=TOXIC[ti];
+    h.push('<div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;">');
+    h.push('<h4 style="margin:0 0 12px;color:'+cat.color+';font-size:15px;">'+cat.cat+'</h4>');
+    for(var ii=0;ii<cat.items.length;ii++){var it=cat.items[ii];h.push('<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:6px;border-left:3px solid '+cat.color+';"><div style="font-weight:bold;color:#fff;font-size:13px;">'+it.n+'</div><div style="color:#999;font-size:12px;margin-top:2px;">'+it.d+'</div></div>');}
+    h.push('</div>');
+  }
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-size:15px;font-weight:bold;" onclick="document.getElementById(\'giftOv\').style.display=\'none\'">Schließen</div></div>');
+  ov.innerHTML=h.join('');ov.style.display='block';ov.scrollTop=0;
+};
+
+// Dashboard Impf-Warnungen
+setInterval(function(){
+  if(!state.pets||state.pets.length===0||document.getElementById('petVaccW'))return;
+  var w=[];
+  for(var i=0;i<state.pets.length;i++){var p=state.pets[i];if(!p.vaccinations)continue;for(var j=0;j<p.vaccinations.length;j++){var v=p.vaccinations[j];if(!v.nextDue)continue;var r=Math.round((new Date(v.nextDue)-new Date())/86400000);if(r<0)w.push({c:'#dc3545',t:'🚨 '+p.name+': '+v.name+' überfällig!'});else if(r<30)w.push({c:'#ffc107',t:'💉 '+p.name+': '+v.name+' in '+r+' Tagen'});}}
+  if(w.length===0)return;
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  for(var ci=0;ci<cards.length;ci++){var cd=cards[ci];if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){
+    var wb=document.createElement('div');wb.id='petVaccW';wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';
+    var wh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">💉 Impf-Erinnerungen</div>';
+    for(var wi=0;wi<w.length;wi++)wh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+w[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+w[wi].t+'</div>';
+    wb.innerHTML=wh;cd.parentElement.insertBefore(wb,cd);break;}}
+},6000);
+})();
+
+// === AUTO TCO (Gesamtkosten-Rechner) ===
+(function(){
+window.openAutoTCO=function(vehId){
+  var v=null;for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===vehId){v=state.vehicles[i];break;}}
+  if(!v)return;
+  var logs=(state.vehicleLogs||[]).filter(function(l){return l.vehId===vehId;});
+  var fC=0,mC=0,rC=0,oC=0,minK=Infinity,maxK=0,minD=null,maxD=null,fA=0;
+  for(var li=0;li<logs.length;li++){
+    var l=logs[li],c=parseFloat(l.cost)||0;
+    if(l.mileage>0){if(l.mileage<minK)minK=l.mileage;if(l.mileage>maxK)maxK=l.mileage;}
+    if(l.date){var d=new Date(l.date);if(!minD||d<minD)minD=d;if(!maxD||d>maxD)maxD=d;}
+    if(l.type==='tanken'||l.type==='laden'){fC+=c;fA+=(l.amount||0);}
+    else if(l.type==='wartung')mC+=c;
+    else if(l.type==='reparatur')rC+=c;
+    else oC+=c;
+  }
+  var totC=fC+mC+rC+oC,totKm=maxK>minK?maxK-minK:0;
+  var totMon=minD&&maxD?Math.max(1,Math.round((maxD-minD)/2592000000)):0;
+  var cpk=totKm>0?(totC/totKm):0;
+  var cpm=totMon>0?(totC/totMon):0;
+  var avgC=totKm>0&&fA>0?((fA/totKm)*100):0;
+  var isEV=v.type&&v.type.toLowerCase().indexOf('elektr')>=0;
+  var cU=isEV?'kWh/100km':'L/100km';
+
+  var ov=document.getElementById('tcoOv');
+  if(!ov){ov=document.createElement('div');ov.id='tcoOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(ov);}
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=['<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">'];
+
+  h.push('<div style="background:linear-gradient(135deg,#e67e22,#d35400);border-radius:16px;padding:20px;margin-bottom:14px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;">');
+  h.push('<div><h2 style="margin:0;color:#fff;font-size:20px;">💰 Gesamtkosten</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.7);font-size:13px;">'+(v.brand||'')+' '+(v.model||'')+' — '+(v.licensePlate||'')+'</div></div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(0,0,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'tcoOv\').style.display=\'none\'">✕</div>');
+  h.push('</div></div>');
+
+  if(logs.length===0){
+    h.push('<div style="'+cs+'text-align:center;"><div style="font-size:48px;margin-bottom:12px;">📊</div><div style="color:#888;font-size:14px;">Noch keine Logbuch-Einträge.<br>Trage Tankvorgänge und Wartungen ein!</div></div>');
+  }else{
+    // Summary Cards
+    h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">');
+    h.push('<div style="'+cs+'text-align:center;"><div style="color:#888;font-size:11px;">Gesamtkosten</div><div style="color:#e67e22;font-weight:bold;font-size:24px;">'+totC.toFixed(0)+' €</div></div>');
+    h.push('<div style="'+cs+'text-align:center;"><div style="color:#888;font-size:11px;">Gefahrene km</div><div style="color:#fff;font-weight:bold;font-size:24px;">'+totKm.toLocaleString('de-DE')+'</div></div>');
+    h.push('<div style="'+cs+'text-align:center;"><div style="color:#888;font-size:11px;">Kosten pro km</div><div style="color:#17a2b8;font-weight:bold;font-size:24px;">'+cpk.toFixed(2)+' €</div></div>');
+    h.push('<div style="'+cs+'text-align:center;"><div style="color:#888;font-size:11px;">Kosten pro Monat</div><div style="color:#17a2b8;font-weight:bold;font-size:24px;">'+cpm.toFixed(0)+' €</div></div>');
+    h.push('</div>');
+
+    // Breakdown
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📊 Kostenaufschlüsselung</h4>');
+    var cats=[{l:isEV?'⚡ Laden':'⛽ Tanken',v:fC,c:'#17a2b8'},{l:'🔧 Wartung',v:mC,c:'#ffc107'},{l:'🛠️ Reparatur',v:rC,c:'#dc3545'},{l:'📝 Sonstiges',v:oC,c:'#6f42c1'}];
+    for(var bi=0;bi<cats.length;bi++){
+      var b=cats[bi],pct=totC>0?((b.v/totC)*100):0;
+      h.push('<div style="margin-bottom:10px;">');
+      h.push('<div style="display:flex;justify-content:space-between;color:#ddd;font-size:13px;margin-bottom:4px;"><span>'+b.l+'</span><span style="font-weight:bold;">'+b.v.toFixed(2)+' € ('+pct.toFixed(0)+'%)</span></div>');
+      h.push('<div style="background:rgba(255,255,255,0.08);border-radius:4px;height:8px;overflow:hidden;"><div style="background:'+b.c+';height:100%;width:'+pct+'%;border-radius:4px;"></div></div>');
+      h.push('</div>');
+    }
+    h.push('</div>');
+
+    // Consumption
+    if(avgC>0){
+      h.push('<div style="'+cs+'">');
+      h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">⛽ Durchschnittsverbrauch</h4>');
+      h.push('<div style="text-align:center;"><div style="color:#17a2b8;font-weight:bold;font-size:32px;">'+avgC.toFixed(1)+'</div><div style="color:#888;font-size:13px;">'+cU+'</div></div>');
+      if(v.wltp){h.push('<div style="text-align:center;margin-top:8px;color:#999;font-size:12px;">WLTP Angabe: '+v.wltp+' '+cU+(avgC>v.wltp?' <span style="color:#dc3545;">(+'+((avgC-v.wltp)/v.wltp*100).toFixed(0)+'% mehr)</span>':' <span style="color:#28a745;">(im Rahmen)</span>')+'</div>');}
+      h.push('</div>');
+    }
+
+    // Stats
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">📈 Statistiken</h4>');
+    h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">');
+    h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;">Einträge</div><div style="color:#fff;font-weight:600;">'+logs.length+'</div></div>');
+    h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;">Zeitraum</div><div style="color:#fff;font-weight:600;">'+totMon+' Monate</div></div>');
+    if(fA>0)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;">Gesamtmenge</div><div style="color:#fff;font-weight:600;">'+fA.toFixed(1)+(isEV?' kWh':' L')+'</div></div>');
+    if(fC>0&&fA>0)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;">Ø Preis</div><div style="color:#fff;font-weight:600;">'+(fC/fA).toFixed(3)+(isEV?' €/kWh':' €/L')+'</div></div>');
+    h.push('</div></div>');
+  }
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;" onclick="document.getElementById(\'tcoOv\').style.display=\'none\'">Schließen</div></div>');
+  ov.innerHTML=h.join('');ov.style.display='block';ov.scrollTop=0;
+};
 })();
 </script>
 </body>
