@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.29';
+const APP_VERSION = '2.30';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -8838,6 +8838,422 @@ if(window.location.search.indexOf('park')>=0){
     }
   },500);
 }
+
+})();
+// === HAUSTIER-MODUL Etappe 1 ===
+(function(){
+var petListOv=null,petEditOv=null,petDetailOv=null,editingPetId=null,petPhotoData=null;
+
+var _pw=setInterval(function(){
+  if(typeof state==='undefined')return;
+  clearInterval(_pw);
+  if(!state.pets)state.pets=[];
+  _petSetup();
+},500);
+
+function _petSetup(){
+  _injectPetTab();
+  setInterval(_injectPetTab,3000);
+}
+
+function _injectPetTab(){
+  if(document.getElementById('petTabInj'))return;
+  var allEls=document.querySelectorAll('a,div,span,button');
+  for(var i=0;i<allEls.length;i++){
+    var el=allEls[i];
+    var txt=(el.textContent||'').trim();
+    if(txt.indexOf('Kfz')>=0&&txt.length<20&&el.offsetWidth>0&&!el.querySelector('div,span,a')){
+      var clone=el.cloneNode(false);
+      clone.id='petTabInj';
+      clone.innerHTML='🐾 Tiere';
+      clone.style.cursor='pointer';
+      var attrs=clone.attributes;
+      for(var a=attrs.length-1;a>=0;a--){
+        var n=attrs[a].name;
+        if(n.indexOf('data-')===0&&n!=='id')clone.removeAttribute(n);
+      }
+      clone.removeAttribute('onclick');
+      clone.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openPetList();});
+      el.parentElement.insertBefore(clone,el.nextSibling);
+      break;
+    }
+  }
+}
+
+function _esc(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+
+function _calcAge(bd){
+  if(!bd)return '';
+  var b=new Date(bd),n=new Date(),y=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();
+  if(m<0){y--;m+=12;}
+  if(y<1)return m+' Monate';
+  return y+' Jahr'+(y>1?'e':'')+( m>0?', '+m+' Mon.':'');
+}
+
+function _dogAge(p){
+  if(!p||p.species!=='dog'||!p.birthDate)return '';
+  var b=new Date(p.birthDate),n=new Date();
+  var years=(n-b)/31557600000;
+  if(years<=0)return '';
+  var w=parseFloat(p.weight)||15;
+  var rate=w<10?4:w<25?5:7;
+  var human=0;
+  if(years<=1)human=15*years;
+  else if(years<=2)human=15+9*(years-1);
+  else human=24+rate*(years-2);
+  return Math.round(human);
+}
+
+function _findPet(id){for(var i=0;i<state.pets.length;i++){if(state.pets[i].id===id)return state.pets[i];}return null;}
+
+// === PET LIST ===
+function openPetList(){
+  if(!petListOv){
+    petListOv=document.createElement('div');
+    petListOv.id='petListOv';
+    petListOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99998;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(petListOv);
+  }
+  _renderPetList();
+  petListOv.style.display='block';
+  petListOv.scrollTop=0;
+}
+
+function _renderPetList(){
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;">');
+  h.push('<div style="width:42px;height:42px;background:linear-gradient(135deg,#e67e22,#d35400);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;">🐾</div>');
+  h.push('<h2 style="margin:0;color:#fff;font-size:20px;">Haustiere</h2></div>');
+  h.push('<div style="display:flex;gap:8px;">');
+  h.push('<div style="padding:10px 18px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:10px;font-weight:bold;cursor:pointer;font-size:14px;" onclick="openPetEdit(null)">+ Tier</div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'petListOv\').style.display=\'none\'">✕</div>');
+  h.push('</div></div>');
+
+  if(!state.pets||state.pets.length===0){
+    h.push('<div style="'+cs+'text-align:center;">');
+    h.push('<div style="font-size:64px;margin-bottom:16px;">🐕</div>');
+    h.push('<div style="color:#888;font-size:15px;margin-bottom:16px;">Noch keine Haustiere eingetragen.</div>');
+    h.push('<div style="padding:14px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:12px;font-weight:bold;cursor:pointer;font-size:15px;" onclick="openPetEdit(null)">+ Erstes Tier hinzufügen</div>');
+    h.push('</div>');
+  }else{
+    for(var i=0;i<state.pets.length;i++){
+      var p=state.pets[i];
+      var age=_calcAge(p.birthDate);
+      var da=_dogAge(p);
+      h.push('<div style="'+cs+'cursor:pointer;display:flex;gap:14px;align-items:center;" onclick="openPetDetail(\''+p.id+'\')">');
+      if(p.photo){
+        h.push('<img src="'+p.photo+'" style="width:72px;height:72px;border-radius:16px;object-fit:cover;flex-shrink:0;border:2px solid rgba(230,126,34,0.3);">');
+      }else{
+        var ico=p.species==='cat'?'🐱':p.species==='other'?'🐾':'🐕';
+        h.push('<div style="width:72px;height:72px;border-radius:16px;background:rgba(230,126,34,0.12);display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0;">'+ico+'</div>');
+      }
+      h.push('<div style="flex:1;min-width:0;">');
+      h.push('<div style="color:#fff;font-weight:bold;font-size:17px;">'+_esc(p.name)+'</div>');
+      h.push('<div style="color:#999;font-size:12px;margin-top:3px;">'+(p.breed||'Unbekannt')+' '+(p.gender==='male'?'♂':'♀')+'</div>');
+      if(age)h.push('<div style="color:#e67e22;font-size:12px;margin-top:3px;">🎂 '+age+(da?' ('+da+' Menschenjahre)':'')+'</div>');
+      h.push('</div>');
+      h.push('<div style="color:#555;font-size:22px;">›</div>');
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+  petListOv.innerHTML=h.join('');
+}
+
+// === PET EDIT ===
+function openPetEdit(id){
+  editingPetId=id;
+  petPhotoData=null;
+  var p=id?_findPet(id):null;
+
+  if(!petEditOv){
+    petEditOv=document.createElement('div');
+    petEditOv.id='petEditOv';
+    petEditOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(petEditOv);
+  }
+  if(p&&p.photo)petPhotoData=p.photo;
+
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var h=[];
+
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<h2 style="margin:0;color:#fff;font-size:20px;">'+(id?'✏️ Tier bearbeiten':'🐾 Neues Tier')+'</h2>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'petEditOv\').style.display=\'none\'">✕</div>');
+  h.push('</div>');
+
+  // Photo
+  h.push('<div style="'+cs+'text-align:center;">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📸 Profilbild</h4>');
+  var ps=p&&p.photo?p.photo:'';
+  h.push('<div id="petPhPrev" style="'+(ps?'':'display:none;')+'margin-bottom:12px;"><img id="petPhThumb" src="'+(ps||'')+'" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid rgba(230,126,34,0.4);"></div>');
+  h.push('<label style="display:inline-block;padding:12px 24px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:10px;cursor:pointer;font-size:14px;border:2px dashed rgba(255,255,255,0.15);">');
+  h.push('📸 Foto aufnehmen / wählen');
+  h.push('<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePetImg(this.files)">');
+  h.push('</label></div>');
+
+  // Basic
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">🐾 Grunddaten</h4>');
+  h.push('<label style="'+ls+'">Name *</label>');
+  h.push('<input id="ptName" value="'+_esc(p?p.name:'')+'" placeholder="z.B. Luna" style="'+is+'">');
+  h.push('<div style="display:flex;gap:10px;">');
+  h.push('<div style="flex:1;"><label style="'+ls+'">Tierart</label>');
+  h.push('<select id="ptSpecies" style="'+is+'"><option value="dog"'+(p&&p.species==='dog'?' selected':'')+'>🐕 Hund</option><option value="cat"'+(p&&p.species==='cat'?' selected':'')+'>🐱 Katze</option><option value="other"'+(p&&p.species==='other'?' selected':'')+'>🐾 Sonstiges</option></select></div>');
+  h.push('<div style="flex:1;"><label style="'+ls+'">Geschlecht</label>');
+  h.push('<select id="ptGender" style="'+is+'"><option value="male"'+(p&&p.gender==='male'?' selected':'')+'>♂ Männlich</option><option value="female"'+(p&&p.gender==='female'?' selected':'')+'>♀ Weiblich</option></select></div>');
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Rasse</label>');
+  h.push('<input id="ptBreed" value="'+_esc(p?p.breed:'')+'" placeholder="z.B. Labrador, Mischling" style="'+is+'">');
+  h.push('<div style="display:flex;gap:10px;">');
+  h.push('<div style="flex:1;"><label style="'+ls+'">Geburtsdatum</label>');
+  h.push('<input type="date" id="ptBirth" value="'+(p?p.birthDate||'':'')+'" style="'+is+'"></div>');
+  h.push('<div style="flex:1;"><label style="'+ls+'">Farbe</label>');
+  h.push('<input id="ptColor" value="'+_esc(p?p.color:'')+'" placeholder="z.B. schwarz-braun" style="'+is+'"></div>');
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Gewicht (kg)</label>');
+  h.push('<input type="number" step="0.1" id="ptWeight" value="'+(p&&p.weight?p.weight:'')+'" placeholder="z.B. 12.5" style="'+is+'">');
+  h.push('</div>');
+
+  // ID
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">🔖 Identifikation</h4>');
+  h.push('<label style="'+ls+'">Chip-Nummer (15-stellig)</label>');
+  h.push('<input id="ptChip" value="'+_esc(p?p.chipNr:'')+'" placeholder="z.B. 276098106123456" style="'+is+'">');
+  h.push('<label style="'+ls+'">TASSO-Registriernr.</label>');
+  h.push('<input id="ptTasso" value="'+_esc(p?p.tassoNr:'')+'" placeholder="TASSO-Nr." style="'+is+'">');
+  h.push('</div>');
+
+  // Vet
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">🏥 Tierarzt</h4>');
+  h.push('<label style="'+ls+'">Name / Praxis</label>');
+  h.push('<input id="ptVetN" value="'+_esc(p?p.vetName:'')+'" placeholder="z.B. Dr. Müller" style="'+is+'">');
+  h.push('<label style="'+ls+'">Telefon</label>');
+  h.push('<input type="tel" id="ptVetP" value="'+_esc(p?p.vetPhone:'')+'" placeholder="030 12345678" style="'+is+'">');
+  h.push('<label style="'+ls+'">Notfall-Telefon (24h)</label>');
+  h.push('<input type="tel" id="ptVetE" value="'+_esc(p?p.vetEmergencyPhone:'')+'" placeholder="Tier-Notdienst" style="'+is+'">');
+  h.push('<label style="'+ls+'">Adresse</label>');
+  h.push('<input id="ptVetA" value="'+_esc(p?p.vetAddress:'')+'" placeholder="Musterstr. 1, 12345 Berlin" style="'+is+'">');
+  h.push('</div>');
+
+  // Health
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">🩺 Gesundheit</h4>');
+  h.push('<label style="'+ls+'">Allergien</label>');
+  h.push('<input id="ptAlrg" value="'+_esc(p?p.allergies:'')+'" placeholder="z.B. Huhn, Getreide" style="'+is+'">');
+  h.push('<label style="'+ls+'">Krankheiten / Vorerkrankungen</label>');
+  h.push('<input id="ptDis" value="'+_esc(p?p.diseases:'')+'" placeholder="z.B. HD, Epilepsie" style="'+is+'">');
+  h.push('<label style="'+ls+'">Allgemeine Notizen</label>');
+  h.push('<textarea id="ptNotes" placeholder="Sonstige Hinweise..." style="'+is+'min-height:70px;resize:vertical;">'+(p?_esc(p.notes||''):'')+'</textarea>');
+  h.push('</div>');
+
+  // Save
+  h.push('<div style="padding:16px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:14px;box-shadow:0 4px 15px rgba(230,126,34,0.3);" onclick="savePetData()">💾 Tier speichern</div>');
+
+  if(id){
+    h.push('<div style="padding:14px;background:rgba(220,53,69,0.12);border:1px solid rgba(220,53,69,0.25);color:#dc3545;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="deletePetData(\''+id+'\')">🗑️ Tier löschen</div>');
+  }
+
+  h.push('</div>');
+  petEditOv.innerHTML=h.join('');
+  petEditOv.style.display='block';
+  petEditOv.scrollTop=0;
+}
+
+// === PET DETAIL ===
+function openPetDetail(id){
+  var p=_findPet(id);
+  if(!p)return;
+
+  if(!petDetailOv){
+    petDetailOv=document.createElement('div');
+    petDetailOv.id='petDetailOv';
+    petDetailOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(petDetailOv);
+  }
+
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var age=_calcAge(p.birthDate);
+  var da=_dogAge(p);
+  var h=[];
+
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+
+  // Header
+  h.push('<div style="background:linear-gradient(135deg,#e67e22,#d35400);border-radius:20px;padding:28px 20px;margin-bottom:14px;text-align:center;position:relative;">');
+  h.push('<div style="position:absolute;top:12px;right:12px;display:flex;gap:8px;">');
+  h.push('<div style="width:36px;height:36px;background:rgba(0,0,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#fff;" onclick="openPetEdit(\''+p.id+'\')">✏️</div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(0,0,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#fff;" onclick="document.getElementById(\'petDetailOv\').style.display=\'none\'">✕</div>');
+  h.push('</div>');
+  if(p.photo){
+    h.push('<img src="'+p.photo+'" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid rgba(255,255,255,0.3);margin-bottom:14px;">');
+  }else{
+    var ico=p.species==='cat'?'🐱':p.species==='other'?'🐾':'🐕';
+    h.push('<div style="width:110px;height:110px;border-radius:50%;background:rgba(0,0,0,0.2);display:inline-flex;align-items:center;justify-content:center;font-size:50px;margin-bottom:14px;">'+ico+'</div>');
+  }
+  h.push('<h2 style="margin:0;color:#fff;font-size:24px;">'+_esc(p.name)+'</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.8);font-size:14px;margin-top:6px;">'+(p.breed||'')+(p.gender?' '+(p.gender==='male'?'♂':'♀'):'')+'</div>');
+  if(age)h.push('<div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:8px;background:rgba(0,0,0,0.15);display:inline-block;padding:4px 14px;border-radius:20px;">🎂 '+age+(da?' ≈ '+da+' Menschenjahre':'')+'</div>');
+  h.push('</div>');
+
+  // Row helper
+  function _r(lbl,val){
+    if(!val)return '';
+    var sv=String(val).replace(/'/g,"\\'");
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px;margin-bottom:6px;"><div style="flex:1;min-width:0;"><div style="color:#888;font-size:11px;margin-bottom:2px;">'+lbl+'</div><div style="color:#fff;font-weight:600;word-break:break-all;">'+_esc(val)+'</div></div><div style="cursor:pointer;font-size:18px;padding:4px 8px;flex-shrink:0;" onclick="if(typeof copyToClip===\'function\')copyToClip(\''+sv+'\');else{navigator.clipboard.writeText(\''+sv+'\');}">📋</div></div>';
+  }
+
+  // Data
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🐾 Grunddaten</h4>');
+  h.push(_r('Tierart',p.species==='dog'?'Hund':p.species==='cat'?'Katze':'Sonstiges'));
+  h.push(_r('Rasse',p.breed));
+  h.push(_r('Geburtsdatum',p.birthDate?p.birthDate.split('-').reverse().join('.'):''));
+  h.push(_r('Geschlecht',p.gender==='male'?'Männlich ♂':'Weiblich ♀'));
+  h.push(_r('Farbe',p.color));
+  h.push(_r('Gewicht',p.weight?p.weight+' kg':''));
+  h.push('</div>');
+
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🔖 Identifikation</h4>');
+  h.push(_r('Chip-Nummer',p.chipNr));
+  h.push(_r('TASSO-Nr.',p.tassoNr));
+  h.push('</div>');
+
+  if(p.vetName||p.vetPhone){
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🏥 Tierarzt</h4>');
+    h.push(_r('Praxis',p.vetName));
+    h.push(_r('Telefon',p.vetPhone));
+    h.push(_r('Notfall 24h',p.vetEmergencyPhone));
+    h.push(_r('Adresse',p.vetAddress));
+    if(p.vetPhone){
+      h.push('<a href="tel:'+p.vetPhone.replace(/ /g,'')+'" style="display:block;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;font-size:15px;text-decoration:none;margin-top:10px;">📞 Tierarzt anrufen</a>');
+    }
+    h.push('</div>');
+  }
+
+  if(p.allergies||p.diseases||p.notes){
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🩺 Gesundheit</h4>');
+    if(p.allergies)h.push('<div style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(220,53,69,0.08);border:1px solid rgba(220,53,69,0.15);border-radius:10px;margin-bottom:6px;font-size:13px;color:#ddd;"><span style="font-size:18px;">⚠️</span> <div><div style="color:#dc3545;font-size:11px;font-weight:bold;">Allergien</div>'+_esc(p.allergies)+'</div></div>');
+    h.push(_r('Krankheiten',p.diseases));
+    if(p.notes)h.push('<div style="background:rgba(255,255,255,0.04);padding:12px;border-radius:10px;margin-bottom:6px;"><div style="color:#888;font-size:11px;margin-bottom:4px;">Notizen</div><div style="color:#ddd;font-size:13px;white-space:pre-wrap;">'+_esc(p.notes)+'</div></div>');
+    h.push('</div>');
+  }
+
+  // Dog Age Card
+  if(p.species==='dog'&&p.birthDate&&p.weight){
+    var w=parseFloat(p.weight)||0;
+    var sz=w<10?'Klein (unter 10kg)':w<25?'Mittel (10-25kg)':'Groß (über 25kg)';
+    h.push('<div style="'+cs+'background:rgba(230,126,34,0.06);border-color:rgba(230,126,34,0.15);">');
+    h.push('<h4 style="margin:0 0 12px;color:#e67e22;font-size:15px;">🎂 Hundealter-Rechner</h4>');
+    h.push('<div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:10px;">');
+    h.push('<div><div style="color:#888;font-size:11px;">Kategorie</div><div style="color:#e67e22;font-weight:bold;font-size:14px;">'+sz+'</div></div>');
+    h.push('<div><div style="color:#888;font-size:11px;">Hundejahre</div><div style="color:#fff;font-weight:bold;font-size:22px;">'+age+'</div></div>');
+    h.push('<div><div style="color:#888;font-size:11px;">Menschenjahre</div><div style="color:#e67e22;font-weight:bold;font-size:22px;">≈ '+da+'</div></div>');
+    h.push('</div>');
+    h.push('<div style="font-size:11px;color:#666;text-align:center;">Berechnung nach Gewichtsklasse (veterinärmedizinische Formel)</div>');
+    h.push('</div>');
+  }
+
+  // Actions
+  h.push('<div style="display:flex;gap:10px;margin-bottom:14px;">');
+  h.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="openPetEdit(\''+p.id+'\')">✏️ Bearbeiten</div>');
+  h.push('<div style="flex:1;padding:14px;background:rgba(220,53,69,0.12);color:#dc3545;border:1px solid rgba(220,53,69,0.25);border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="deletePetData(\''+p.id+'\')">🗑️ Löschen</div>');
+  h.push('</div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;" onclick="document.getElementById(\'petDetailOv\').style.display=\'none\'">← Zurück zur Liste</div>');
+  h.push('</div>');
+  petDetailOv.innerHTML=h.join('');
+  petDetailOv.style.display='block';
+  petDetailOv.scrollTop=0;
+}
+
+// === HANDLERS ===
+window.handlePetImg=function(files){
+  if(!files||!files[0])return;
+  var rd=new FileReader();
+  rd.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var c=document.createElement('canvas'),mx=200;
+      var r=Math.min(mx/img.width,mx/img.height,1);
+      c.width=img.width*r;c.height=img.height*r;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      petPhotoData=c.toDataURL('image/jpeg',0.5);
+      var pv=document.getElementById('petPhPrev'),th=document.getElementById('petPhThumb');
+      if(pv&&th){th.src=petPhotoData;pv.style.display='block';}
+    };
+    img.src=e.target.result;
+  };
+  rd.readAsDataURL(files[0]);
+};
+
+window.savePetData=function(){
+  var nm=((document.getElementById('ptName')||{}).value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Name ist erforderlich!','warn');else alert('Bitte einen Namen eingeben.');return;}
+
+  var d={
+    name:nm,
+    species:(document.getElementById('ptSpecies')||{}).value||'dog',
+    gender:(document.getElementById('ptGender')||{}).value||'male',
+    breed:((document.getElementById('ptBreed')||{}).value||'').trim(),
+    birthDate:(document.getElementById('ptBirth')||{}).value||'',
+    color:((document.getElementById('ptColor')||{}).value||'').trim(),
+    weight:parseFloat((document.getElementById('ptWeight')||{}).value)||0,
+    chipNr:((document.getElementById('ptChip')||{}).value||'').trim(),
+    tassoNr:((document.getElementById('ptTasso')||{}).value||'').trim(),
+    vetName:((document.getElementById('ptVetN')||{}).value||'').trim(),
+    vetPhone:((document.getElementById('ptVetP')||{}).value||'').trim(),
+    vetEmergencyPhone:((document.getElementById('ptVetE')||{}).value||'').trim(),
+    vetAddress:((document.getElementById('ptVetA')||{}).value||'').trim(),
+    allergies:((document.getElementById('ptAlrg')||{}).value||'').trim(),
+    diseases:((document.getElementById('ptDis')||{}).value||'').trim(),
+    notes:((document.getElementById('ptNotes')||{}).value||'').trim(),
+    photo:petPhotoData||null
+  };
+
+  if(editingPetId){
+    for(var i=0;i<state.pets.length;i++){
+      if(state.pets[i].id===editingPetId){
+        if(!d.photo&&state.pets[i].photo)d.photo=state.pets[i].photo;
+        state.pets[i]=Object.assign({},state.pets[i],d);
+        break;
+      }
+    }
+  }else{
+    d.id=typeof uid==='function'?uid():Date.now().toString();
+    d.createdAt=Date.now();
+    state.pets.push(d);
+  }
+
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast(editingPetId?'Tier aktualisiert!':'Tier hinzugefügt!');
+  petEditOv.style.display='none';
+  _renderPetList();
+};
+
+window.deletePetData=function(id){
+  if(!confirm('Dieses Tier wirklich löschen?'))return;
+  state.pets=state.pets.filter(function(p){return p.id!==id;});
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Tier gelöscht');
+  if(petDetailOv)petDetailOv.style.display='none';
+  if(petEditOv)petEditOv.style.display='none';
+  _renderPetList();
+};
+
+window.openPetList=openPetList;
+window.openPetEdit=openPetEdit;
+window.openPetDetail=openPetDetail;
 
 })();
 </script>
