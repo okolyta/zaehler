@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.36';
+const APP_VERSION = '2.37';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -10174,6 +10174,208 @@ window.openAutoTCO=function(vehId){
   h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;" onclick="document.getElementById(\'tcoOv\').style.display=\'none\'">Schließen</div></div>');
   ov.innerHTML=h.join('');ov.style.display='block';ov.scrollTop=0;
 };
+})();
+// === KI GIFT-ALARM + SYMPTOM-CHECKER + DISEASE-FIX ===
+(function(){
+
+var GIFT_CATS=[
+  {name:'Lebensbedrohlich',color:'#dc3545',items:['Schokolade','Xylit / Xylitol','Trauben und Rosinen','Zwiebeln und Knoblauch','Macadamia-Nuesse','Alkohol','Koffein','Avocado']},
+  {name:'Giftig',color:'#ffc107',items:['Rohes Schweinefleisch','Steinobstkerne','Rohe Kartoffeln','Muskatnuss','Hopfen','Tabak und Nikotin']},
+  {name:'Vorsicht',color:'#17a2b8',items:['Milch und Laktose','Gekochte Knochen','Salz in grossen Mengen','Rohes Eiklar','Leber in grossen Mengen']},
+  {name:'Giftige Pflanzen',color:'#6f42c1',items:['Oleander','Efeu','Weihnachtsstern','Maigloeckchen','Eibe','Herbstzeitlose','Engelstrompete','Goldregen']},
+  {name:'Gefaehrliche Substanzen',color:'#e83e8c',items:['Frostschutzmittel','Rattengift','Schneckenkorn','Ameisengift und Ameisenkoeder','Ibuprofen und Paracetamol','Duengemittel','Insektenspray']}
+];
+
+function _safeKi(prompt,targetEl,label){
+  if(!settings.openrouterKey){
+    targetEl.innerHTML='<div style="color:#ffc107;padding:12px;background:rgba(255,193,7,0.08);border-radius:10px;font-size:13px;">OpenRouter API-Key in Einstellungen hinterlegen. Im Zweifel IMMER sofort den Tierarzt anrufen!</div>';
+    return;
+  }
+  targetEl.innerHTML='<div style="text-align:center;padding:20px;color:#999;font-size:13px;">KI analysiert'+(label?': '+label:'')+'...</div>';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},
+    body:JSON.stringify({
+      model:settings.ocrModel||'google/gemini-flash-1.5-8b',
+      messages:[{role:'user',content:prompt}],
+      temperature:0.0,
+      max_tokens:1200
+    })
+  }).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort erhalten.';
+    var safe=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    safe=safe.replace(/\n/g,'<br>');
+    targetEl.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.12);margin-top:8px;"><div style="color:#17a2b8;font-size:10px;font-weight:bold;margin-bottom:8px;">KI-Analyse (kein Ersatz fuer den Tierarzt!)</div><div style="color:#ddd;font-size:12px;line-height:1.8;">'+safe+'</div></div>';
+    targetEl.setAttribute('data-loaded','1');
+  }).catch(function(e){
+    targetEl.innerHTML='<div style="color:#dc3545;padding:10px;font-size:12px;">Fehler: '+e.message+'</div>';
+  });
+}
+
+var _oldGA2=window.openGiftAlarm;
+window.openGiftAlarm=function(){
+  var ov=document.getElementById('giftOvK2');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='giftOvK2';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:100000;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(ov);
+  }
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<h2 style="margin:0;color:#fff;font-size:20px;">Gift-Alarm</h2>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'giftOvK2\').style.display=\'none\'">X</div>');
+  h.push('</div>');
+
+  h.push('<div style="background:rgba(220,53,69,0.1);border:1px solid rgba(220,53,69,0.2);border-radius:12px;padding:14px;margin-bottom:14px;">');
+  h.push('<div style="color:#dc3545;font-weight:bold;margin-bottom:8px;">Notfall? Sofort handeln!</div>');
+  h.push('<a href="tel:055119240" style="display:block;padding:12px;background:#dc3545;color:#fff;border-radius:8px;text-align:center;font-weight:bold;text-decoration:none;margin-bottom:8px;">Gift-Notruf: 0551 19240</a>');
+  h.push('<div style="display:flex;gap:8px;">');
+  h.push('<a href="tel:112" style="flex:1;display:block;padding:10px;background:rgba(220,53,69,0.15);color:#fff;border-radius:8px;text-align:center;font-weight:bold;text-decoration:none;">Notruf 112</a>');
+  h.push('<div style="flex:1;padding:10px;background:rgba(23,162,184,0.15);color:#17a2b8;border-radius:8px;text-align:center;font-weight:bold;cursor:pointer;" onclick="if(typeof findNearbyVet===\'function\')findNearbyVet(\'notdienst\')">Tierklinik</div>');
+  h.push('</div></div>');
+
+  h.push('<input id="giftSrch2" type="text" placeholder="Suchen..." oninput="filterGifts2(this.value)" style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:14px;">');
+
+  h.push('<div style="background:rgba(23,162,184,0.06);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#999;">Tippe auf einen Stoff fuer eine KI-Detailanalyse: Symptome, Mengen, Erste Hilfe.</div>');
+
+  h.push('<div id="gCatWrap2">');
+  for(var ci=0;ci<GIFT_CATS.length;ci++){
+    var cat=GIFT_CATS[ci];
+    h.push('<div class="gC2" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;">');
+    h.push('<h4 style="margin:0 0 12px;color:'+cat.color+';font-size:15px;">'+cat.name+'</h4>');
+    for(var ii=0;ii<cat.items.length;ii++){
+      var itm=cat.items[ii];
+      var eid='gk2_'+ci+'_'+ii;
+      h.push('<div class="gI2" data-nm="'+itm.toLowerCase()+'" style="background:rgba(255,255,255,0.03);border-radius:10px;margin-bottom:8px;border-left:3px solid '+cat.color+';overflow:hidden;">');
+      h.push('<div style="padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleGk2(\''+eid+'\',\''+itm+'\')">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">'+itm+'</div>');
+      h.push('<div style="color:#17a2b8;font-size:11px;padding:4px 10px;background:rgba(23,162,184,0.12);border-radius:6px;">Details</div>');
+      h.push('</div>');
+      h.push('<div id="'+eid+'" style="display:none;padding:0 12px 14px;"></div>');
+      h.push('</div>');
+    }
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  h.push('<div style="background:rgba(255,255,255,0.06);border-radius:14px;padding:18px;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0 0 12px;color:#17a2b8;font-size:15px;">Eigene Substanz pruefen</h4>');
+  h.push('<div style="display:flex;gap:8px;">');
+  h.push('<input id="giftCust2" placeholder="z.B. Lilienpollen..." style="flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;">');
+  h.push('<div style="padding:12px 16px;background:#17a2b8;color:#fff;border-radius:10px;font-weight:bold;cursor:pointer;" onclick="chkCust2()">Pruefen</div>');
+  h.push('</div>');
+  h.push('<div id="giftCustR2" style="margin-top:10px;"></div>');
+  h.push('</div>');
+
+  h.push('<div style="background:rgba(255,255,255,0.06);border-radius:14px;padding:18px;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0 0 12px;color:#dc3545;font-size:15px;">Symptom-Eingabe</h4>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:10px;">Beschreibe akute Symptome fuer eine kurze KI-Ersteinschaetzung.</div>');
+  h.push('<textarea id="symInpGA" placeholder="z.B. erbricht seit 2h, zittert, trinkt nicht..." style="width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;min-height:60px;resize:vertical;margin-bottom:10px;"></textarea>');
+  h.push('<div style="padding:12px;background:#dc3545;color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;" onclick="chkSymGA()">Symptome analysieren</div>');
+  h.push('<div id="symResGA" style="margin-top:10px;"></div>');
+  h.push('<div style="color:#666;font-size:10px;margin-top:8px;text-align:center;">Kein Ersatz fuer den Tierarzt! Im Zweifel IMMER anrufen.</div>');
+  h.push('</div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-weight:bold;" onclick="document.getElementById(\'giftOvK2\').style.display=\'none\'">Schliessen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='block';
+  ov.scrollTop=0;
+};
+
+window.filterGifts2=function(q){
+  q=(q||'').toLowerCase();
+  var items=document.querySelectorAll('.gI2');
+  for(var i=0;i<items.length;i++){
+    var nm=items[i].getAttribute('data-nm')||'';
+    items[i].style.display=(!q||nm.indexOf(q)>=0)?'block':'none';
+  }
+};
+
+var giftPr='Du bist ein Veterinaertoxikologe. Analysiere diese Substanz fuer HUNDE. NUR gesicherte Fakten, keine Vermutungen.\n\nSubstanz: "SUB"\n\nAntworte exakt in diesem Format:\n\nPROBLEM: Warum ist es giftig? Was passiert im Koerper?\n\nSYMPTOME: Welche Anzeichen treten auf und wann?\n\nGEFAEHRLICHE MENGE: Ab welcher Menge pro kg Koerpergewicht gefaehrlich? Konkrete Beispiele.\n\nWAS SOFORT TUN: Erste Hilfe Schritt fuer Schritt.\n\nWANN ZUM TIERARZT: Wie schnell muss man handeln?\n\nWORAUF ACHTEN: Versteckte Quellen, haeufige Fehler.\n\nAuf Deutsch, maximal 2 Saetze pro Punkt.';
+
+window.toggleGk2=function(elId,name){
+  var el=document.getElementById(elId);
+  if(!el)return;
+  if(el.style.display==='block'){el.style.display='none';return;}
+  el.style.display='block';
+  if(el.getAttribute('data-loaded')==='1')return;
+  _safeKi(giftPr.replace('SUB',name),el,name);
+};
+
+window.chkCust2=function(){
+  var inp=document.getElementById('giftCust2');
+  var el=document.getElementById('giftCustR2');
+  if(!inp||!el)return;
+  var sub=inp.value.trim();
+  if(!sub){if(typeof toast==='function')toast('Bitte Substanz eingeben','warn');return;}
+  el.removeAttribute('data-loaded');
+  _safeKi(giftPr.replace('SUB',sub),el,sub);
+};
+
+var symPr='Du bist ein Veterinaer im Notdienst. Ein Hundebesitzer beschreibt akute Symptome.\n\nSymptome: "SYM"\n\nNUR gesicherte Fakten. Antworte exakt so:\n\nDRINGLICHKEIT: Sofort Tierarzt oder beobachten?\n\nMOEGLICHE URSACHEN: Die 3 wahrscheinlichsten.\n\nSOFORT TUN: Was jetzt machen?\n\nNICHT TUN: Was auf keinen Fall?\n\nAuf Deutsch, maximal 2 Saetze pro Punkt. Kurz und klar.';
+
+window.chkSymGA=function(){
+  var inp=document.getElementById('symInpGA');
+  var el=document.getElementById('symResGA');
+  if(!inp||!el)return;
+  var sym=inp.value.trim();
+  if(!sym){if(typeof toast==='function')toast('Bitte Symptome beschreiben','warn');return;}
+  el.removeAttribute('data-loaded');
+  _safeKi(symPr.replace('SYM',sym),el,'Symptome');
+};
+
+// KI-Button bei Krankheiten direkt sichtbar machen
+setInterval(function(){
+  var ov=document.getElementById('petDetailOv');
+  if(!ov||ov.style.display==='none')return;
+  if(ov.querySelector('.kiDI2'))return;
+  var divs=ov.querySelectorAll('div');
+  for(var i=0;i<divs.length;i++){
+    var d=divs[i];
+    if(!d.firstChild)continue;
+    var ft=(d.firstChild.textContent||'').trim();
+    if(ft!=='Krankheiten')continue;
+    var valDiv=d.querySelector('div[style*="word-break"]')||d.querySelector('div[style*="font-weight"]');
+    if(!valDiv)continue;
+    var dis=valDiv.textContent.trim();
+    if(!dis||dis==='\u2014')continue;
+    var petId=null;
+    var ebs=ov.querySelectorAll('[onclick*="openPetEdit"]');
+    for(var e=0;e<ebs.length;e++){
+      var mx=ebs[e].getAttribute('onclick').match(/openPetEdit\('([^']+)'\)/);
+      if(mx){petId=mx[1];break;}
+    }
+    if(!petId)continue;
+    var p=null;
+    for(var x=0;x<state.pets.length;x++){if(state.pets[x].id===petId){p=state.pets[x];break;}}
+    if(!p)continue;
+    var age2='';
+    if(p.birthDate){var bn2=new Date(p.birthDate),nn2=new Date();age2=Math.floor((nn2-bn2)/31557600000)+' Jahre';}
+    var meds2='Keine';
+    if(p.medications&&p.medications.length>0)meds2=p.medications.map(function(m){return m.name;}).join(', ');
+    var wrap2=document.createElement('div');
+    wrap2.className='kiDI2';
+    wrap2.style.cssText='margin-top:10px;';
+    var btn2=document.createElement('div');
+    btn2.style.cssText='padding:12px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:13px;';
+    btn2.textContent='KI-Tipps fuer '+dis+' abrufen';
+    var res2=document.createElement('div');
+    res2.style.cssText='margin-top:10px;';
+    var disPr='Du bist ein erfahrener Veterinaer. NUR gesicherte Fakten, keine Vermutungen.\n\nHund: '+p.name+', '+(p.breed||'Unbekannt')+', '+(p.weight||'?')+'kg, '+(age2||'?')+'\nDiagnose: '+dis+'\nAllergien: '+(p.allergies||'Keine')+'\nMedikamente: '+meds2+'\n\nAntworte exakt so:\n\nPROBLEM: Was ist '+dis+'? Was passiert im Koerper?\n\nSYMPTOME: Woran erkennt man eine Verschlechterung?\n\nERNAEHRUNG: Was fuettern? Was strikt meiden?\n\nWAS MAN SELBST TUN KANN: Praktische Alltagstipps.\n\nWANN ZUM TIERARZT: Bei welchen Anzeichen sofort?\n\nWORAUF ACHTEN: Was beobachten?\n\nAuf Deutsch, maximal 3 Saetze pro Punkt.';
+    btn2.addEventListener('click',(function(pr2,rd2,lb2){return function(){
+      if(rd2.getAttribute('data-loaded')==='1'){rd2.innerHTML='';rd2.removeAttribute('data-loaded');return;}
+      _safeKi(pr2,rd2,lb2);
+    };})(disPr,res2,dis));
+    wrap2.appendChild(btn2);
+    wrap2.appendChild(res2);
+    d.parentElement.appendChild(wrap2);
+    break;
+  }
+},1500);
+
 })();
 </script>
 </body>
