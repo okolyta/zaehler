@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.34';
+const APP_VERSION = '2.35';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1635,7 +1635,7 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [] };
+let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [], pets: [], emergencyInfo: {}, parking: {} };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
@@ -1717,6 +1717,9 @@ function load(){
   if(!state.wasteSchedule) state.wasteSchedule=[];
   if(!state.vehicles) state.vehicles=[];
   if(!state.vehicleLogs) state.vehicleLogs=[];
+  if(!state.pets) state.pets=[];
+  if(!state.emergencyInfo) state.emergencyInfo={};
+  if(!state.parking) state.parking={};
   if(!settings.docCategories || !settings.docCategories.length){
     settings.docCategories=[
       {id:'rechnung',    label:'Rechnung',             icon:'📋'},
@@ -1750,6 +1753,7 @@ function save(){
   scheduleBackup();
   scheduleAutoSync();
 }
+var saveData = save;
 function scheduleBackup(){
   try{
     const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]');
