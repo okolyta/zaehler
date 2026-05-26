@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.27';
+const APP_VERSION = '2.28';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5751,6 +5751,7 @@ function renderVehicles() {
       </div>
       
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+        <div style="width:100%;padding:14px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(220,53,69,0.3);" onclick="openEmergencyCard('${v.id}')">🆘 Notfall- & Unfallhilfe</div>
         <button class="btn" style="width:100%; background:var(--acc); color:#fff; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;" onclick="openVehDetails('${v.id}')">ℹ️ Fahrzeug-Details anzeigen</button>
         
         <div style="display:flex; gap:6px; width:100%;">
@@ -8275,6 +8276,254 @@ setInterval(function(){
     }
   }
 },2000);
+
+})();
+// === NOTFALL- & UNFALLKARTE ===
+(function(){
+var _emOv=null;
+
+function _af(l,v){
+  if(!v)return '';
+  var s=String(v).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;margin-bottom:2px;">'+l+'</div><div style="color:#fff;font-weight:600;word-break:break-all;">'+s+'</div></div>';
+}
+
+function openEmergencyCard(vehId){
+  var v=null;
+  for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===vehId){v=state.vehicles[i];break;}}
+  if(!v)return;
+  if(!state.emergencyInfo)state.emergencyInfo={};
+  var ei=state.emergencyInfo;
+
+  if(!_emOv){
+    _emOv=document.createElement('div');
+    _emOv.id='emOverlay';
+    _emOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.94);z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(_emOv);
+  }
+  _emOv.setAttribute('data-vid',vehId);
+
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var ls='display:block;padding:14px;border-radius:10px;margin-bottom:8px;text-decoration:none;font-size:16px;font-weight:600;text-align:center;';
+  var is='width:100%;padding:11px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:8px;';
+  var h=[];
+
+  h.push('<div style="max-width:440px;margin:0 auto;padding:12px 12px 80px;">');
+
+  // Header
+  h.push('<div style="background:linear-gradient(135deg,#dc3545,#8b0000);border-radius:16px;padding:20px;margin-top:8px;margin-bottom:14px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;">');
+  h.push('<div style="font-size:38px;">🆘</div>');
+  h.push('<div><h2 style="margin:0;color:#fff;font-size:20px;">Notfall- & Unfallhilfe</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.8);font-size:13px;">'+(v.brand||'')+' '+(v.model||'')+' — '+(v.licensePlate||'')+'</div></div>');
+  h.push('</div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(0,0,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'emOverlay\').style.display=\'none\'">✕</div>');
+  h.push('</div></div>');
+
+  // Emergency Numbers
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📞 Sofortnummern</h4>');
+  h.push('<a href="tel:112" style="'+ls+'background:linear-gradient(135deg,#dc3545,#c82333);color:#fff;">🚑 Notruf / Rettung: 112</a>');
+  h.push('<a href="tel:110" style="'+ls+'background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;">🚔 Polizei: 110</a>');
+  h.push('<a href="tel:08005101112" style="'+ls+'background:linear-gradient(135deg,#ffc107,#e0a800);color:#000;">🛡️ ADAC Pannenhilfe: 0800 510 11 12</a>');
+  if(v.insPhone){h.push('<a href="tel:'+v.insPhone.replace(/\s/g,'')+'" style="'+ls+'background:rgba(255,255,255,0.1);color:#fff;">📋 '+(v.insName||'Versicherung')+': '+v.insPhone+'</a>');}
+  if(ei.emergencyPhone){h.push('<a href="tel:'+ei.emergencyPhone.replace(/\s/g,'')+'" style="'+ls+'background:rgba(255,255,255,0.1);color:#fff;">👤 Notfallkontakt: '+(ei.emergencyContact||'')+' '+ei.emergencyPhone+'</a>');}
+  if(ei.lawyerPhone){h.push('<a href="tel:'+ei.lawyerPhone.replace(/\s/g,'')+'" style="'+ls+'background:rgba(255,255,255,0.1);color:#fff;">⚖️ Anwalt/Rechtsschutz: '+ei.lawyerPhone+'</a>');}
+  h.push('</div>');
+
+  // Vehicle Data
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🚗 Fahrzeugdaten</h4>');
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">');
+  h.push(_af('Kennzeichen',v.licensePlate));
+  h.push(_af('Fahrzeug',(v.brand||'')+' '+(v.model||'')));
+  h.push(_af('FIN / Fahrgestellnr.',v.vin));
+  h.push(_af('HSN / TSN',v.hsnTsn));
+  h.push(_af('Antrieb/Kraftstoff',v.type));
+  h.push(_af('Farbe',v.color));
+  h.push('</div></div>');
+
+  // Insurance
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">🛡️ Versicherungsdaten</h4>');
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">');
+  h.push(_af('Versicherung',v.insName));
+  h.push(_af('Police Nr.',v.insPolicy));
+  h.push(_af('Telefon',v.insPhone));
+  h.push(_af('Kündigungsfrist',v.insCancel));
+  h.push(_af('ADAC Mitgl.-Nr.',ei.adacNr));
+  h.push('</div></div>');
+
+  // Personal Emergency Data
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">🏥 Persönliche Notfalldaten</h4>');
+  h.push('<div style="font-size:12px;color:#17a2b8;cursor:pointer;padding:6px 10px;background:rgba(23,162,184,0.15);border-radius:6px;" onclick="toggleEmEdit()">✏️ Bearbeiten</div>');
+  h.push('</div>');
+
+  h.push('<div id="emPView" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">');
+  h.push(_af('Fahrer/in',ei.driverName||'\u2014'));
+  h.push(_af('Blutgruppe',ei.bloodType||'\u2014'));
+  h.push(_af('Allergien',ei.allergies||'\u2014'));
+  h.push(_af('Medikamente',ei.medications||'\u2014'));
+  h.push(_af('Notfallkontakt',ei.emergencyContact||'\u2014'));
+  h.push(_af('Notfall-Telefon',ei.emergencyPhone||'\u2014'));
+  h.push(_af('Krankenkasse',ei.healthInsurance||'\u2014'));
+  h.push(_af('ADAC Nr.',ei.adacNr||'\u2014'));
+  h.push(_af('Anwalt/Rechtsschutz',ei.lawyerPhone||'\u2014'));
+  h.push('</div>');
+
+  h.push('<div id="emPEdit" style="display:none;margin-top:10px;">');
+  var ef=function(id,l,val){return '<div style="margin-bottom:8px;"><label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">'+l+'</label><input id="'+id+'" value="'+(val||'').replace(/"/g,'&quot;')+'" style="'+is+'"></div>';};
+  h.push(ef('eiName','Fahrer/in (Name)',ei.driverName));
+  h.push(ef('eiBlood','Blutgruppe (z.B. A+, 0-)',ei.bloodType));
+  h.push(ef('eiAllergy','Allergien',ei.allergies));
+  h.push(ef('eiMeds','Medikamente',ei.medications));
+  h.push(ef('eiContact','Notfallkontakt (Name)',ei.emergencyContact));
+  h.push(ef('eiPhone','Notfallkontakt (Telefon)',ei.emergencyPhone));
+  h.push(ef('eiHealth','Krankenkasse',ei.healthInsurance));
+  h.push(ef('eiAdac','ADAC Mitgliedsnummer',ei.adacNr));
+  h.push(ef('eiLawyer','Anwalt / Rechtsschutz (Tel.)',ei.lawyerPhone));
+  h.push('<div style="padding:12px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveEmInfo()">💾 Notfalldaten speichern</div>');
+  h.push('</div>');
+  h.push('</div>');
+
+  // Accident Checklist
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">✅ Unfall-Checkliste</h4>');
+  var checks=['⚠️ Warnblinkanlage einschalten','🦺 Warnweste anziehen','🔺 Warndreieck aufstellen (50\u2013100m)','🩹 Erste Hilfe leisten (falls nötig)','📞 Bei Verletzten: Notruf 112','📞 Polizei rufen (bei Personenschaden Pflicht!)','📸 Unfallstelle fotografieren','📸 Alle Schäden fotografieren','📸 Kennzeichen aller Beteiligten fotografieren','🎥 Dashcam-Aufnahme sichern','📝 Daten mit Unfallgegner austauschen','👁️ Zeugen ansprechen & Daten notieren','📋 Europäischen Unfallbericht ausfüllen','📞 Versicherung informieren (innerhalb 1 Woche!)','🔧 Werkstatt für Kostenvoranschlag kontaktieren'];
+  for(var ci=0;ci<checks.length;ci++){
+    h.push('<label style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:#ddd;">');
+    h.push('<input type="checkbox" style="width:20px;height:20px;accent-color:#28a745;flex-shrink:0;">');
+    h.push('<span>'+checks[ci]+'</span></label>');
+  }
+  h.push('</div>');
+
+  // Photo Checklist
+  h.push('<div style="'+cs+'background:rgba(255,193,7,0.06);border-color:rgba(255,193,7,0.15);">');
+  h.push('<h4 style="margin:0 0 10px;color:#ffc107;font-size:15px;">📸 Foto-Checkliste</h4>');
+  h.push('<div style="font-size:13px;color:#ddd;line-height:2;">');
+  h.push('\u2022 Gesamtübersicht der Unfallstelle (mehrere Winkel)<br>');
+  h.push('\u2022 Endposition aller beteiligten Fahrzeuge<br>');
+  h.push('\u2022 Nahaufnahmen aller Schäden<br>');
+  h.push('\u2022 Kennzeichen aller Beteiligten<br>');
+  h.push('\u2022 Bremsspuren / Glassplitter / Trümmerteile<br>');
+  h.push('\u2022 Verkehrsschilder & Ampeln im Umfeld<br>');
+  h.push('\u2022 Straßenverhältnisse & Wetterbedingungen<br>');
+  h.push('\u2022 Führerschein & Ausweis des Gegners<br>');
+  h.push('\u2022 Versicherungsnachweis des Gegners</div>');
+  h.push('</div>');
+
+  // Legal Tips
+  h.push('<div style="'+cs+'background:rgba(220,53,69,0.06);border-color:rgba(220,53,69,0.15);">');
+  h.push('<h4 style="margin:0 0 10px;color:#dc3545;font-size:15px;">⚖️ Wichtige rechtliche Hinweise</h4>');
+  h.push('<div style="font-size:13px;color:#ddd;line-height:2;">');
+  h.push('\u2022 <strong>NIEMALS</strong> ein Schuldeingeständnis abgeben!<br>');
+  h.push('\u2022 Sagen Sie nur: "Das wird die Versicherung klären."<br>');
+  h.push('\u2022 Bei Personenschaden: Polizei ist <strong>Pflicht</strong>!<br>');
+  h.push('\u2022 Unfallflucht ist eine <strong>Straftat</strong> (\u00A7142 StGB)!<br>');
+  h.push('\u2022 Gegner will abhauen? Kennzeichen notieren & sofort 110!<br>');
+  h.push('\u2022 Schäden NICHT vor Gutachten reparieren lassen!<br>');
+  h.push('\u2022 Versicherung innerhalb von <strong>1 Woche</strong> informieren!</div>');
+  h.push('</div>');
+
+  // Counter-party form
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📝 Daten des Unfallgegners</h4>');
+  h.push('<input id="emGName" placeholder="Name des Unfallgegners" style="'+is+'">');
+  h.push('<input id="emGPlate" placeholder="Kennzeichen" style="'+is+'">');
+  h.push('<input id="emGPhone" placeholder="Telefonnummer" style="'+is+'">');
+  h.push('<input id="emGIns" placeholder="Versicherung + Police-Nr." style="'+is+'">');
+  h.push('<input id="emGCar" placeholder="Fahrzeug (Marke / Modell / Farbe)" style="'+is+'">');
+  h.push('<textarea id="emGNotes" placeholder="Unfallhergang, Beschreibung, Besonderheiten..." style="'+is+'min-height:80px;resize:vertical;"></textarea>');
+  h.push('</div>');
+
+  // Witnesses
+  h.push('<div style="'+cs+'">');
+  h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">👁️ Zeugen</h4>');
+  h.push('<input id="emW1" placeholder="Zeuge 1: Name, Telefon, Adresse" style="'+is+'">');
+  h.push('<input id="emW2" placeholder="Zeuge 2: Name, Telefon, Adresse" style="'+is+'">');
+  h.push('<input id="emW3" placeholder="Zeuge 3: Name, Telefon, Adresse" style="'+is+'">');
+  h.push('</div>');
+
+  // Save Accident Report Button
+  h.push('<div style="padding:16px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:14px;box-shadow:0 4px 15px rgba(13,110,253,0.3);" onclick="saveAccidentReport()">📋 Unfallbericht speichern</div>');
+
+  // Close Button at Bottom
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;" onclick="document.getElementById(\'emOverlay\').style.display=\'none\'">Schließen</div>');
+
+  h.push('</div>');
+  _emOv.innerHTML=h.join('');
+  _emOv.style.display='block';
+  _emOv.scrollTop=0;
+}
+
+window.openEmergencyCard=openEmergencyCard;
+
+window.toggleEmEdit=function(){
+  var v=document.getElementById('emPView'),e=document.getElementById('emPEdit');
+  if(!v||!e)return;
+  if(e.style.display==='none'){e.style.display='block';v.style.display='none';}
+  else{e.style.display='none';v.style.display='grid';}
+};
+
+window.saveEmInfo=function(){
+  if(!state.emergencyInfo)state.emergencyInfo={};
+  var ei=state.emergencyInfo;
+  ei.driverName=(document.getElementById('eiName')||{}).value||'';
+  ei.bloodType=(document.getElementById('eiBlood')||{}).value||'';
+  ei.allergies=(document.getElementById('eiAllergy')||{}).value||'';
+  ei.medications=(document.getElementById('eiMeds')||{}).value||'';
+  ei.emergencyContact=(document.getElementById('eiContact')||{}).value||'';
+  ei.emergencyPhone=(document.getElementById('eiPhone')||{}).value||'';
+  ei.healthInsurance=(document.getElementById('eiHealth')||{}).value||'';
+  ei.adacNr=(document.getElementById('eiAdac')||{}).value||'';
+  ei.lawyerPhone=(document.getElementById('eiLawyer')||{}).value||'';
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Notfalldaten gespeichert!');
+  var vid=_emOv?_emOv.getAttribute('data-vid'):null;
+  if(vid)openEmergencyCard(vid);
+};
+
+window.saveAccidentReport=function(){
+  var vid=_emOv?_emOv.getAttribute('data-vid'):null;
+  if(!vid)return;
+  var gn=(document.getElementById('emGName')||{}).value||'';
+  var gp=(document.getElementById('emGPlate')||{}).value||'';
+  var gt=(document.getElementById('emGPhone')||{}).value||'';
+  var gi=(document.getElementById('emGIns')||{}).value||'';
+  var gc=(document.getElementById('emGCar')||{}).value||'';
+  var gno=(document.getElementById('emGNotes')||{}).value||'';
+  var w1=(document.getElementById('emW1')||{}).value||'';
+  var w2=(document.getElementById('emW2')||{}).value||'';
+  var w3=(document.getElementById('emW3')||{}).value||'';
+  if(!gn&&!gp&&!gno){if(typeof toast==='function')toast('Bitte mindestens Name, Kennzeichen oder Notizen eingeben','warn');return;}
+  var r='\u2014\u2014\u2014 UNFALLBERICHT \u2014\u2014\u2014\n';
+  r+='Datum: '+new Date().toLocaleDateString('de-DE')+' '+new Date().toLocaleTimeString('de-DE')+'\n';
+  if(gn)r+='Gegner: '+gn+'\n';
+  if(gp)r+='Kennzeichen: '+gp+'\n';
+  if(gt)r+='Telefon: '+gt+'\n';
+  if(gi)r+='Versicherung: '+gi+'\n';
+  if(gc)r+='Fahrzeug: '+gc+'\n';
+  if(w1)r+='Zeuge 1: '+w1+'\n';
+  if(w2)r+='Zeuge 2: '+w2+'\n';
+  if(w3)r+='Zeuge 3: '+w3+'\n';
+  if(gno)r+='Hergang: '+gno+'\n';
+  if(!state.vehicleLogs)state.vehicleLogs=[];
+  state.vehicleLogs.push({id:typeof uid==='function'?uid():Date.now().toString(),vehId:vid,date:new Date().toISOString().split('T')[0],type:'sonstiges',mileage:0,amount:0,cost:0,notes:r,timestamp:Date.now()});
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Unfallbericht im Logbuch gespeichert!');
+  document.getElementById('emGName').value='';
+  document.getElementById('emGPlate').value='';
+  document.getElementById('emGPhone').value='';
+  document.getElementById('emGIns').value='';
+  document.getElementById('emGCar').value='';
+  document.getElementById('emGNotes').value='';
+  document.getElementById('emW1').value='';
+  document.getElementById('emW2').value='';
+  document.getElementById('emW3').value='';
+};
 
 })();
 </script>
