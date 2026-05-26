@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.37';
+const APP_VERSION = '2.39';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -10375,6 +10375,362 @@ setInterval(function(){
     break;
   }
 },1500);
+
+})();
+// === AUTO-ERINNERUNGEN, WARTUNGSPLANER & KI-ANALYSE ===
+(function(){
+
+var MAINT_TYPES=[
+  {id:'oilchange',label:'Oelwechsel',icon:'O',defKm:15000,defMonths:12},
+  {id:'brakefluid',label:'Bremsfluessigkeit',icon:'B',defKm:0,defMonths:24},
+  {id:'airfilter',label:'Luftfilter',icon:'L',defKm:30000,defMonths:24},
+  {id:'sparkplugs',label:'Zuendkerzen',icon:'Z',defKm:60000,defMonths:48},
+  {id:'coolant',label:'Kuehlmittel',icon:'K',defKm:0,defMonths:36},
+  {id:'timing',label:'Zahnriemen/Steuerkette',icon:'S',defKm:100000,defMonths:60},
+  {id:'firstaid',label:'Verbandskasten',icon:'V',defKm:0,defMonths:60},
+  {id:'custom',label:'Eigene Wartung',icon:'W',defKm:0,defMonths:12}
+];
+
+function _fv(id){for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===id)return state.vehicles[i];}return null;}
+
+function _getLastKm(vehId){
+  var lastKm=0;
+  var logs=(state.vehicleLogs||[]).filter(function(l){return l.vehId===vehId&&l.mileage>0;});
+  for(var li=0;li<logs.length;li++){if(logs[li].mileage>lastKm)lastKm=logs[li].mileage;}
+  return lastKm;
+}
+
+var _origVD2=window.openVehDetails;
+window.openVehDetails=function(id){
+  if(typeof _origVD2==='function')_origVD2(id);
+  setTimeout(function(){_injectMaintBtn(id);},200);
+};
+
+function _injectMaintBtn(vehId){
+  var ov=document.getElementById('vehDetailsModal');
+  if(!ov)return;
+  if(ov.querySelector('#maintBtnInj'))return;
+  var v=_fv(vehId);if(!v)return;
+  var content=ov.querySelector('.modal-content')||ov.querySelector('div[style*="max-width"]');
+  if(!content)return;
+  var btn=document.createElement('div');
+  btn.id='maintBtnInj';
+  btn.style.cssText='padding:14px;background:linear-gradient(135deg,#ffc107,#e0a800);color:#000;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;margin-top:12px;margin-bottom:8px;';
+  btn.textContent='Wartungsplaner oeffnen';
+  btn.addEventListener('click',function(){
+    if(ov.style)ov.style.display='none';
+    openMaintPlanner(vehId);
+  });
+  content.appendChild(btn);
+}
+
+window.openMaintPlanner=function(vehId){
+  var v=_fv(vehId);if(!v)return;
+  if(!v.maintenance)v.maintenance=[];
+  var ov=document.getElementById('maintOv');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='maintOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(ov);
+  }
+  _renderMaint(vehId);
+  ov.style.display='block';
+  ov.scrollTop=0;
+};
+
+function _renderMaint(vehId){
+  var ov=document.getElementById('maintOv');if(!ov)return;
+  var v=_fv(vehId);if(!v)return;
+  if(!v.maintenance)v.maintenance=[];
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var lastKm=_getLastKm(vehId);
+
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<div><h2 style="margin:0;color:#fff;font-size:20px;">Wartungsplaner</h2>');
+  h.push('<div style="color:#999;font-size:12px;">'+(v.brand||'')+' '+(v.model||'')+' - '+(v.licensePlate||'')+'</div></div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'maintOv\').style.display=\'none\'">X</div>');
+  h.push('</div>');
+
+  if(lastKm>0){
+    h.push('<div style="'+cs+'text-align:center;">');
+    h.push('<div style="color:#888;font-size:11px;">Letzter bekannter KM-Stand</div>');
+    h.push('<div style="color:#17a2b8;font-weight:bold;font-size:24px;">'+lastKm.toLocaleString('de-DE')+' km</div>');
+    h.push('</div>');
+  }
+
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h3 style="margin:0;color:#fff;font-size:16px;">Aktive Wartungen</h3>');
+  h.push('<div style="padding:8px 14px;background:rgba(255,193,7,0.15);color:#ffc107;border-radius:8px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openAddMaint(\''+vehId+'\')">+ Wartung</div>');
+  h.push('</div>');
+
+  if(v.maintenance.length===0){
+    h.push('<div style="'+cs+'text-align:center;color:#666;font-size:13px;padding:30px 0;">Noch keine Wartungen eingetragen.</div>');
+  }else{
+    for(var mi=0;mi<v.maintenance.length;mi++){
+      var m=v.maintenance[mi];
+      var kmLeft=null,daysLeft=null,status='ok',statusTxt='',statusCol='#28a745';
+      if(m.intervalKm>0&&m.lastKm>0&&lastKm>0){
+        kmLeft=(m.lastKm+m.intervalKm)-lastKm;
+        if(kmLeft<0){status='overdue';statusTxt='Ueberfaellig: '+Math.abs(kmLeft)+' km drueber!';statusCol='#dc3545';}
+        else if(kmLeft<2000){status='soon';statusTxt='Bald faellig: noch '+kmLeft+' km';statusCol='#ffc107';}
+        else{statusTxt='Noch '+kmLeft.toLocaleString('de-DE')+' km';}
+      }
+      if(m.intervalMonths>0&&m.lastDate){
+        var ld=new Date(m.lastDate);
+        ld.setMonth(ld.getMonth()+m.intervalMonths);
+        daysLeft=Math.round((ld-new Date())/86400000);
+        if(daysLeft<0){status='overdue';statusTxt+=(statusTxt?' | ':'')+'Ueberfaellig: '+Math.abs(daysLeft)+' Tage!';statusCol='#dc3545';}
+        else if(daysLeft<30){if(status!=='overdue')status='soon';statusTxt+=(statusTxt?' | ':'')+'Noch '+daysLeft+' Tage';if(statusCol!=='#dc3545')statusCol='#ffc107';}
+        else{statusTxt+=(statusTxt?' | ':'')+'Noch '+daysLeft+' Tage';}
+      }
+      if(!statusTxt)statusTxt='Kein Intervall gesetzt';
+      h.push('<div style="'+cs+'border-left:4px solid '+statusCol+';padding-left:16px;">');
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:15px;">'+(m.label||'Wartung')+'</div>');
+      h.push('<div style="display:flex;gap:6px;">');
+      h.push('<div style="padding:5px 10px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;" onclick="markMaintDone(\''+vehId+'\','+mi+')">Erledigt</div>');
+      h.push('<div style="padding:5px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteMaint(\''+vehId+'\','+mi+')">X</div>');
+      h.push('</div></div>');
+      h.push('<div style="color:'+statusCol+';font-size:13px;font-weight:600;margin-bottom:6px;">'+statusTxt+'</div>');
+      var details=[];
+      if(m.intervalKm)details.push('Alle '+m.intervalKm.toLocaleString('de-DE')+' km');
+      if(m.intervalMonths)details.push('Alle '+m.intervalMonths+' Monate');
+      if(m.lastKm)details.push('Letzter: '+m.lastKm.toLocaleString('de-DE')+' km');
+      if(m.lastDate)details.push('Am: '+m.lastDate.split('-').reverse().join('.'));
+      if(details.length>0)h.push('<div style="color:#666;font-size:11px;">'+details.join(' | ')+'</div>');
+      if(m.notes)h.push('<div style="color:#888;font-size:11px;margin-top:4px;font-style:italic;">'+m.notes+'</div>');
+      h.push('</div>');
+    }
+  }
+
+  // KI Fahrzeug-Analyse
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.06),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.15);">');
+  h.push('<h4 style="margin:0 0 12px;color:#17a2b8;font-size:15px;">KI-Wartungsempfehlung</h4>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:10px;">Basierend auf deinem exakten Fahrzeugmodell, Kilometerstand und Alter.</div>');
+  h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="getVehKiMaint(\''+vehId+'\')">KI-Analyse fuer '+(v.brand||'Fahrzeug')+' '+(v.model||'')+' starten</div>');
+  h.push('<div id="vehKiMaintRes_'+vehId+'" style="margin-top:10px;"></div>');
+  h.push('</div>');
+
+  // Saisonale Hinweise
+  var mo=new Date().getMonth()+1;
+  h.push('<div style="'+cs+'background:rgba(23,162,184,0.06);border-color:rgba(23,162,184,0.15);">');
+  h.push('<h4 style="margin:0 0 12px;color:#17a2b8;font-size:15px;">Saisonale Hinweise</h4>');
+  if(mo>=9&&mo<=11){
+    h.push('<div style="padding:10px;background:rgba(23,162,184,0.08);border-radius:8px;margin-bottom:6px;border-left:3px solid #17a2b8;"><div style="color:#17a2b8;font-weight:bold;font-size:13px;">Winterreifen</div><div style="color:#ddd;font-size:12px;">O-bis-O Regel: Oktober bis Ostern Winterreifen! Profiltiefe mind. 4mm empfohlen.</div></div>');
+    h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;margin-bottom:6px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Frostschutz</div><div style="color:#ddd;font-size:12px;">Frostschutzmittel und Scheibenwischerfluessigkeit pruefen!</div></div>');
+    h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Beleuchtung</div><div style="color:#ddd;font-size:12px;">Alle Lichter pruefen. Herbst = frueher dunkel!</div></div>');
+  }else if(mo>=3&&mo<=5){
+    h.push('<div style="padding:10px;background:rgba(23,162,184,0.08);border-radius:8px;margin-bottom:6px;border-left:3px solid #17a2b8;"><div style="color:#17a2b8;font-weight:bold;font-size:13px;">Sommerreifen</div><div style="color:#ddd;font-size:12px;">Ab Ostern auf Sommerreifen wechseln. Profiltiefe pruefen!</div></div>');
+    h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Fruehjahrs-Check</div><div style="color:#ddd;font-size:12px;">Unterbodenwaesche nach Streusalz-Saison. Wischerblaetter pruefen.</div></div>');
+  }else if(mo>=6&&mo<=8){
+    h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;margin-bottom:6px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Klimaanlage</div><div style="color:#ddd;font-size:12px;">Klimaanlage desinfizieren lassen. Pollenfilter wechseln.</div></div>');
+    h.push('<div style="padding:10px;background:rgba(23,162,184,0.06);border-radius:8px;border-left:3px solid #17a2b8;"><div style="color:#17a2b8;font-weight:bold;font-size:13px;">Reifendruck</div><div style="color:#ddd;font-size:12px;">Bei Hitze steigt der Reifendruck. Regelmaessig pruefen!</div></div>');
+  }else{
+    h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Wintercheck</div><div style="color:#ddd;font-size:12px;">Batterie pruefen! Kaelte ist der groesste Feind. Tuerschloesser enteisen.</div></div>');
+  }
+  h.push('</div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-weight:bold;" onclick="document.getElementById(\'maintOv\').style.display=\'none\'">Schliessen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+}
+
+// Wartung hinzufuegen
+window.openAddMaint=function(vehId){
+  var ov=document.getElementById('addMaintOv');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='addMaintOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">Wartung hinzufuegen</h3>');
+  ih.push('<label style="'+ls+'">Wartungsart</label>');
+  ih.push('<select id="maintType" onchange="updateMaintDefaults()" style="'+is+'">');
+  for(var ti=0;ti<MAINT_TYPES.length;ti++){
+    ih.push('<option value="'+MAINT_TYPES[ti].id+'" data-km="'+MAINT_TYPES[ti].defKm+'" data-mo="'+MAINT_TYPES[ti].defMonths+'">'+MAINT_TYPES[ti].label+'</option>');
+  }
+  ih.push('</select>');
+  ih.push('<div id="maintCustomName" style="display:none;">');
+  ih.push('<label style="'+ls+'">Eigener Name</label>');
+  ih.push('<input id="maintCustNm" placeholder="z.B. Zahnriemen" style="'+is+'">');
+  ih.push('</div>');
+  ih.push('<label style="'+ls+'">Intervall (km) - 0 = nur zeitbasiert</label>');
+  ih.push('<input type="number" id="maintIntKm" value="15000" placeholder="z.B. 15000" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Intervall (Monate) - 0 = nur km-basiert</label>');
+  ih.push('<input type="number" id="maintIntMo" value="12" placeholder="z.B. 12" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Zuletzt durchgefuehrt am</label>');
+  ih.push('<input type="date" id="maintLastDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+is+'">');
+  ih.push('<label style="'+ls+'">KM-Stand bei letzter Wartung</label>');
+  ih.push('<input type="number" id="maintLastKm" placeholder="z.B. 45000" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Notizen (optional)</label>');
+  ih.push('<input id="maintNotes" placeholder="z.B. Castrol 5W-30" style="'+is+'">');
+  ih.push('<input type="hidden" id="maintVehId" value="'+vehId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveMaint()">Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'addMaintOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.updateMaintDefaults=function(){
+  var sel=document.getElementById('maintType');
+  var opt=sel.options[sel.selectedIndex];
+  document.getElementById('maintIntKm').value=opt.getAttribute('data-km')||'0';
+  document.getElementById('maintIntMo').value=opt.getAttribute('data-mo')||'12';
+  document.getElementById('maintCustomName').style.display=sel.value==='custom'?'block':'none';
+};
+
+window.saveMaint=function(){
+  var vehId=document.getElementById('maintVehId').value;
+  var v=_fv(vehId);if(!v)return;
+  if(!v.maintenance)v.maintenance=[];
+  var sel=document.getElementById('maintType');
+  var typeId=sel.value;
+  var mt=null;
+  for(var i=0;i<MAINT_TYPES.length;i++){if(MAINT_TYPES[i].id===typeId){mt=MAINT_TYPES[i];break;}}
+  var label=mt?mt.label:'Wartung';
+  if(typeId==='custom'){
+    var cn=(document.getElementById('maintCustNm').value||'').trim();
+    if(cn)label=cn;
+  }
+  v.maintenance.push({
+    id:typeof uid==='function'?uid():Date.now().toString(),
+    type:typeId,
+    label:label,
+    intervalKm:parseInt(document.getElementById('maintIntKm').value,10)||0,
+    intervalMonths:parseInt(document.getElementById('maintIntMo').value,10)||0,
+    lastDate:document.getElementById('maintLastDt').value||'',
+    lastKm:parseInt(document.getElementById('maintLastKm').value,10)||0,
+    notes:(document.getElementById('maintNotes').value||'').trim()
+  });
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Wartung gespeichert!');
+  document.getElementById('addMaintOv').style.display='none';
+  _renderMaint(vehId);
+};
+
+window.markMaintDone=function(vehId,idx){
+  var v=_fv(vehId);if(!v||!v.maintenance||!v.maintenance[idx])return;
+  var lastKm=_getLastKm(vehId);
+  v.maintenance[idx].lastDate=new Date().toISOString().split('T')[0];
+  if(lastKm>0)v.maintenance[idx].lastKm=lastKm;
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Als erledigt markiert!');
+  _renderMaint(vehId);
+};
+
+window.deleteMaint=function(vehId,idx){
+  if(!confirm('Wartung wirklich loeschen?'))return;
+  var v=_fv(vehId);if(!v)return;
+  v.maintenance.splice(idx,1);
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Geloescht');
+  _renderMaint(vehId);
+};
+
+// KI Wartungs-Analyse pro Fahrzeug
+window.getVehKiMaint=function(vehId){
+  var v=_fv(vehId);if(!v)return;
+  var el=document.getElementById('vehKiMaintRes_'+vehId);if(!el)return;
+  var lastKm=_getLastKm(vehId);
+  var age='';
+  if(v.ezDate){var ez=new Date(v.ezDate),now=new Date();age=Math.round((now-ez)/31557600000)+' Jahre';}
+  var existMaint='Keine';
+  if(v.maintenance&&v.maintenance.length>0){
+    existMaint=v.maintenance.map(function(m){return m.label+(m.lastKm?' (letzter bei '+m.lastKm+'km)':'');}).join(', ');
+  }
+  var pr='Du bist ein erfahrener Kfz-Meister. Analysiere dieses Fahrzeug und gib spezifische Wartungsempfehlungen.\n\n';
+  pr+='WICHTIG: NUR gesicherte, belegbare Fakten. Keine Vermutungen.\n\n';
+  pr+='Fahrzeugdaten:\n';
+  pr+='Marke/Modell: '+(v.brand||'?')+' '+(v.model||'?')+'\n';
+  pr+='HSN/TSN: '+(v.hsnTsn||'unbekannt')+'\n';
+  pr+='FIN: '+(v.vin||'unbekannt')+'\n';
+  pr+='Erstzulassung: '+(v.ezDate||'unbekannt')+' (Alter: '+(age||'?')+')\n';
+  pr+='Antrieb: '+(v.type||'unbekannt')+'\n';
+  pr+='Aktueller KM-Stand: '+(lastKm>0?lastKm+' km':'unbekannt')+'\n';
+  pr+='Reifen: '+(v.tires||'unbekannt')+'\n';
+  pr+='Bereits eingetragene Wartungen: '+existMaint+'\n\n';
+  pr+='Antworte exakt in diesem Format:\n\n';
+  pr+='FAHRZEUG-PROFIL: Kurze Einordnung des Modells.\n\n';
+  pr+='EMPFOHLENE WARTUNGSINTERVALLE: Herstellerempfehlungen fuer dieses Modell mit km und Zeitangaben.\n\n';
+  pr+='BEKANNTE SCHWACHSTELLEN: Typische Probleme dieses Modells.\n\n';
+  pr+='RUECKRUFAKTIONEN: Bekannte Rueckrufe falls vorhanden.\n\n';
+  pr+='AKTUELL FAELLIG: Was sollte bei '+(lastKm>0?lastKm+' km und ':'')+(age||'?')+' Alter jetzt gemacht werden?\n\n';
+  pr+='SPAR-TIPPS: Fahrzeugspezifische Tipps um Kosten zu sparen.\n\n';
+  pr+='Auf Deutsch. Maximal 3 Saetze pro Punkt.';
+
+  if(!settings.openrouterKey){
+    el.innerHTML='<div style="color:#ffc107;padding:12px;background:rgba(255,193,7,0.08);border-radius:10px;font-size:13px;">OpenRouter API-Key in Einstellungen hinterlegen!</div>';
+    return;
+  }
+  el.innerHTML='<div style="text-align:center;padding:20px;color:#999;font-size:13px;">KI analysiert '+(v.brand||'')+' '+(v.model||'')+' ...</div>';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},
+    body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.0,max_tokens:1500})
+  }).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
+    var safe=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.12);"><div style="color:#17a2b8;font-size:10px;font-weight:bold;margin-bottom:8px;">KI-Analyse (keine Garantie auf Vollstaendigkeit)</div><div style="color:#ddd;font-size:12px;line-height:1.8;">'+safe+'</div></div>';
+  }).catch(function(e){
+    el.innerHTML='<div style="color:#dc3545;padding:10px;font-size:12px;">Fehler: '+e.message+'</div>';
+  });
+};
+
+// Dashboard Wartungs-Warnungen
+setInterval(function(){
+  if(!state.vehicles||state.vehicles.length===0)return;
+  if(document.getElementById('dashMaintW'))return;
+  var warns=[];
+  for(var vi=0;vi<state.vehicles.length;vi++){
+    var v=state.vehicles[vi];
+    if(!v.maintenance)continue;
+    var lastKm=_getLastKm(v.id);
+    var vName=(v.brand||'Kfz')+' '+(v.licensePlate||'');
+    for(var mi=0;mi<v.maintenance.length;mi++){
+      var m=v.maintenance[mi];
+      if(m.intervalKm>0&&m.lastKm>0&&lastKm>0){
+        var kmLeft=(m.lastKm+m.intervalKm)-lastKm;
+        if(kmLeft<0)warns.push({c:'#dc3545',t:vName+': '+(m.label||'Wartung')+' ueberfaellig ('+Math.abs(kmLeft)+' km drueber)!'});
+        else if(kmLeft<2000)warns.push({c:'#ffc107',t:vName+': '+(m.label||'Wartung')+' in '+kmLeft+' km faellig'});
+      }
+      if(m.intervalMonths>0&&m.lastDate){
+        var ld=new Date(m.lastDate);
+        ld.setMonth(ld.getMonth()+m.intervalMonths);
+        var daysLeft=Math.round((ld-new Date())/86400000);
+        if(daysLeft<0)warns.push({c:'#dc3545',t:vName+': '+(m.label||'Wartung')+' ueberfaellig ('+Math.abs(daysLeft)+' Tage)!'});
+        else if(daysLeft<30)warns.push({c:'#ffc107',t:vName+': '+(m.label||'Wartung')+' in '+daysLeft+' Tagen faellig'});
+      }
+    }
+  }
+  if(warns.length===0)return;
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  for(var ci=0;ci<cards.length;ci++){
+    var cd=cards[ci];
+    if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){
+      var wb=document.createElement('div');
+      wb.id='dashMaintW';
+      wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';
+      var wh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">Kfz-Wartung</div>';
+      for(var wi=0;wi<warns.length;wi++){
+        wh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+warns[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+warns[wi].t+'</div>';
+      }
+      wb.innerHTML=wh;
+      cd.parentElement.insertBefore(wb,cd);
+      break;
+    }
+  }
+},5000);
 
 })();
 </script>
