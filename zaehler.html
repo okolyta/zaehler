@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.31';
+const APP_VERSION = '2.32';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -8967,6 +8967,7 @@ function _renderPetList(){
 function openPetEdit(id){
   editingPetId=id;
   petPhotoData=null;
+  if(petDetailOv)petDetailOv.style.display='none';
   var p=id?_findPet(id):null;
 
   if(!petEditOv){
@@ -8995,7 +8996,7 @@ function openPetEdit(id){
   h.push('<div id="petPhPrev" style="'+(ps?'':'display:none;')+'margin-bottom:12px;"><img id="petPhThumb" src="'+(ps||'')+'" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid rgba(230,126,34,0.4);"></div>');
   h.push('<label style="display:inline-block;padding:12px 24px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:10px;cursor:pointer;font-size:14px;border:2px dashed rgba(255,255,255,0.15);">');
   h.push('📸 Foto aufnehmen / wählen');
-  h.push('<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePetImg(this.files)">');
+  h.push('<input type="file" accept="image/*" style="display:none;" onchange="handlePetImg(this.files)">');
   h.push('</label></div>');
 
   // Basic
