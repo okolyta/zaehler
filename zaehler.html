@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.32';
+const APP_VERSION = '2.33';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -9646,6 +9646,56 @@ setInterval(function(){
   }
 },5000);
 
+})();
+// === PERSISTENZ FIX fuer Pets, Emergency, Parking ===
+(function(){
+  var PK='zaehler_pets',EK='zaehler_emergency',KK='zaehler_parking';
+
+  function _persist(){
+    try{
+      if(state.pets&&state.pets.length>0)localStorage.setItem(PK,JSON.stringify(state.pets));
+      if(state.emergencyInfo&&Object.keys(state.emergencyInfo).length>0)localStorage.setItem(EK,JSON.stringify(state.emergencyInfo));
+      if(state.parking)localStorage.setItem(KK,JSON.stringify(state.parking));
+    }catch(x){}
+  }
+
+  function _restore(){
+    try{
+      var p=localStorage.getItem(PK);
+      if(p&&(!state.pets||state.pets.length===0)){state.pets=JSON.parse(p);}
+      var e=localStorage.getItem(EK);
+      if(e&&(!state.emergencyInfo||Object.keys(state.emergencyInfo).length===0)){state.emergencyInfo=JSON.parse(e);}
+      var k=localStorage.getItem(KK);
+      if(k&&(!state.parking||!state.parking.active)){
+        var pk=JSON.parse(k);
+        if(pk&&pk.active)state.parking=pk;
+      }
+    }catch(x){}
+  }
+
+  // saveData wrappen
+  var _waitSave=setInterval(function(){
+    if(typeof saveData!=='function')return;
+    clearInterval(_waitSave);
+    var _origSave=saveData;
+    saveData=async function(){
+      _persist();
+      if(typeof _origSave==='function')return _origSave.apply(this,arguments);
+    };
+  },300);
+
+  // Restore sobald state verfügbar ist
+  var _waitState=setInterval(function(){
+    if(typeof state==='undefined'||!state)return;
+    clearInterval(_waitState);
+    _restore();
+    // Sicherheitsnetz: Falls Drive-Sync die Daten überschreibt
+    setInterval(function(){
+      if((!state.pets||state.pets.length===0)&&localStorage.getItem(PK)){
+        _restore();
+      }
+    },5000);
+  },500);
 })();
 </script>
 </body>
