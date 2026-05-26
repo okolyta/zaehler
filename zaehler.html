@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.28';
+const APP_VERSION = '2.29';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -5752,6 +5752,7 @@ function renderVehicles() {
       
       <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
         <div style="width:100%;padding:14px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(220,53,69,0.3);" onclick="openEmergencyCard('${v.id}')">🆘 Notfall- & Unfallhilfe</div>
+        <div style="width:100%;padding:14px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer;box-sizing:border-box;box-shadow:0 4px 15px rgba(13,110,253,0.3);" onclick="openParkingMode('${v.id}')">${state.parking&&state.parking.active&&state.parking.vehId===v.id?'🅿️ Geparktes Auto anzeigen':'🅿️ Parkplatz merken'}</div>
         <button class="btn" style="width:100%; background:var(--acc); color:#fff; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;" onclick="openVehDetails('${v.id}')">ℹ️ Fahrzeug-Details anzeigen</button>
         
         <div style="display:flex; gap:6px; width:100%;">
@@ -8524,6 +8525,319 @@ window.saveAccidentReport=function(){
   document.getElementById('emW2').value='';
   document.getElementById('emW3').value='';
 };
+
+})();
+// === PARKPLATZ-MERKER & ERINNERUNGEN ===
+(function(){
+var pOv=null,pLat=0,pLng=0,pGps=false,pPhoto=null,pMins=0,pVid=null;
+
+window.openParkingMode=function(vid){
+  pVid=vid;pLat=0;pLng=0;pGps=false;pPhoto=null;pMins=0;
+  if(!pOv){pOv=document.createElement('div');pOv.id='parkOv';pOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(pOv);}
+  _renderPark();
+  pOv.style.display='block';pOv.scrollTop=0;
+};
+
+function _renderPark(){
+  var saved=state.parking&&state.parking.active;
+  var v=null;if(pVid){for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===pVid){v=state.vehicles[i];break;}}}
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+
+  h.push('<div style="background:linear-gradient(135deg,#0d6efd,#0b5ed7);border-radius:16px;padding:20px;margin-bottom:14px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;"><div style="font-size:36px;">🅿️</div>');
+  h.push('<div><h2 style="margin:0;color:#fff;font-size:20px;">Parkplatz-Merker</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.7);font-size:12px;">'+(saved?'Dein geparktes Auto':'Parkplatz speichern')+'</div></div></div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(0,0,0,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'parkOv\').style.display=\'none\'">✕</div>');
+  h.push('</div></div>');
+
+  if(saved){
+    var p=state.parking;
+    var mins=Math.round((Date.now()-p.timestamp)/60000);
+    var hh=Math.floor(mins/60),mm=mins%60;
+
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">📍 Parkposition</h4>');
+    if(p.vehicle) h.push('<div style="color:#ddd;font-size:14px;margin-bottom:10px;font-weight:600;">'+p.vehicle+'</div>');
+    h.push('<div style="color:#17a2b8;font-size:13px;margin-bottom:12px;">⏱️ Geparkt seit: '+(hh>0?hh+'h ':'')+(mm)+'min</div>');
+    if(p.spotNumber) h.push('<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;"><div style="color:#888;font-size:11px;">Parkplatz-Nr.</div><div style="color:#fff;font-weight:700;font-size:22px;">'+p.spotNumber+'</div></div>');
+    if(p.level) h.push('<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;"><div style="color:#888;font-size:11px;">Ebene / Bereich</div><div style="color:#fff;font-weight:600;font-size:16px;">'+p.level+'</div></div>');
+    if(p.notes) h.push('<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;"><div style="color:#888;font-size:11px;">Notizen</div><div style="color:#fff;">'+p.notes+'</div></div>');
+    h.push('</div>');
+
+    if(p.photo){
+      h.push('<div style="'+cs+'">');
+      h.push('<h4 style="margin:0 0 12px;color:#fff;font-size:15px;">📸 Foto</h4>');
+      h.push('<img src="'+p.photo+'" style="width:100%;border-radius:10px;max-height:300px;object-fit:cover;">');
+      h.push('</div>');
+    }
+
+    if(p.lat&&p.lng){
+      h.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'&travelmode=walking" target="_blank" style="display:block;padding:16px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:14px;text-align:center;font-weight:bold;font-size:16px;text-decoration:none;margin-bottom:14px;box-shadow:0 4px 15px rgba(40,167,69,0.3);">🧭 Zum Auto navigieren</a>');
+    }
+
+    if(p.timerEnd){
+      var rem=Math.max(0,Math.round((p.timerEnd-Date.now())/60000));
+      if(rem>0){
+        h.push('<div style="'+cs+'background:rgba(255,193,7,0.08);border-color:rgba(255,193,7,0.2);">');
+        h.push('<div style="display:flex;align-items:center;gap:10px;"><div style="font-size:28px;">⏰</div>');
+        h.push('<div><div style="color:#ffc107;font-size:14px;font-weight:bold;">Parkzeit-Erinnerung</div>');
+        h.push('<div style="color:#ddd;font-size:22px;font-weight:bold;">'+Math.floor(rem/60)+'h '+rem%60+'min</div></div></div></div>');
+      }else{
+        h.push('<div style="'+cs+'background:rgba(220,53,69,0.12);border-color:rgba(220,53,69,0.3);">');
+        h.push('<div style="display:flex;align-items:center;gap:10px;"><div style="font-size:28px;">🚨</div>');
+        h.push('<div><div style="color:#dc3545;font-size:14px;font-weight:bold;">Parkzeit abgelaufen!</div>');
+        h.push('<div style="color:#ddd;font-size:13px;">Bitte schnell zum Auto!</div></div></div></div>');
+      }
+    }
+
+    h.push('<div style="padding:14px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;margin-bottom:14px;" onclick="clearParkSpot()">🗑️ Parken beenden</div>');
+
+  }else{
+
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📡 GPS-Position</h4>');
+    h.push('<div id="parkGpsInfo" style="color:#888;font-size:13px;margin-bottom:10px;">Position noch nicht erfasst</div>');
+    h.push('<div style="padding:12px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="captureParkGps()">📡 Aktuelle Position erfassen</div>');
+    h.push('</div>');
+
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📸 Foto</h4>');
+    h.push('<div id="parkPhotoBox" style="display:none;margin-bottom:10px;"><img id="parkPhotoThumb" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;"></div>');
+    h.push('<label style="display:block;padding:14px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;border:2px dashed rgba(255,255,255,0.15);">');
+    h.push('📸 Foto aufnehmen');
+    h.push('<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleParkImg(this.files)">');
+    h.push('</label></div>');
+
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">📝 Parkplatz-Details</h4>');
+    h.push('<input id="parkSpotNr" placeholder="Parkplatz-Nr. (z.B. P3-A42)" style="'+is+'">');
+    h.push('<input id="parkLevelNr" placeholder="Ebene / Bereich (z.B. Ebene 3)" style="'+is+'">');
+    h.push('<input id="parkNotesField" placeholder="Notizen (z.B. nahe Aufzug, rote Saule)" style="'+is+'">');
+    h.push('</div>');
+
+    h.push('<div style="'+cs+'">');
+    h.push('<h4 style="margin:0 0 14px;color:#fff;font-size:15px;">⏰ Parkzeit-Timer (optional)</h4>');
+    h.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">');
+    var ts=[30,60,90,120,180,240];
+    for(var ti=0;ti<ts.length;ti++){
+      var t=ts[ti],lb=t<60?t+'min':(t/60)+'h';
+      h.push('<div data-pm="'+t+'" style="flex:1;min-width:55px;padding:10px 6px;background:rgba(255,255,255,0.08);color:#fff;border-radius:8px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;border:2px solid transparent;" onclick="selParkTime(this,'+t+')">'+lb+'</div>');
+    }
+    h.push('</div>');
+    h.push('<input id="parkTimerCustom" type="number" placeholder="Oder: eigene Dauer in Minuten" style="'+is+'">');
+    h.push('</div>');
+
+    h.push('<div style="padding:16px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:14px;box-shadow:0 4px 15px rgba(13,110,253,0.3);" onclick="saveParkSpot()">💾 Parkplatz speichern</div>');
+  }
+
+  h.push('<div style="'+cs+'background:rgba(23,162,184,0.06);border-color:rgba(23,162,184,0.15);">');
+  h.push('<h4 style="margin:0 0 8px;color:#17a2b8;font-size:14px;">📱 Homescreen-Schnellzugriff</h4>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:10px;">Lege den Parkplatz-Merker als eigene Kachel auf deinen Homescreen.</div>');
+  h.push('<div style="padding:10px;background:rgba(255,255,255,0.06);border-radius:8px;text-align:center;cursor:pointer;font-size:13px;color:#17a2b8;font-weight:bold;" onclick="shareParkUrl()">📤 Link teilen / Homescreen</div>');
+  h.push('</div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;" onclick="document.getElementById(\'parkOv\').style.display=\'none\'">Schließen</div>');
+  h.push('</div>');
+  pOv.innerHTML=h.join('');
+}
+
+window.captureParkGps=function(){
+  var el=document.getElementById('parkGpsInfo');
+  if(!navigator.geolocation){el.innerHTML='<span style="color:#dc3545;">GPS nicht verfuegbar</span>';return;}
+  el.innerHTML='<span style="color:#ffc107;">📡 Position wird ermittelt...</span>';
+  navigator.geolocation.getCurrentPosition(function(pos){
+    pLat=pos.coords.latitude;pLng=pos.coords.longitude;pGps=true;
+    el.innerHTML='<span style="color:#28a745;">✅ Position erfasst (Genauigkeit: '+Math.round(pos.coords.accuracy)+'m)</span>';
+  },function(err){
+    el.innerHTML='<span style="color:#dc3545;">❌ Fehler: '+err.message+'</span>';
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+};
+
+window.handleParkImg=function(files){
+  if(!files||!files[0])return;
+  var rd=new FileReader();
+  rd.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var c=document.createElement('canvas'),s=Math.min(600/img.width,1);
+      c.width=img.width*s;c.height=img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      pPhoto=c.toDataURL('image/jpeg',0.6);
+      var bx=document.getElementById('parkPhotoBox'),th=document.getElementById('parkPhotoThumb');
+      if(bx&&th){th.src=pPhoto;bx.style.display='block';}
+    };
+    img.src=e.target.result;
+  };
+  rd.readAsDataURL(files[0]);
+};
+
+window.selParkTime=function(el,min){
+  pMins=min;
+  var all=pOv.querySelectorAll('[data-pm]');
+  for(var i=0;i<all.length;i++)all[i].style.borderColor='transparent';
+  el.style.borderColor='#0d6efd';
+  var ci=document.getElementById('parkTimerCustom');if(ci)ci.value='';
+};
+
+window.saveParkSpot=function(){
+  var v=null;
+  if(pVid){for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===pVid){v=state.vehicles[i];break;}}}
+  var cust=parseInt((document.getElementById('parkTimerCustom')||{}).value,10);
+  var mins=cust>0?cust:pMins;
+
+  state.parking={
+    active:true,
+    vehId:pVid,
+    vehicle:v?((v.brand||'')+' '+(v.model||'')+' - '+(v.licensePlate||'')):'',
+    lat:pGps?pLat:0,
+    lng:pGps?pLng:0,
+    photo:pPhoto,
+    spotNumber:((document.getElementById('parkSpotNr')||{}).value||'').trim(),
+    level:((document.getElementById('parkLevelNr')||{}).value||'').trim(),
+    notes:((document.getElementById('parkNotesField')||{}).value||'').trim(),
+    timestamp:Date.now(),
+    timerEnd:mins>0?Date.now()+mins*60000:0,
+    timerMinutes:mins,
+    notified5:false,
+    notifiedEnd:false
+  };
+
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Parkplatz gespeichert!');
+  if(mins>0&&'Notification'in window&&Notification.permission==='default')Notification.requestPermission();
+  _renderPark();
+};
+
+window.clearParkSpot=function(){
+  if(!confirm('Parken wirklich beenden?'))return;
+  state.parking={active:false};
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Parkplatz geloescht');
+  var b=document.getElementById('dashParkBnr');if(b)b.remove();
+  pOv.style.display='none';
+};
+
+window.shareParkUrl=function(){
+  var url=window.location.origin+window.location.pathname+'?park';
+  if(navigator.share){
+    navigator.share({title:'Parkplatz-Merker',text:'Schnellzugriff',url:url}).catch(function(){});
+  }else{
+    prompt('Diesen Link zum Homescreen hinzufuegen:',url);
+  }
+};
+
+// Timer Checker (alle 30s)
+setInterval(function(){
+  if(!state.parking||!state.parking.active||!state.parking.timerEnd)return;
+  var rem=state.parking.timerEnd-Date.now();
+  if(rem<=300000&&rem>0&&!state.parking.notified5){
+    state.parking.notified5=true;
+    if('Notification'in window&&Notification.permission==='granted'){
+      try{new Notification('Noch 5 Minuten Parkzeit!',{body:'Dein Parkschein laeuft gleich ab!',tag:'park5'});}catch(e){}
+    }
+    if(typeof toast==='function')toast('⏰ Noch 5 Min Parkzeit!');
+  }
+  if(rem<=0&&!state.parking.notifiedEnd){
+    state.parking.notifiedEnd=true;
+    if('Notification'in window&&Notification.permission==='granted'){
+      try{new Notification('Parkzeit abgelaufen!',{body:'Bitte schnell zum Auto!',tag:'parkEnd'});}catch(e){}
+    }
+    if(typeof toast==='function')toast('🚨 Parkzeit abgelaufen!');
+  }
+},30000);
+
+// Dashboard: Parking Banner + Reminders
+setInterval(function(){
+  if(!state.vehicles||state.vehicles.length===0)return;
+
+  // Parking Banner
+  var bnr=document.getElementById('dashParkBnr');
+  if(state.parking&&state.parking.active){
+    var mins2=Math.round((Date.now()-state.parking.timestamp)/60000);
+    var ht=Math.floor(mins2/60),mt=mins2%60;
+    var tStr=(ht>0?ht+'h ':'')+(mt)+'min';
+    var timerStr='';
+    if(state.parking.timerEnd){
+      var rm2=Math.max(0,Math.round((state.parking.timerEnd-Date.now())/60000));
+      timerStr=rm2>0?' | Timer: '+rm2+'min':'| ⚠️ Abgelaufen!';
+    }
+    if(bnr){
+      var tx=bnr.querySelector('.ptxt');
+      if(tx)tx.innerHTML='Seit '+tStr+(state.parking.spotNumber?' | Platz: '+state.parking.spotNumber:'')+timerStr;
+    }else{
+      var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+      for(var ci=0;ci<cards.length;ci++){
+        var cd=cards[ci];
+        if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){
+          var nb=document.createElement('div');
+          nb.id='dashParkBnr';
+          nb.style.cssText='padding:16px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:14px;font-weight:bold;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 15px rgba(13,110,253,0.3);margin-bottom:16px;';
+          nb.innerHTML='<div style="font-size:28px;">🅿️</div><div><div style="font-size:15px;">Auto geparkt</div><div class="ptxt" style="font-size:11px;font-weight:normal;opacity:0.85;">Seit '+tStr+(state.parking.spotNumber?' | Platz: '+state.parking.spotNumber:'')+timerStr+'</div></div>';
+          nb.addEventListener('click',function(){openParkingMode(state.parking.vehId||state.vehicles[0].id);});
+          cd.parentElement.insertBefore(nb,cd);
+          break;
+        }
+      }
+    }
+  }else{
+    if(bnr)bnr.remove();
+  }
+
+  // Reminders Banner
+  if(document.getElementById('dashRemBnr'))return;
+  var now=new Date(),warns=[];
+  for(var ri=0;ri<state.vehicles.length;ri++){
+    var vr=state.vehicles[ri];
+    if(vr.tuevDate){
+      var td=new Date(vr.tuevDate),dd=(td-now)/86400000;
+      if(dd<0)warns.push({c:'#dc3545',t:'🚨 '+(vr.brand||'Kfz')+': TÜV abgelaufen seit '+Math.abs(Math.round(dd))+' Tagen!'});
+      else if(dd<60)warns.push({c:'#ffc107',t:'⚠️ '+(vr.brand||'Kfz')+': TÜV in '+Math.round(dd)+' Tagen'});
+    }
+    if(vr.insCancel){
+      var ic=new Date(vr.insCancel),icd=(ic-now)/86400000;
+      if(icd>0&&icd<45)warns.push({c:'#ffc107',t:'📋 '+(vr.brand||'Kfz')+': Versicherungs-Kuendigung in '+Math.round(icd)+' Tagen'});
+    }
+  }
+  var mo=now.getMonth()+1;
+  if(mo===10)warns.push({c:'#17a2b8',t:'❄️ Oktober: Zeit fuer Winterreifen! (O-bis-O Regel)'});
+  if(mo===4)warns.push({c:'#17a2b8',t:'☀️ April: Zeit fuer Sommerreifen! (O-bis-O Regel)'});
+
+  if(warns.length>0){
+    var cards2=document.querySelectorAll('.card,div.card,[class*="card"]');
+    for(var ci2=0;ci2<cards2.length;ci2++){
+      var cd2=cards2[ci2];
+      if(cd2.textContent&&cd2.textContent.indexOf('Hallo!')>=0){
+        var rb=document.createElement('div');
+        rb.id='dashRemBnr';
+        rb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';
+        var rh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">🔔 Erinnerungen</div>';
+        for(var wi=0;wi<warns.length;wi++){
+          rh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+warns[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+warns[wi].t+'</div>';
+        }
+        rb.innerHTML=rh;
+        cd2.parentElement.insertBefore(rb,cd2);
+        break;
+      }
+    }
+  }
+},4000);
+
+// URL-Parameter fuer Homescreen-Shortcut
+if(window.location.search.indexOf('park')>=0){
+  var _pi=setInterval(function(){
+    if(typeof state!=='undefined'&&state&&state.vehicles&&state.vehicles.length>0){
+      clearInterval(_pi);
+      setTimeout(function(){
+        var vid=(state.parking&&state.parking.active&&state.parking.vehId)?state.parking.vehId:state.vehicles[0].id;
+        window.openParkingMode(vid);
+      },800);
+    }
+  },500);
+}
 
 })();
 </script>
