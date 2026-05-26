@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.30';
+const APP_VERSION = '2.31';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -9198,6 +9198,7 @@ window.handlePetImg=function(files){
 };
 
 window.savePetData=function(){
+  if(!state.pets)state.pets=[];
   var nm=((document.getElementById('ptName')||{}).value||'').trim();
   if(!nm){if(typeof toast==='function')toast('Name ist erforderlich!','warn');else alert('Bitte einen Namen eingeben.');return;}
 
@@ -9254,6 +9255,395 @@ window.deletePetData=function(id){
 window.openPetList=openPetList;
 window.openPetEdit=openPetEdit;
 window.openPetDetail=openPetDetail;
+
+})();
+// === HAUSTIER ETAPPE 2: Schutz-Zyklen, Medikamente, Futter, Notfall-Finder ===
+(function(){
+
+function _fp2(id){for(var i=0;i<state.pets.length;i++){if(state.pets[i].id===id)return state.pets[i];}return null;}
+function _esc2(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'):''}
+
+// --- TIER-NOTFALL FINDER ---
+window.findNearbyVet=function(type){
+  var q=type==='notdienst'?'Tierklinik+Notdienst+geöffnet':'Tierarzt+geöffnet+in+der+Nähe';
+  if(!navigator.geolocation){window.open('https://www.google.com/maps/search/'+q,'_blank');return;}
+  if(typeof toast==='function')toast('📡 Standort wird ermittelt...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    window.open('https://www.google.com/maps/search/'+q+'/@'+pos.coords.latitude+','+pos.coords.longitude+',14z','_blank');
+  },function(){
+    window.open('https://www.google.com/maps/search/'+q,'_blank');
+  },{enableHighAccuracy:true,timeout:10000});
+};
+
+// --- SCHUTZ-ZYKLEN HELPERS ---
+function _protDue(pr){
+  if(!pr.lastApplied)return null;
+  var d=new Date(pr.lastApplied);d.setDate(d.getDate()+(pr.intervalDays||30));return d;
+}
+function _protRem(pr){var d=_protDue(pr);if(!d)return -999;return Math.round((d-new Date())/86400000);}
+function _protCol(r){return r<0?'#dc3545':r<7?'#ffc107':'#28a745';}
+function _protIco(t){return t==='tick'?'🪳':t==='flea'?'🦟':t==='worm'?'🪱':'💊';}
+function _protLbl(t){return t==='tick'?'Zeckenschutz':t==='flea'?'Flohschutz':t==='worm'?'Entwurmung':'Schutz';}
+
+// --- OVERRIDE PET DETAIL VIEW ---
+var _origPD2=window.openPetDetail;
+window.openPetDetail=function(id){
+  _origPD2(id);
+  setTimeout(function(){_injectE2(id);},150);
+};
+
+function _injectE2(id){
+  var ov=document.getElementById('petDetailOv');
+  if(!ov)return;
+  var old=document.getElementById('petE2X');if(old)old.remove();
+  var p=_fp2(id);if(!p)return;
+  if(!p.protections)p.protections=[];
+  if(!p.medications)p.medications=[];
+  if(!p.feeding)p.feeding={};
+
+  var inner=ov.querySelector('div[style*="max-width"]');
+  if(!inner)inner=ov.firstElementChild;
+  if(!inner)return;
+
+  var ex=document.createElement('div');ex.id='petE2X';
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=[];
+
+  // NOTFALL
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(220,53,69,0.08),rgba(220,53,69,0.03));border-color:rgba(220,53,69,0.2);">');
+  h.push('<h4 style="margin:0 0 12px;color:#dc3545;font-size:15px;">🆘 Tier-Notfall</h4>');
+  h.push('<div style="display:flex;gap:8px;margin-bottom:8px;">');
+  h.push('<div style="flex:1;padding:12px;background:linear-gradient(135deg,#dc3545,#a71d2a);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:12px;" onclick="findNearbyVet(\'notdienst\')">🏥 Tierklinik<br>Notdienst</div>');
+  h.push('<div style="flex:1;padding:12px;background:linear-gradient(135deg,#0d6efd,#0b5ed7);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:12px;" onclick="findNearbyVet(\'tierarzt\')">🏥 Tierarzt<br>in der Nähe</div>');
+  h.push('</div>');
+  h.push('<a href="tel:055119240" style="display:block;padding:10px;background:rgba(255,255,255,0.06);color:#ddd;border-radius:8px;text-align:center;font-size:13px;text-decoration:none;">☠️ Gift-Notruf: 0551 - 19240</a>');
+  h.push('</div>');
+
+  // SCHUTZ-ZYKLEN
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">🛡️ Schutz-Zyklen</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openProtModal(\''+id+'\')">+ Hinzufügen</div>');
+  h.push('</div>');
+  if(p.protections.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Schutz-Zyklen eingetragen.</div>');
+  }else{
+    for(var pi=0;pi<p.protections.length;pi++){
+      var pr=p.protections[pi],rem=_protRem(pr),col=_protCol(rem),due=_protDue(pr);
+      var dStr=due?due.toLocaleDateString('de-DE'):'—';
+      var rStr=rem===-999?'Noch nie angewendet':rem<0?'⚠️ Überfällig seit '+Math.abs(rem)+' Tagen!':rem===0?'⏰ Heute fällig!':'✅ Noch '+rem+' Tage';
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid '+col+';">');
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">'+_protIco(pr.type)+' '+_protLbl(pr.type)+'</div>');
+      h.push('<div style="display:flex;gap:6px;">');
+      h.push('<div style="padding:5px 10px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;" onclick="applyProtNow(\''+id+'\',\''+pr.id+'\')">✅ Heute angewendet</div>');
+      h.push('<div style="padding:5px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteProt(\''+id+'\',\''+pr.id+'\')">🗑️</div>');
+      h.push('</div></div>');
+      if(pr.product)h.push('<div style="color:#999;font-size:12px;margin-bottom:4px;">Produkt: '+_esc2(pr.product)+'</div>');
+      h.push('<div style="color:'+col+';font-size:13px;font-weight:600;">'+rStr+'</div>');
+      h.push('<div style="color:#666;font-size:11px;margin-top:2px;">Nächste Anwendung: '+dStr+' | Intervall: '+(pr.intervalDays||'?')+' Tage</div>');
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+
+  // MEDIKAMENTE
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">💊 Medikamente</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openMedModal(\''+id+'\')">+ Hinzufügen</div>');
+  h.push('</div>');
+  if(p.medications.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Keine Medikamente eingetragen.</div>');
+  }else{
+    for(var mi=0;mi<p.medications.length;mi++){
+      var med=p.medications[mi];
+      var ft=med.frequency==='daily'?'Täglich':med.frequency==='weekly'?'Wöchentlich':med.frequency==='monthly'?'Monatlich':med.frequency==='asneeded'?'Bei Bedarf':(med.frequency||'');
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">');
+      h.push('<div style="flex:1;min-width:0;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">💊 '+_esc2(med.name)+'</div>');
+      h.push('<div style="color:#999;font-size:12px;margin-top:2px;">'+_esc2(med.dosage)+' | '+ft+(med.time?' ('+_esc2(med.time)+')':'')+'</div>');
+      if(med.notes)h.push('<div style="color:#666;font-size:11px;margin-top:2px;">'+_esc2(med.notes)+'</div>');
+      h.push('</div>');
+      h.push('<div style="padding:5px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;margin-left:8px;" onclick="deleteMed(\''+id+'\',\''+med.id+'\')">🗑️</div>');
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+
+  // FUTTERPLAN
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h4 style="margin:0;color:#fff;font-size:15px;">🍖 Futterplan</h4>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openFeedModal(\''+id+'\')">✏️ Bearbeiten</div>');
+  h.push('</div>');
+  var f=p.feeding||{};
+  if(!f.brand&&!f.morningAmount&&!f.eveningAmount){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch kein Futterplan eingetragen.</div>');
+  }else{
+    if(f.brand)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:6px;"><div style="color:#888;font-size:11px;">Futter / Marke</div><div style="color:#fff;font-weight:600;">'+_esc2(f.brand)+'</div></div>');
+    if(f.morningAmount||f.morningTime)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🌅</span><div><div style="color:#888;font-size:11px;">Morgens'+(f.morningTime?' ('+_esc2(f.morningTime)+')':'')+'</div><div style="color:#fff;font-weight:600;">'+_esc2(f.morningAmount)+'</div></div></div>');
+    if(f.eveningAmount||f.eveningTime)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🌙</span><div><div style="color:#888;font-size:11px;">Abends'+(f.eveningTime?' ('+_esc2(f.eveningTime)+')':'')+'</div><div style="color:#fff;font-weight:600;">'+_esc2(f.eveningAmount)+'</div></div></div>');
+    if(f.treats)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:6px;"><div style="color:#888;font-size:11px;">Leckerlis / Ergänzung</div><div style="color:#ddd;">'+_esc2(f.treats)+'</div></div>');
+    if(f.notes)h.push('<div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;"><div style="color:#888;font-size:11px;">Hinweise</div><div style="color:#ddd;">'+_esc2(f.notes)+'</div></div>');
+  }
+  h.push('</div>');
+
+  ex.innerHTML=h.join('');
+
+  var ch=inner.children,ref=null;
+  for(var c=ch.length-1;c>=0;c--){
+    var tx=ch[c].textContent||'';
+    if(tx.indexOf('Bearbeiten')>=0&&tx.indexOf('Löschen')>=0){ref=ch[c];break;}
+  }
+  if(ref)inner.insertBefore(ex,ref);else inner.appendChild(ex);
+}
+
+// --- SCHUTZ-ZYKLEN MODAL ---
+window.openProtModal=function(petId){
+  var ov=document.getElementById('protModalOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='protModalOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 20px;color:#fff;">🛡️ Schutz-Zyklus hinzufügen</h3>');
+  ih.push('<label style="'+ls+'">Art</label>');
+  ih.push('<select id="protType" style="'+is+'"><option value="tick">🪳 Zeckenschutz</option><option value="flea">🦟 Flohschutz</option><option value="worm">🪱 Entwurmung</option></select>');
+  ih.push('<label style="'+ls+'">Produkt / Marke</label>');
+  ih.push('<input id="protProd" placeholder="z.B. Simparica, Bravecto" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Intervall (Tage)</label>');
+  ih.push('<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">');
+  var ints=[{d:28,l:'4 Wochen'},{d:30,l:'30 Tage'},{d:35,l:'5 Wochen'},{d:84,l:'3 Monate'},{d:90,l:'90 Tage'},{d:180,l:'6 Monate'}];
+  for(var ii=0;ii<ints.length;ii++){
+    ih.push('<div data-pd="'+ints[ii].d+'" style="padding:8px 12px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:8px;font-size:12px;cursor:pointer;border:2px solid transparent;" onclick="selProtInt(this,'+ints[ii].d+')">'+ints[ii].l+'</div>');
+  }
+  ih.push('</div>');
+  ih.push('<input id="protIntCustom" type="number" placeholder="Oder: eigene Tage" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Zuletzt angewendet</label>');
+  ih.push('<input type="date" id="protLast" value="'+new Date().toISOString().split('T')[0]+'" style="'+is+'">');
+  ih.push('<input type="hidden" id="protPetId" value="'+petId+'">');
+  ih.push('<input type="hidden" id="protSelInt" value="30">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveProt()">💾 Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'protModalOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.selProtInt=function(el,d){
+  document.getElementById('protSelInt').value=d;
+  document.getElementById('protIntCustom').value='';
+  var all=document.getElementById('protModalOv').querySelectorAll('[data-pd]');
+  for(var i=0;i<all.length;i++)all[i].style.borderColor='transparent';
+  el.style.borderColor='#28a745';
+};
+
+window.saveProt=function(){
+  var petId=document.getElementById('protPetId').value;
+  var p=_fp2(petId);if(!p)return;
+  if(!p.protections)p.protections=[];
+  var cust=parseInt(document.getElementById('protIntCustom').value,10);
+  var intv=cust>0?cust:parseInt(document.getElementById('protSelInt').value,10)||30;
+  p.protections.push({
+    id:typeof uid==='function'?uid():Date.now().toString(),
+    type:document.getElementById('protType').value,
+    product:(document.getElementById('protProd').value||'').trim(),
+    intervalDays:intv,
+    lastApplied:document.getElementById('protLast').value||new Date().toISOString().split('T')[0]
+  });
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Schutz-Zyklus gespeichert!');
+  document.getElementById('protModalOv').style.display='none';
+  window.openPetDetail(petId);
+};
+
+window.applyProtNow=function(petId,protId){
+  var p=_fp2(petId);if(!p)return;
+  for(var i=0;i<p.protections.length;i++){
+    if(p.protections[i].id===protId){
+      p.protections[i].lastApplied=new Date().toISOString().split('T')[0];
+      break;
+    }
+  }
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Als heute angewendet markiert!');
+  window.openPetDetail(petId);
+};
+
+window.deleteProt=function(petId,protId){
+  if(!confirm('Schutz-Zyklus wirklich löschen?'))return;
+  var p=_fp2(petId);if(!p)return;
+  p.protections=p.protections.filter(function(x){return x.id!==protId;});
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Gelöscht');
+  window.openPetDetail(petId);
+};
+
+// --- MEDIKAMENTE MODAL ---
+window.openMedModal=function(petId){
+  var ov=document.getElementById('medModalOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='medModalOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 20px;color:#fff;">💊 Medikament hinzufügen</h3>');
+  ih.push('<label style="'+ls+'">Medikament *</label>');
+  ih.push('<input id="medName" placeholder="z.B. Vetmedin, Apoquel" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Dosierung</label>');
+  ih.push('<input id="medDose" placeholder="z.B. 1 Tablette, 2.5ml" style="'+is+'">');
+  ih.push('<div style="display:flex;gap:10px;">');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Häufigkeit</label>');
+  ih.push('<select id="medFreq" style="'+is+'"><option value="daily">Täglich</option><option value="twice">2x Täglich</option><option value="weekly">Wöchentlich</option><option value="monthly">Monatlich</option><option value="asneeded">Bei Bedarf</option></select></div>');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Uhrzeit</label>');
+  ih.push('<input id="medTime" placeholder="z.B. morgens" style="'+is+'"></div>');
+  ih.push('</div>');
+  ih.push('<label style="'+ls+'">Notizen</label>');
+  ih.push('<input id="medNotes" placeholder="z.B. mit Futter geben" style="'+is+'">');
+  ih.push('<input type="hidden" id="medPetId" value="'+petId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveMed()">💾 Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'medModalOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.saveMed=function(){
+  var petId=document.getElementById('medPetId').value;
+  var p=_fp2(petId);if(!p)return;
+  if(!p.medications)p.medications=[];
+  var nm=(document.getElementById('medName').value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Name ist erforderlich!','warn');return;}
+  p.medications.push({
+    id:typeof uid==='function'?uid():Date.now().toString(),
+    name:nm,
+    dosage:(document.getElementById('medDose').value||'').trim(),
+    frequency:document.getElementById('medFreq').value,
+    time:(document.getElementById('medTime').value||'').trim(),
+    notes:(document.getElementById('medNotes').value||'').trim()
+  });
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Medikament gespeichert!');
+  document.getElementById('medModalOv').style.display='none';
+  window.openPetDetail(petId);
+};
+
+window.deleteMed=function(petId,medId){
+  if(!confirm('Medikament wirklich löschen?'))return;
+  var p=_fp2(petId);if(!p)return;
+  p.medications=p.medications.filter(function(x){return x.id!==medId;});
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Gelöscht');
+  window.openPetDetail(petId);
+};
+
+// --- FUTTERPLAN MODAL ---
+window.openFeedModal=function(petId){
+  var ov=document.getElementById('feedModalOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='feedModalOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var p=_fp2(petId);if(!p)return;
+  var f=p.feeding||{};
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 20px;color:#fff;">🍖 Futterplan bearbeiten</h3>');
+  ih.push('<label style="'+ls+'">Futter / Marke</label>');
+  ih.push('<input id="feedBrand" value="'+_esc2(f.brand)+'" placeholder="z.B. Royal Canin, Rinti" style="'+is+'">');
+  ih.push('<div style="display:flex;gap:10px;">');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">🌅 Morgens Menge</label>');
+  ih.push('<input id="feedMornAmt" value="'+_esc2(f.morningAmount)+'" placeholder="z.B. 200g" style="'+is+'"></div>');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">🌅 Morgens Uhrzeit</label>');
+  ih.push('<input id="feedMornTime" value="'+_esc2(f.morningTime)+'" placeholder="z.B. 07:00" style="'+is+'"></div>');
+  ih.push('</div>');
+  ih.push('<div style="display:flex;gap:10px;">');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">🌙 Abends Menge</label>');
+  ih.push('<input id="feedEveAmt" value="'+_esc2(f.eveningAmount)+'" placeholder="z.B. 200g" style="'+is+'"></div>');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">🌙 Abends Uhrzeit</label>');
+  ih.push('<input id="feedEveTime" value="'+_esc2(f.eveningTime)+'" placeholder="z.B. 18:00" style="'+is+'"></div>');
+  ih.push('</div>');
+  ih.push('<label style="'+ls+'">Leckerlis / Ergänzung</label>');
+  ih.push('<input id="feedTreats" value="'+_esc2(f.treats)+'" placeholder="z.B. Kausticks, Lachsöl" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Hinweise</label>');
+  ih.push('<textarea id="feedNotes" placeholder="z.B. kein Getreide, extra Wasser..." style="'+is+'min-height:60px;resize:vertical;">'+_esc2(f.notes)+'</textarea>');
+  ih.push('<input type="hidden" id="feedPetId" value="'+petId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveFeed()">💾 Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'feedModalOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.saveFeed=function(){
+  var petId=document.getElementById('feedPetId').value;
+  var p=_fp2(petId);if(!p)return;
+  p.feeding={
+    brand:(document.getElementById('feedBrand').value||'').trim(),
+    morningAmount:(document.getElementById('feedMornAmt').value||'').trim(),
+    morningTime:(document.getElementById('feedMornTime').value||'').trim(),
+    eveningAmount:(document.getElementById('feedEveAmt').value||'').trim(),
+    eveningTime:(document.getElementById('feedEveTime').value||'').trim(),
+    treats:(document.getElementById('feedTreats').value||'').trim(),
+    notes:(document.getElementById('feedNotes').value||'').trim()
+  };
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Futterplan gespeichert!');
+  document.getElementById('feedModalOv').style.display='none';
+  window.openPetDetail(petId);
+};
+
+// --- DASHBOARD WARNUNGEN ---
+setInterval(function(){
+  if(!state.pets||state.pets.length===0)return;
+  if(document.getElementById('petWarnBnr'))return;
+  var warns=[];
+  for(var i=0;i<state.pets.length;i++){
+    var p=state.pets[i];
+    if(!p.protections)continue;
+    for(var j=0;j<p.protections.length;j++){
+      var pr=p.protections[j],rem=_protRem(pr);
+      if(rem===-999)warns.push({c:'#888',t:'💊 '+p.name+': '+_protLbl(pr.type)+' noch nie angewendet'});
+      else if(rem<0)warns.push({c:'#dc3545',t:'🚨 '+p.name+': '+_protLbl(pr.type)+' überfällig seit '+Math.abs(rem)+' Tagen!'});
+      else if(rem<7)warns.push({c:'#ffc107',t:'⏰ '+p.name+': '+_protLbl(pr.type)+' in '+rem+' Tagen fällig'});
+    }
+  }
+  if(warns.length===0)return;
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  for(var ci=0;ci<cards.length;ci++){
+    var cd=cards[ci];
+    if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){
+      var wb=document.createElement('div');
+      wb.id='petWarnBnr';
+      wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';
+      var wh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">🐾 Tier-Erinnerungen</div>';
+      for(var wi=0;wi<warns.length;wi++){
+        wh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+warns[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+warns[wi].t+'</div>';
+      }
+      wb.innerHTML=wh;
+      cd.parentElement.insertBefore(wb,cd);
+      break;
+    }
+  }
+},5000);
 
 })();
 </script>
