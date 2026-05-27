@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.39';
+const APP_VERSION = '2.40';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1635,7 +1635,7 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [], pets: [], emergencyInfo: {}, parking: {} };
+let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [], pets: [], emergencyInfo: {}, parking: {}, healthItems: [], permethrinItems: [] };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
@@ -1720,6 +1720,8 @@ function load(){
   if(!state.pets) state.pets=[];
   if(!state.emergencyInfo) state.emergencyInfo={};
   if(!state.parking) state.parking={};
+  if(!state.healthItems) state.healthItems=[];
+  if(!state.permethrinItems) state.permethrinItems=[];
   if(!settings.docCategories || !settings.docCategories.length){
     settings.docCategories=[
       {id:'rechnung',    label:'Rechnung',             icon:'📋'},
@@ -10731,6 +10733,464 @@ setInterval(function(){
     }
   }
 },5000);
+
+})();
+// === GESUNDHEITS- & SCHUTZ-MANAGEMENT ===
+(function(){
+
+// Tab injizieren
+var _hw=setInterval(function(){
+  if(typeof state==='undefined')return;
+  _injectHealthTab();
+},3000);
+
+function _injectHealthTab(){
+  if(document.getElementById('healthTabInj'))return;
+  var allEls=document.querySelectorAll('a,div,span,button');
+  for(var i=0;i<allEls.length;i++){
+    var el=allEls[i];
+    var txt=(el.textContent||'').trim();
+    if(txt.indexOf('Tiere')>=0&&txt.length<20&&el.offsetWidth>0&&el.id==='petTabInj'){
+      var clone=el.cloneNode(false);
+      clone.id='healthTabInj';
+      clone.innerHTML='Gesundheit';
+      clone.style.cursor='pointer';
+      clone.removeAttribute('onclick');
+      clone.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openHealthHub();});
+      el.parentElement.insertBefore(clone,el.nextSibling);
+      break;
+    }
+  }
+}
+
+var healthOv=null;
+
+function openHealthHub(){
+  if(!healthOv){
+    healthOv=document.createElement('div');
+    healthOv.id='healthOv';
+    healthOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99998;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(healthOv);
+  }
+  _renderHealth();
+  healthOv.style.display='block';
+  healthOv.scrollTop=0;
+}
+
+function _renderHealth(){
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;">');
+  h.push('<div style="width:42px;height:42px;background:linear-gradient(135deg,#28a745,#218838);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;">+</div>');
+  h.push('<h2 style="margin:0;color:#fff;font-size:20px;">Gesundheit</h2></div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'healthOv\').style.display=\'none\'">X</div>');
+  h.push('</div>');
+
+  // Permethrin Section
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h3 style="margin:0;color:#28a745;font-size:16px;">Zeckenschutz Kleidung</h3>');
+  h.push('<div style="padding:6px 12px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openPermAdd()">+ Artikel</div>');
+  h.push('</div>');
+
+  if(!state.permethrinItems||state.permethrinItems.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Artikel eingetragen.</div>');
+  }else{
+    for(var pi=0;pi<state.permethrinItems.length;pi++){
+      var p=state.permethrinItems[pi];
+      var daysSince=Math.round((Date.now()-new Date(p.sprayDate).getTime())/86400000);
+      var daysLeft=Math.max(0,(p.durationDays||28)-daysSince);
+      var washLeft=Math.max(0,(p.maxWashes||4)-(p.washCount||0));
+      var needsRenewal=daysLeft<=3||washLeft<=0;
+      var col=needsRenewal?'#dc3545':daysLeft<=7?'#ffc107':'#28a745';
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid '+col+';display:flex;gap:12px;align-items:center;">');
+      if(p.photo){
+        h.push('<img src="'+p.photo+'" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0;">');
+      }else{
+        h.push('<div style="width:56px;height:56px;border-radius:10px;background:rgba(40,167,69,0.12);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">T</div>');
+      }
+      h.push('<div style="flex:1;min-width:0;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">'+_he(p.name)+'</div>');
+      h.push('<div style="color:#999;font-size:11px;margin-top:2px;">Eingesprueht: '+p.sprayDate.split('-').reverse().join('.')+'</div>');
+      h.push('<div style="display:flex;gap:10px;margin-top:4px;">');
+      h.push('<div style="color:'+col+';font-size:12px;font-weight:600;">'+daysLeft+' Tage</div>');
+      h.push('<div style="color:#999;font-size:12px;">Waeschen: '+(p.washCount||0)+'/'+(p.maxWashes||4)+'</div>');
+      h.push('</div></div>');
+      h.push('<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">');
+      h.push('<div style="padding:4px 8px;background:rgba(23,162,184,0.15);color:#17a2b8;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="addPermWash('+pi+')">Waesche+1</div>');
+      h.push('<div style="padding:4px 8px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="renewPerm('+pi+')">Erneuern</div>');
+      h.push('<div style="padding:4px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="deletePerm('+pi+')">X</div>');
+      h.push('</div></div>');
+    }
+  }
+  h.push('</div>');
+
+  // Permethrin Rechner
+  h.push('<div style="'+cs+'">');
+  h.push('<h3 style="margin:0 0 14px;color:#17a2b8;font-size:16px;">Permethrin-Rechner</h3>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:12px;">Aspermet 200 EC (20% Permethrin) auf 0,5% Zielkonzentration</div>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:10px;">');
+  h.push('<div style="flex:1;"><label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">Wasser (ml/g)</label>');
+  h.push('<input type="number" id="permWater" value="211" oninput="calcPerm()" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;"></div>');
+  h.push('<div style="flex:1;"><label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">Zielkonz. (%)</label>');
+  h.push('<input type="number" step="0.1" id="permTarget" value="0.5" oninput="calcPerm()" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;"></div>');
+  h.push('</div>');
+  h.push('<div id="permResult" style="background:rgba(40,167,69,0.08);border:1px solid rgba(40,167,69,0.15);border-radius:10px;padding:14px;"></div>');
+  h.push('</div>');
+
+  // Supplements Section
+  h.push('<div style="'+cs+'">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h3 style="margin:0;color:#e67e22;font-size:16px;">Supplements und Medikamente</h3>');
+  h.push('<div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openSupAdd()">+ Hinzufuegen</div>');
+  h.push('</div>');
+
+  if(!state.healthItems||state.healthItems.length===0){
+    h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Supplements eingetragen.</div>');
+  }else{
+    var morgens=[],abends=[],mittags=[],sonstige=[];
+    for(var si=0;si<state.healthItems.length;si++){
+      var s=state.healthItems[si];
+      if(s.time==='morgens')morgens.push(s);
+      else if(s.time==='abends')abends.push(s);
+      else if(s.time==='mittags')mittags.push(s);
+      else sonstige.push(s);
+    }
+    var groups=[{label:'Morgens',items:morgens,bg:'rgba(255,193,7,0.06)'},{label:'Mittags',items:mittags,bg:'rgba(23,162,184,0.06)'},{label:'Abends',items:abends,bg:'rgba(106,90,205,0.06)'},{label:'Sonstige',items:sonstige,bg:'rgba(255,255,255,0.03)'}];
+    for(var gi=0;gi<groups.length;gi++){
+      var g=groups[gi];
+      if(g.items.length===0)continue;
+      h.push('<div style="background:'+g.bg+';border-radius:10px;padding:12px;margin-bottom:8px;">');
+      h.push('<div style="color:#888;font-size:11px;font-weight:bold;margin-bottom:8px;">'+g.label.toUpperCase()+'</div>');
+      for(var ii=0;ii<g.items.length;ii++){
+        var it=g.items[ii];
+        var idx=state.healthItems.indexOf(it);
+        var takenToday=it.lastTaken&&it.lastTaken===new Date().toISOString().split('T')[0];
+        h.push('<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:4px;">');
+        h.push('<div style="flex:1;min-width:0;">');
+        h.push('<div style="font-weight:bold;color:#fff;font-size:13px;">'+(it.emoji||'')+' '+_he(it.name)+'</div>');
+        h.push('<div style="color:#888;font-size:11px;">'+_he(it.dosage||'')+(it.withFood?' | mit Essen':'')+'</div>');
+        h.push('</div>');
+        h.push('<div style="display:flex;gap:4px;flex-shrink:0;">');
+        h.push('<div style="padding:6px 10px;background:'+(takenToday?'rgba(40,167,69,0.2)':'rgba(255,255,255,0.08)')+';color:'+(takenToday?'#28a745':'#888')+';border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;" onclick="markSupTaken('+idx+')">'+(takenToday?'OK':'Nehmen')+'</div>');
+        h.push('<div style="padding:6px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteSup('+idx+')">X</div>');
+        h.push('</div></div>');
+      }
+      h.push('</div>');
+    }
+  }
+  h.push('</div>');
+
+  // KI Supplement-Berater
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.06),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.15);">');
+  h.push('<h3 style="margin:0 0 12px;color:#17a2b8;font-size:16px;">KI Supplement-Berater</h3>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:12px;">Analyse deiner Supplements: optimale Einnahmezeiten, Wechselwirkungen, Empfehlungen.</div>');
+  if(state.healthItems&&state.healthItems.length>0){
+    h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;margin-bottom:8px;" onclick="getSupKiPlan()">KI-Analyse meiner Supplements starten</div>');
+  }else{
+    h.push('<div style="color:#666;font-size:12px;text-align:center;">Trage zuerst Supplements ein.</div>');
+  }
+  h.push('<div id="supKiRes" style="margin-top:10px;"></div>');
+  h.push('</div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-weight:bold;" onclick="document.getElementById(\'healthOv\').style.display=\'none\'">Schliessen</div>');
+  h.push('</div>');
+  healthOv.innerHTML=h.join('');
+  calcPerm();
+}
+
+function _he(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';}
+
+// Permethrin Rechner
+window.calcPerm=function(){
+  var water=parseFloat(document.getElementById('permWater').value)||0;
+  var target=parseFloat(document.getElementById('permTarget').value)||0.5;
+  var el=document.getElementById('permResult');if(!el)return;
+  if(water<=0){el.innerHTML='<div style="color:#888;font-size:13px;">Bitte Wassermenge eingeben.</div>';return;}
+  var koncPercent=20;
+  var mlKonz=(target/koncPercent)*water;
+  var gKonz=mlKonz*0.94;
+  el.innerHTML='<div style="font-size:13px;color:#ddd;line-height:2;">'+
+    '<div style="color:#28a745;font-weight:bold;font-size:15px;margin-bottom:8px;">Deine Mischung:</div>'+
+    '<div style="display:flex;justify-content:space-between;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:4px;"><span style="color:#888;">Aspermet 200 EC</span><span style="color:#fff;font-weight:bold;">~'+gKonz.toFixed(1)+' g ('+mlKonz.toFixed(2)+' ml)</span></div>'+
+    '<div style="display:flex;justify-content:space-between;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:8px;"><span style="color:#888;">Wasser</span><span style="color:#fff;font-weight:bold;">'+water+' g/ml</span></div>'+
+    '<div style="color:#888;font-size:11px;">Formel: ('+target+'% / '+koncPercent+'%) x '+water+' ml = '+mlKonz.toFixed(2)+' ml x 0,94 = ~'+gKonz.toFixed(1)+' g</div>'+
+    '</div>';
+};
+
+// Permethrin Artikel
+var permPhotoData=null;
+
+window.openPermAdd=function(){
+  permPhotoData=null;
+  var ov=document.getElementById('permAddOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='permAddOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">Artikel einspruechen</h3>');
+  ih.push('<label style="'+ls+'">Artikel-Name</label>');
+  ih.push('<input id="permName" placeholder="z.B. Wanderschuhe, Cargohose" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Datum eingesprueht</label>');
+  ih.push('<input type="date" id="permDate" value="'+new Date().toISOString().split('T')[0]+'" style="'+is+'">');
+  ih.push('<div style="display:flex;gap:10px;">');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Haltbarkeit (Tage)</label>');
+  ih.push('<input type="number" id="permDays" value="28" style="'+is+'"></div>');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Max Waeschen</label>');
+  ih.push('<input type="number" id="permWash" value="4" style="'+is+'"></div>');
+  ih.push('</div>');
+  ih.push('<label style="'+ls+'">Foto (optional)</label>');
+  ih.push('<div id="permPhBox" style="display:none;margin-bottom:8px;"><img id="permPhThumb" style="width:100%;max-height:150px;border-radius:10px;object-fit:cover;"></div>');
+  ih.push('<label style="display:block;padding:12px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:10px;text-align:center;cursor:pointer;font-size:13px;border:2px dashed rgba(255,255,255,0.15);margin-bottom:10px;">');
+  ih.push('Foto aufnehmen / waehlen');
+  ih.push('<input type="file" accept="image/*" style="display:none;" onchange="handlePermImg(this.files)">');
+  ih.push('</label>');
+  ih.push('<label style="'+ls+'">Notiz (optional)</label>');
+  ih.push('<input id="permNote" placeholder="z.B. Marke, Farbe..." style="'+is+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:12px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="savePerm()">Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'permAddOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.handlePermImg=function(files){
+  if(!files||!files[0])return;
+  var rd=new FileReader();
+  rd.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var c=document.createElement('canvas'),mx=300;
+      var r=Math.min(mx/img.width,mx/img.height,1);
+      c.width=img.width*r;c.height=img.height*r;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      permPhotoData=c.toDataURL('image/jpeg',0.5);
+      var bx=document.getElementById('permPhBox'),th=document.getElementById('permPhThumb');
+      if(bx&&th){th.src=permPhotoData;bx.style.display='block';}
+    };
+    img.src=e.target.result;
+  };
+  rd.readAsDataURL(files[0]);
+};
+
+window.savePerm=function(){
+  var nm=(document.getElementById('permName').value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Name eingeben','warn');return;}
+  if(!state.permethrinItems)state.permethrinItems=[];
+  state.permethrinItems.push({
+    id:typeof uid==='function'?uid():Date.now().toString(),
+    name:nm,
+    sprayDate:document.getElementById('permDate').value,
+    durationDays:parseInt(document.getElementById('permDays').value,10)||28,
+    maxWashes:parseInt(document.getElementById('permWash').value,10)||4,
+    washCount:0,
+    photo:permPhotoData||null,
+    note:(document.getElementById('permNote').value||'').trim()
+  });
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Artikel gespeichert!');
+  document.getElementById('permAddOv').style.display='none';
+  _renderHealth();
+};
+
+window.addPermWash=function(idx){
+  if(!state.permethrinItems[idx])return;
+  state.permethrinItems[idx].washCount=(state.permethrinItems[idx].washCount||0)+1;
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Waesche +1');
+  _renderHealth();
+};
+
+window.renewPerm=function(idx){
+  if(!state.permethrinItems[idx])return;
+  state.permethrinItems[idx].sprayDate=new Date().toISOString().split('T')[0];
+  state.permethrinItems[idx].washCount=0;
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Erneuert!');
+  _renderHealth();
+};
+
+window.deletePerm=function(idx){
+  if(!confirm('Artikel loeschen?'))return;
+  state.permethrinItems.splice(idx,1);
+  if(typeof save==='function')save();
+  _renderHealth();
+};
+
+// Supplement Tracker
+window.openSupAdd=function(){
+  var ov=document.getElementById('supAddOv');
+  if(!ov){
+    ov=document.createElement('div');ov.id='supAddOv';
+    ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';
+    ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});
+    document.body.appendChild(ov);
+  }
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">Supplement / Medikament</h3>');
+  ih.push('<label style="'+ls+'">Name</label>');
+  ih.push('<input id="supName" placeholder="z.B. Vitamin D3, Omega-3, Magnesium" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Dosierung</label>');
+  ih.push('<input id="supDose" placeholder="z.B. 2000 IE, 1 Kapsel, 400mg" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Einnahmezeit</label>');
+  ih.push('<select id="supTime" style="'+is+'">');
+  ih.push('<option value="morgens">Morgens</option>');
+  ih.push('<option value="mittags">Mittags</option>');
+  ih.push('<option value="abends">Abends</option>');
+  ih.push('<option value="sonstig">Bei Bedarf / Sonstig</option>');
+  ih.push('</select>');
+  ih.push('<div style="display:flex;gap:10px;">');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Kategorie</label>');
+  ih.push('<select id="supCat" style="'+is+'">');
+  ih.push('<option value="vitamin">Vitamin</option>');
+  ih.push('<option value="mineral">Mineral</option>');
+  ih.push('<option value="omega">Omega / Fettsaeure</option>');
+  ih.push('<option value="protein">Protein / Amino</option>');
+  ih.push('<option value="herb">Pflanzlich</option>');
+  ih.push('<option value="med">Medikament</option>');
+  ih.push('<option value="other">Sonstiges</option>');
+  ih.push('</select></div>');
+  ih.push('<div style="flex:1;"><label style="'+ls+'">Mit Essen?</label>');
+  ih.push('<select id="supFood" style="'+is+'">');
+  ih.push('<option value="no">Nein / egal</option>');
+  ih.push('<option value="yes">Ja, mit Essen</option>');
+  ih.push('</select></div>');
+  ih.push('</div>');
+  ih.push('<label style="'+ls+'">Notizen</label>');
+  ih.push('<input id="supNotes" placeholder="Optional" style="'+is+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:12px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveSup()">Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'supAddOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');
+  ov.style.display='flex';
+};
+
+window.saveSup=function(){
+  var nm=(document.getElementById('supName').value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Name eingeben','warn');return;}
+  if(!state.healthItems)state.healthItems=[];
+  var emojis={vitamin:'D',mineral:'M',omega:'O',protein:'P',herb:'H',med:'R',other:'S'};
+  var cat=document.getElementById('supCat').value;
+  state.healthItems.push({
+    id:typeof uid==='function'?uid():Date.now().toString(),
+    name:nm,
+    dosage:(document.getElementById('supDose').value||'').trim(),
+    time:document.getElementById('supTime').value,
+    category:cat,
+    emoji:emojis[cat]||'S',
+    withFood:document.getElementById('supFood').value==='yes',
+    notes:(document.getElementById('supNotes').value||'').trim(),
+    lastTaken:null
+  });
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Supplement gespeichert!');
+  document.getElementById('supAddOv').style.display='none';
+  _renderHealth();
+};
+
+window.markSupTaken=function(idx){
+  if(!state.healthItems[idx])return;
+  state.healthItems[idx].lastTaken=new Date().toISOString().split('T')[0];
+  if(typeof save==='function')save();
+  if(typeof toast==='function')toast('Eingenommen!');
+  _renderHealth();
+};
+
+window.deleteSup=function(idx){
+  if(!confirm('Supplement loeschen?'))return;
+  state.healthItems.splice(idx,1);
+  if(typeof save==='function')save();
+  _renderHealth();
+};
+
+// KI Supplement Berater
+window.getSupKiPlan=function(){
+  var el=document.getElementById('supKiRes');if(!el)return;
+  if(!settings.openrouterKey){
+    el.innerHTML='<div style="color:#ffc107;padding:12px;background:rgba(255,193,7,0.08);border-radius:10px;font-size:13px;">OpenRouter API-Key in Einstellungen hinterlegen!</div>';
+    return;
+  }
+  var supList=state.healthItems.map(function(s){return s.name+' ('+s.dosage+', '+s.time+(s.withFood?', mit Essen':'')+')';}).join('\n');
+  var pr='Du bist ein erfahrener Ernaehrungsberater und Pharmazeut. Analysiere diese Supplement-Liste.\n\n';
+  pr+='WICHTIG: NUR gesicherte, wissenschaftlich belegte Fakten.\n\n';
+  pr+='Aktuelle Supplements:\n'+supList+'\n\n';
+  pr+='Antworte exakt in diesem Format:\n\n';
+  pr+='OPTIMALER TAGESPLAN: Wann genau welches Supplement nehmen? Morgens nuchtern, zum Fruehstueck, mittags, abends? Konkrete Uhrzeiten vorschlagen.\n\n';
+  pr+='WECHSELWIRKUNGEN: Welche Supplements sich gegenseitig behindern oder verstaerken. Was NICHT zusammen nehmen?\n\n';
+  pr+='EINNAHME-TIPPS: Mit Essen oder nuchtern? Mit Fett? Mit Vitamin C? Konkrete Tipps pro Supplement.\n\n';
+  pr+='FEHLENDE SUPPLEMENTS: Was fehlt eventuell in der Liste? Was wuerde gut ergaenzen?\n\n';
+  pr+='WARNUNGEN: Ueberdosierungen? Kontraindikationen? Worauf achten?\n\n';
+  pr+='Auf Deutsch. Maximal 3 Saetze pro Punkt. Konkret und praxisnah.';
+
+  el.innerHTML='<div style="text-align:center;padding:20px;color:#999;font-size:13px;">KI analysiert deine Supplements...</div>';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},
+    body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.0,max_tokens:1500})
+  }).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
+    var safe=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.12);"><div style="color:#17a2b8;font-size:10px;font-weight:bold;margin-bottom:8px;">KI-Analyse (kein Ersatz fuer aerztliche Beratung!)</div><div style="color:#ddd;font-size:12px;line-height:1.8;">'+safe+'</div></div>';
+  }).catch(function(e){
+    el.innerHTML='<div style="color:#dc3545;padding:10px;font-size:12px;">Fehler: '+e.message+'</div>';
+  });
+};
+
+// Dashboard Erinnerungen
+setInterval(function(){
+  if(document.getElementById('dashHealthW'))return;
+  var warns=[];
+  if(state.permethrinItems){
+    for(var pi=0;pi<state.permethrinItems.length;pi++){
+      var p=state.permethrinItems[pi];
+      var daysSince=Math.round((Date.now()-new Date(p.sprayDate).getTime())/86400000);
+      var daysLeft=Math.max(0,(p.durationDays||28)-daysSince);
+      var washLeft=Math.max(0,(p.maxWashes||4)-(p.washCount||0));
+      if(daysLeft<=3)warns.push({c:'#dc3545',t:p.name+': Permethrin erneuern ('+daysLeft+' Tage)!'});
+      if(washLeft<=1&&washLeft>0)warns.push({c:'#ffc107',t:p.name+': Nur noch '+washLeft+' Waesche(n) uebrig'});
+      if(washLeft<=0)warns.push({c:'#dc3545',t:p.name+': Max. Waeschen erreicht - erneuern!'});
+    }
+  }
+  if(state.healthItems){
+    var today=new Date().toISOString().split('T')[0];
+    var untaken=state.healthItems.filter(function(s){return s.lastTaken!==today;});
+    if(untaken.length>0){
+      warns.push({c:'#ffc107',t:untaken.length+' Supplement(e) heute noch nicht eingenommen'});
+    }
+  }
+  if(warns.length===0)return;
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  for(var ci=0;ci<cards.length;ci++){
+    var cd=cards[ci];
+    if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){
+      var wb=document.createElement('div');
+      wb.id='dashHealthW';
+      wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';
+      var wh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">Gesundheit</div>';
+      for(var wi=0;wi<warns.length;wi++){
+        wh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+warns[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+warns[wi].t+'</div>';
+      }
+      wb.innerHTML=wh;
+      cd.parentElement.insertBefore(wb,cd);
+      break;
+    }
+  }
+},5000);
+
+window.openHealthHub=openHealthHub;
 
 })();
 </script>
