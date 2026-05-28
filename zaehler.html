@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.44';
+const APP_VERSION = '2.45';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -7384,6 +7384,15 @@ function mergeState(local, remote){
     wasteSchedule: mergeArr(local.wasteSchedule||[], remote.wasteSchedule||[]),
     vehicles: mergeArr(local.vehicles||[], remote.vehicles||[]),
     vehicleLogs: mergeArr(local.vehicleLogs||[], remote.vehicleLogs||[]),
+    pets: mergeArr(local.pets||[], remote.pets||[]),
+    healthItems: mergeArr(local.healthItems||[], remote.healthItems||[]),
+    permethrinItems: mergeArr(local.permethrinItems||[], remote.permethrinItems||[]),
+    emergencyInfo: (local.emergencyInfo && Object.keys(local.emergencyInfo).length > 0)
+      ? local.emergencyInfo
+      : (remote.emergencyInfo || {}),
+    parking: (local.parking && local.parking.active)
+      ? local.parking
+      : (remote.parking || {}),
   };
 }
 async function uploadDrive(isNew){
