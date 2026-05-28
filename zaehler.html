@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.43';
+const APP_VERSION = '2.44';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1755,6 +1755,17 @@ function save(){
   scheduleBackup();
   scheduleAutoSync();
 }
+var _origSave2 = save;
+save = function(){
+  _origSave2.apply(this,arguments);
+  try{
+    if(state.healthItems&&state.healthItems.length>0)localStorage.setItem('zp_health_bak',JSON.stringify(state.healthItems));
+    if(state.permethrinItems&&state.permethrinItems.length>0)localStorage.setItem('zp_perm_bak',JSON.stringify(state.permethrinItems));
+    if(state.pets&&state.pets.length>0)localStorage.setItem('zp_pets_bak',JSON.stringify(state.pets));
+    if(state.emergencyInfo&&Object.keys(state.emergencyInfo).length>0)localStorage.setItem('zp_emerg_bak',JSON.stringify(state.emergencyInfo));
+    if(state.parking&&state.parking.active)localStorage.setItem('zp_park_bak',JSON.stringify(state.parking));
+  }catch(e){}
+};
 var saveData = save;
 function scheduleBackup(){
   try{
@@ -10836,6 +10847,20 @@ setInterval(function(){
 },5000);
 
 window.openHealthHub=openHealthHub;
+})();
+// === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
+(function(){
+  function _restoreIfWiped(){
+    if(typeof state==='undefined'||!state)return;
+    try{
+      if((!state.healthItems||state.healthItems.length===0)){var h=localStorage.getItem('zp_health_bak');if(h){var a=JSON.parse(h);if(a&&a.length>0)state.healthItems=a;}}
+      if((!state.permethrinItems||state.permethrinItems.length===0)){var p=localStorage.getItem('zp_perm_bak');if(p){var a2=JSON.parse(p);if(a2&&a2.length>0)state.permethrinItems=a2;}}
+      if((!state.pets||state.pets.length===0)){var pe=localStorage.getItem('zp_pets_bak');if(pe){var a3=JSON.parse(pe);if(a3&&a3.length>0)state.pets=a3;}}
+      if((!state.emergencyInfo||Object.keys(state.emergencyInfo).length===0)){var e=localStorage.getItem('zp_emerg_bak');if(e){state.emergencyInfo=JSON.parse(e);}}
+      if((!state.parking||!state.parking.active)){var pk=localStorage.getItem('zp_park_bak');if(pk){var o=JSON.parse(pk);if(o&&o.active)state.parking=o;}}
+    }catch(x){}
+  }
+  setInterval(_restoreIfWiped,2000);
 })();
 </script>
 </body>
