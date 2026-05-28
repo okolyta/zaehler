@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.40';
+const APP_VERSION = '2.41';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -11192,6 +11192,263 @@ setInterval(function(){
 
 window.openHealthHub=openHealthHub;
 
+})();
+// === AUTO-ERINNERUNGEN, WARTUNGSPLANER & KI-ANALYSE ===
+(function(){
+
+var MAINT_TYPES=[
+  {id:'oilchange',label:'Oelwechsel',defKm:15000,defMonths:12},
+  {id:'brakefluid',label:'Bremsfluessigkeit',defKm:0,defMonths:24},
+  {id:'airfilter',label:'Luftfilter',defKm:30000,defMonths:24},
+  {id:'sparkplugs',label:'Zuendkerzen',defKm:60000,defMonths:48},
+  {id:'coolant',label:'Kuehlmittel',defKm:0,defMonths:36},
+  {id:'timing',label:'Zahnriemen/Steuerkette',defKm:100000,defMonths:60},
+  {id:'firstaid',label:'Verbandskasten',defKm:0,defMonths:60},
+  {id:'custom',label:'Eigene Wartung',defKm:0,defMonths:12}
+];
+
+function _fv(id){for(var i=0;i<state.vehicles.length;i++){if(state.vehicles[i].id===id)return state.vehicles[i];}return null;}
+function _getLastKm(vehId){var lk=0;var logs=(state.vehicleLogs||[]).filter(function(l){return l.vehId===vehId&&l.mileage>0;});for(var i=0;i<logs.length;i++){if(logs[i].mileage>lk)lk=logs[i].mileage;}return lk;}
+
+var _origVD2=window.openVehDetails;
+window.openVehDetails=function(id){if(typeof _origVD2==='function')_origVD2(id);setTimeout(function(){_injectMaintBtn(id);},200);};
+
+function _injectMaintBtn(vehId){
+  var ov=document.getElementById('vehDetailsModal');if(!ov)return;
+  if(ov.querySelector('#maintBtnInj'))return;
+  var v=_fv(vehId);if(!v)return;
+  var content=ov.querySelector('.modal-content')||ov.querySelector('div[style*="max-width"]');if(!content)return;
+  var btn=document.createElement('div');btn.id='maintBtnInj';
+  btn.style.cssText='padding:14px;background:linear-gradient(135deg,#ffc107,#e0a800);color:#000;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;font-size:15px;margin-top:12px;margin-bottom:8px;';
+  btn.textContent='Wartungsplaner oeffnen';
+  btn.addEventListener('click',function(){if(ov.style)ov.style.display='none';openMaintPlanner(vehId);});
+  content.appendChild(btn);
+}
+
+window.openMaintPlanner=function(vehId){
+  var v=_fv(vehId);if(!v)return;if(!v.maintenance)v.maintenance=[];
+  var ov=document.getElementById('maintOv');
+  if(!ov){ov=document.createElement('div');ov.id='maintOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99999;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(ov);}
+  _renderMaint(vehId);ov.style.display='block';ov.scrollTop=0;
+};
+
+function _renderMaint(vehId){
+  var ov=document.getElementById('maintOv');if(!ov)return;
+  var v=_fv(vehId);if(!v)return;if(!v.maintenance)v.maintenance=[];
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var lastKm=_getLastKm(vehId);
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">');
+  h.push('<div><h2 style="margin:0;color:#fff;font-size:20px;">Wartungsplaner</h2>');
+  h.push('<div style="color:#999;font-size:12px;">'+(v.brand||'')+' '+(v.model||'')+' - '+(v.licensePlate||'')+'</div></div>');
+  h.push('<div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'maintOv\').style.display=\'none\'">X</div>');
+  h.push('</div>');
+  if(lastKm>0){h.push('<div style="'+cs+'text-align:center;"><div style="color:#888;font-size:11px;">Letzter KM-Stand</div><div style="color:#17a2b8;font-weight:bold;font-size:24px;">'+lastKm.toLocaleString('de-DE')+' km</div></div>');}
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">');
+  h.push('<h3 style="margin:0;color:#fff;font-size:16px;">Aktive Wartungen</h3>');
+  h.push('<div style="padding:8px 14px;background:rgba(255,193,7,0.15);color:#ffc107;border-radius:8px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openAddMaint(\''+vehId+'\')">+ Wartung</div>');
+  h.push('</div>');
+  if(v.maintenance.length===0){h.push('<div style="'+cs+'text-align:center;color:#666;font-size:13px;padding:30px 0;">Noch keine Wartungen eingetragen.</div>');}
+  else{
+    for(var mi=0;mi<v.maintenance.length;mi++){
+      var m=v.maintenance[mi],statusTxt='',statusCol='#28a745';
+      if(m.intervalKm>0&&m.lastKm>0&&lastKm>0){var kl=(m.lastKm+m.intervalKm)-lastKm;if(kl<0){statusTxt='Ueberfaellig: '+Math.abs(kl)+' km!';statusCol='#dc3545';}else if(kl<2000){statusTxt='Bald: noch '+kl+' km';statusCol='#ffc107';}else{statusTxt='Noch '+kl.toLocaleString('de-DE')+' km';}}
+      if(m.intervalMonths>0&&m.lastDate){var ld=new Date(m.lastDate);ld.setMonth(ld.getMonth()+m.intervalMonths);var dl=Math.round((ld-new Date())/86400000);if(dl<0){statusTxt+=(statusTxt?' | ':'')+'Ueberfaellig: '+Math.abs(dl)+' Tage!';statusCol='#dc3545';}else if(dl<30){statusTxt+=(statusTxt?' | ':'')+'Noch '+dl+' Tage';if(statusCol!=='#dc3545')statusCol='#ffc107';}else{statusTxt+=(statusTxt?' | ':'')+'Noch '+dl+' Tage';}}
+      if(!statusTxt)statusTxt='Kein Intervall gesetzt';
+      h.push('<div style="'+cs+'border-left:4px solid '+statusCol+';padding-left:16px;">');
+      h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">');
+      h.push('<div style="font-weight:bold;color:#fff;font-size:15px;">'+(m.label||'Wartung')+'</div>');
+      h.push('<div style="display:flex;gap:6px;">');
+      h.push('<div style="padding:5px 10px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;" onclick="markMaintDone(\''+vehId+'\','+mi+')">Erledigt</div>');
+      h.push('<div style="padding:5px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteMaint(\''+vehId+'\','+mi+')">X</div>');
+      h.push('</div></div>');
+      h.push('<div style="color:'+statusCol+';font-size:13px;font-weight:600;margin-bottom:6px;">'+statusTxt+'</div>');
+      var det=[];if(m.intervalKm)det.push('Alle '+m.intervalKm.toLocaleString('de-DE')+' km');if(m.intervalMonths)det.push('Alle '+m.intervalMonths+' Mon.');if(m.lastKm)det.push('Letzter: '+m.lastKm.toLocaleString('de-DE')+' km');if(m.lastDate)det.push('Am: '+m.lastDate.split('-').reverse().join('.'));
+      if(det.length>0)h.push('<div style="color:#666;font-size:11px;">'+det.join(' | ')+'</div>');
+      if(m.notes)h.push('<div style="color:#888;font-size:11px;margin-top:4px;font-style:italic;">'+m.notes+'</div>');
+      h.push('</div>');
+    }
+  }
+  // KI Analyse
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.06),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.15);">');
+  h.push('<h4 style="margin:0 0 12px;color:#17a2b8;font-size:15px;">KI-Wartungsempfehlung</h4>');
+  h.push('<div style="color:#999;font-size:12px;margin-bottom:10px;">Basierend auf deinem Fahrzeugmodell, KM-Stand und Alter.</div>');
+  h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="getVehKiMaint(\''+vehId+'\')">KI-Analyse starten</div>');
+  h.push('<div id="vehKiMaintRes_'+vehId+'" style="margin-top:10px;"></div>');
+  h.push('</div>');
+  // Saisonale Hinweise
+  var mo=new Date().getMonth()+1;
+  h.push('<div style="'+cs+'background:rgba(23,162,184,0.06);border-color:rgba(23,162,184,0.15);">');
+  h.push('<h4 style="margin:0 0 12px;color:#17a2b8;font-size:15px;">Saisonale Hinweise</h4>');
+  if(mo>=9&&mo<=11){h.push('<div style="padding:10px;background:rgba(23,162,184,0.08);border-radius:8px;margin-bottom:6px;border-left:3px solid #17a2b8;"><div style="color:#17a2b8;font-weight:bold;font-size:13px;">Winterreifen</div><div style="color:#ddd;font-size:12px;">O-bis-O Regel: Oktober bis Ostern!</div></div>');h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Frostschutz pruefen</div><div style="color:#ddd;font-size:12px;">Scheibenwischer und Kuehlmittel.</div></div>');}
+  else if(mo>=3&&mo<=5){h.push('<div style="padding:10px;background:rgba(23,162,184,0.08);border-radius:8px;margin-bottom:6px;border-left:3px solid #17a2b8;"><div style="color:#17a2b8;font-weight:bold;font-size:13px;">Sommerreifen</div><div style="color:#ddd;font-size:12px;">Ab Ostern wechseln.</div></div>');h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Unterbodenwaesche</div><div style="color:#ddd;font-size:12px;">Streusalz-Reste entfernen.</div></div>');}
+  else if(mo>=6&&mo<=8){h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Klimaanlage + Reifendruck</div><div style="color:#ddd;font-size:12px;">Pollenfilter wechseln. Druck bei Hitze pruefen.</div></div>');}
+  else{h.push('<div style="padding:10px;background:rgba(255,193,7,0.06);border-radius:8px;border-left:3px solid #ffc107;"><div style="color:#ffc107;font-weight:bold;font-size:13px;">Wintercheck</div><div style="color:#ddd;font-size:12px;">Batterie pruefen! Tuerschloesser enteisen.</div></div>');}
+  h.push('</div>');
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-weight:bold;" onclick="document.getElementById(\'maintOv\').style.display=\'none\'">Schliessen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+}
+
+window.openAddMaint=function(vehId){
+  var ov=document.getElementById('addMaintOv');
+  if(!ov){ov=document.createElement('div');ov.id='addMaintOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';
+  var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';
+  var ih=[];
+  ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">');
+  ih.push('<h3 style="margin:0 0 16px;color:#fff;">Wartung hinzufuegen</h3>');
+  ih.push('<label style="'+ls+'">Wartungsart</label><select id="maintType" onchange="updateMaintDefaults()" style="'+is+'">');
+  for(var ti=0;ti<MAINT_TYPES.length;ti++){ih.push('<option value="'+MAINT_TYPES[ti].id+'" data-km="'+MAINT_TYPES[ti].defKm+'" data-mo="'+MAINT_TYPES[ti].defMonths+'">'+MAINT_TYPES[ti].label+'</option>');}
+  ih.push('</select>');
+  ih.push('<div id="maintCustomName" style="display:none;"><label style="'+ls+'">Eigener Name</label><input id="maintCustNm" placeholder="z.B. Zahnriemen" style="'+is+'"></div>');
+  ih.push('<label style="'+ls+'">Intervall (km)</label><input type="number" id="maintIntKm" value="15000" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Intervall (Monate)</label><input type="number" id="maintIntMo" value="12" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Zuletzt am</label><input type="date" id="maintLastDt" value="'+new Date().toISOString().split('T')[0]+'" style="'+is+'">');
+  ih.push('<label style="'+ls+'">KM-Stand damals</label><input type="number" id="maintLastKm" placeholder="z.B. 45000" style="'+is+'">');
+  ih.push('<label style="'+ls+'">Notizen</label><input id="maintNotes" placeholder="Optional" style="'+is+'">');
+  ih.push('<input type="hidden" id="maintVehId" value="'+vehId+'">');
+  ih.push('<div style="display:flex;gap:10px;margin-top:16px;">');
+  ih.push('<div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveMaint()">Speichern</div>');
+  ih.push('<div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'addMaintOv\').style.display=\'none\'">Abbrechen</div>');
+  ih.push('</div></div>');
+  ov.innerHTML=ih.join('');ov.style.display='flex';
+};
+
+window.updateMaintDefaults=function(){var sel=document.getElementById('maintType');var opt=sel.options[sel.selectedIndex];document.getElementById('maintIntKm').value=opt.getAttribute('data-km')||'0';document.getElementById('maintIntMo').value=opt.getAttribute('data-mo')||'12';document.getElementById('maintCustomName').style.display=sel.value==='custom'?'block':'none';};
+
+window.saveMaint=function(){var vehId=document.getElementById('maintVehId').value;var v=_fv(vehId);if(!v)return;if(!v.maintenance)v.maintenance=[];var sel=document.getElementById('maintType');var typeId=sel.value;var mt=null;for(var i=0;i<MAINT_TYPES.length;i++){if(MAINT_TYPES[i].id===typeId){mt=MAINT_TYPES[i];break;}}var label=mt?mt.label:'Wartung';if(typeId==='custom'){var cn=(document.getElementById('maintCustNm').value||'').trim();if(cn)label=cn;}v.maintenance.push({id:typeof uid==='function'?uid():Date.now().toString(),type:typeId,label:label,intervalKm:parseInt(document.getElementById('maintIntKm').value,10)||0,intervalMonths:parseInt(document.getElementById('maintIntMo').value,10)||0,lastDate:document.getElementById('maintLastDt').value||'',lastKm:parseInt(document.getElementById('maintLastKm').value,10)||0,notes:(document.getElementById('maintNotes').value||'').trim()});save();if(typeof toast==='function')toast('Wartung gespeichert!');document.getElementById('addMaintOv').style.display='none';_renderMaint(vehId);};
+
+window.markMaintDone=function(vehId,idx){var v=_fv(vehId);if(!v||!v.maintenance||!v.maintenance[idx])return;var lk=_getLastKm(vehId);v.maintenance[idx].lastDate=new Date().toISOString().split('T')[0];if(lk>0)v.maintenance[idx].lastKm=lk;save();if(typeof toast==='function')toast('Erledigt!');_renderMaint(vehId);};
+
+window.deleteMaint=function(vehId,idx){if(!confirm('Loeschen?'))return;var v=_fv(vehId);if(!v)return;v.maintenance.splice(idx,1);save();_renderMaint(vehId);};
+
+window.getVehKiMaint=function(vehId){
+  var v=_fv(vehId);if(!v)return;var el=document.getElementById('vehKiMaintRes_'+vehId);if(!el)return;
+  var lastKm=_getLastKm(vehId);var age='';if(v.ezDate){var ez=new Date(v.ezDate),now=new Date();age=Math.round((now-ez)/31557600000)+' Jahre';}
+  var existM='Keine';if(v.maintenance&&v.maintenance.length>0){existM=v.maintenance.map(function(m){return m.label+(m.lastKm?' ('+m.lastKm+'km)':'');}).join(', ');}
+  var pr='Du bist ein Kfz-Meister. NUR gesicherte Fakten.\n\nFahrzeug: '+(v.brand||'?')+' '+(v.model||'?')+'\nHSN/TSN: '+(v.hsnTsn||'?')+'\nFIN: '+(v.vin||'?')+'\nEZ: '+(v.ezDate||'?')+' ('+age+')\nAntrieb: '+(v.type||'?')+'\nKM: '+(lastKm>0?lastKm:'?')+'\nReifen: '+(v.tires||'?')+'\nWartungen: '+existM+'\n\nAntworte:\n\nFAHRZEUG-PROFIL: Kurze Einordnung.\n\nWARTUNGSINTERVALLE: Herstellerempfehlungen.\n\nSCHWACHSTELLEN: Typische Probleme.\n\nAKTUELL FAELLIG: Was jetzt machen?\n\nSPAR-TIPPS: Kosten sparen.\n\nAuf Deutsch, max 3 Saetze pro Punkt.';
+  if(!settings.openrouterKey){el.innerHTML='<div style="color:#ffc107;padding:12px;background:rgba(255,193,7,0.08);border-radius:10px;font-size:13px;">API-Key fehlt!</div>';return;}
+  el.innerHTML='<div style="text-align:center;padding:20px;color:#999;">KI analysiert...</div>';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.0,max_tokens:1500})}).then(function(r){return r.json();}).then(function(d){var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';var safe=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.12);"><div style="color:#17a2b8;font-size:10px;font-weight:bold;margin-bottom:8px;">KI-Analyse</div><div style="color:#ddd;font-size:12px;line-height:1.8;">'+safe+'</div></div>';}).catch(function(e){el.innerHTML='<div style="color:#dc3545;padding:10px;font-size:12px;">Fehler: '+e.message+'</div>';});
+};
+
+// Dashboard Wartungs-Warnungen
+setInterval(function(){
+  if(!state.vehicles||state.vehicles.length===0||document.getElementById('dashMaintW'))return;
+  var warns=[];
+  for(var vi=0;vi<state.vehicles.length;vi++){var v=state.vehicles[vi];if(!v.maintenance)continue;var lk=_getLastKm(v.id);var vn=(v.brand||'Kfz')+' '+(v.licensePlate||'');
+    for(var mi=0;mi<v.maintenance.length;mi++){var m=v.maintenance[mi];
+      if(m.intervalKm>0&&m.lastKm>0&&lk>0){var kl=(m.lastKm+m.intervalKm)-lk;if(kl<0)warns.push({c:'#dc3545',t:vn+': '+(m.label||'Wartung')+' ueberfaellig!'});else if(kl<2000)warns.push({c:'#ffc107',t:vn+': '+(m.label||'Wartung')+' in '+kl+' km'});}
+      if(m.intervalMonths>0&&m.lastDate){var ld2=new Date(m.lastDate);ld2.setMonth(ld2.getMonth()+m.intervalMonths);var dl2=Math.round((ld2-new Date())/86400000);if(dl2<0)warns.push({c:'#dc3545',t:vn+': '+(m.label||'Wartung')+' ueberfaellig!'});else if(dl2<30)warns.push({c:'#ffc107',t:vn+': '+(m.label||'Wartung')+' in '+dl2+' Tagen'});}
+    }}
+  if(warns.length===0)return;
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  for(var ci=0;ci<cards.length;ci++){var cd=cards[ci];if(cd.textContent&&cd.textContent.indexOf('Hallo!')>=0){var wb=document.createElement('div');wb.id='dashMaintW';wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;';var wh='<div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:10px;">Kfz-Wartung</div>';for(var wi=0;wi<warns.length;wi++){wh+='<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-left:3px solid '+warns[wi].c+';border-radius:6px;margin-bottom:6px;font-size:13px;color:#ddd;">'+warns[wi].t+'</div>';}wb.innerHTML=wh;cd.parentElement.insertBefore(wb,cd);break;}}
+},5000);
+
+})();
+
+// === GESUNDHEITS- & SCHUTZ-MANAGEMENT ===
+(function(){
+
+var _hw2=setInterval(function(){if(typeof state==='undefined')return;_injectHealthTab2();},3000);
+
+function _injectHealthTab2(){
+  if(document.getElementById('healthTabInj'))return;
+  var allEls=document.querySelectorAll('a,div,span,button');
+  for(var i=0;i<allEls.length;i++){var el=allEls[i];var txt=(el.textContent||'').trim();
+    if(txt.indexOf('Tiere')>=0&&txt.length<20&&el.offsetWidth>0&&el.id==='petTabInj'){
+      var clone=el.cloneNode(false);clone.id='healthTabInj';clone.innerHTML='Gesundheit';clone.style.cursor='pointer';clone.removeAttribute('onclick');
+      clone.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openHealthHub();});
+      el.parentElement.insertBefore(clone,el.nextSibling);break;}}
+}
+
+var healthOv2=null;
+function _he2(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';}
+
+function openHealthHub(){
+  if(!healthOv2){healthOv2=document.createElement('div');healthOv2.id='healthOv';healthOv2.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99998;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(healthOv2);}
+  _renderHealth2();healthOv2.style.display='block';healthOv2.scrollTop=0;
+}
+
+function _renderHealth2(){
+  var cs='background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;margin-bottom:14px;';
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:16px 12px 80px;">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><div style="display:flex;align-items:center;gap:12px;"><div style="width:42px;height:42px;background:linear-gradient(135deg,#28a745,#218838);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;">+</div><h2 style="margin:0;color:#fff;font-size:20px;">Gesundheit</h2></div><div style="width:36px;height:36px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'healthOv\').style.display=\'none\'">X</div></div>');
+
+  // Permethrin
+  h.push('<div style="'+cs+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h3 style="margin:0;color:#28a745;font-size:16px;">Zeckenschutz Kleidung</h3><div style="padding:6px 12px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openPermAdd()">+ Artikel</div></div>');
+  if(!state.permethrinItems||state.permethrinItems.length===0){h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Artikel.</div>');}
+  else{for(var pi=0;pi<state.permethrinItems.length;pi++){var p=state.permethrinItems[pi];var ds=Math.round((Date.now()-new Date(p.sprayDate).getTime())/86400000);var dl=Math.max(0,(p.durationDays||28)-ds);var wl=Math.max(0,(p.maxWashes||4)-(p.washCount||0));var nr=dl<=3||wl<=0;var co=nr?'#dc3545':dl<=7?'#ffc107':'#28a745';
+    h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid '+co+';display:flex;gap:12px;align-items:center;">');
+    if(p.photo){h.push('<img src="'+p.photo+'" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0;">');}else{h.push('<div style="width:56px;height:56px;border-radius:10px;background:rgba(40,167,69,0.12);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">T</div>');}
+    h.push('<div style="flex:1;min-width:0;"><div style="font-weight:bold;color:#fff;font-size:14px;">'+_he2(p.name)+'</div><div style="color:#999;font-size:11px;margin-top:2px;">'+p.sprayDate.split('-').reverse().join('.')+'</div><div style="display:flex;gap:10px;margin-top:4px;"><div style="color:'+co+';font-size:12px;font-weight:600;">'+dl+' Tage</div><div style="color:#999;font-size:12px;">W: '+(p.washCount||0)+'/'+(p.maxWashes||4)+'</div></div></div>');
+    h.push('<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;"><div style="padding:4px 8px;background:rgba(23,162,184,0.15);color:#17a2b8;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="addPermWash('+pi+')">Waesche+1</div><div style="padding:4px 8px;background:rgba(40,167,69,0.15);color:#28a745;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="renewPerm('+pi+')">Erneuern</div><div style="padding:4px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:4px;font-size:10px;cursor:pointer;text-align:center;" onclick="deletePerm('+pi+')">X</div></div></div>');}}
+  h.push('</div>');
+
+  // Rechner
+  h.push('<div style="'+cs+'"><h3 style="margin:0 0 14px;color:#17a2b8;font-size:16px;">Permethrin-Rechner</h3><div style="color:#999;font-size:12px;margin-bottom:12px;">Aspermet 200 EC (20%) auf 0,5%</div><div style="display:flex;gap:10px;margin-bottom:10px;"><div style="flex:1;"><label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">Wasser (ml)</label><input type="number" id="permWater" value="211" oninput="calcPerm()" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;"></div><div style="flex:1;"><label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">Ziel (%)</label><input type="number" step="0.1" id="permTarget" value="0.5" oninput="calcPerm()" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;"></div></div><div id="permResult" style="background:rgba(40,167,69,0.08);border:1px solid rgba(40,167,69,0.15);border-radius:10px;padding:14px;"></div></div>');
+
+  // Supplements
+  h.push('<div style="'+cs+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h3 style="margin:0;color:#e67e22;font-size:16px;">Supplements</h3><div style="padding:6px 12px;background:rgba(230,126,34,0.15);color:#e67e22;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;" onclick="openSupAdd()">+ Neu</div></div>');
+  if(!state.healthItems||state.healthItems.length===0){h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Supplements.</div>');}
+  else{var gr={morgens:[],mittags:[],abends:[],sonstig:[]};for(var si=0;si<state.healthItems.length;si++){var s=state.healthItems[si];(gr[s.time]||gr.sonstig).push(s);}
+    var gn=[{k:'morgens',l:'MORGENS',bg:'rgba(255,193,7,0.06)'},{k:'mittags',l:'MITTAGS',bg:'rgba(23,162,184,0.06)'},{k:'abends',l:'ABENDS',bg:'rgba(106,90,205,0.06)'},{k:'sonstig',l:'SONSTIGE',bg:'rgba(255,255,255,0.03)'}];
+    for(var gi=0;gi<gn.length;gi++){var g=gn[gi];if(!gr[g.k]||gr[g.k].length===0)continue;
+      h.push('<div style="background:'+g.bg+';border-radius:10px;padding:12px;margin-bottom:8px;"><div style="color:#888;font-size:11px;font-weight:bold;margin-bottom:8px;">'+g.l+'</div>');
+      for(var ii=0;ii<gr[g.k].length;ii++){var it=gr[g.k][ii];var idx=state.healthItems.indexOf(it);var tt=it.lastTaken&&it.lastTaken===new Date().toISOString().split('T')[0];
+        h.push('<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:4px;"><div style="flex:1;min-width:0;"><div style="font-weight:bold;color:#fff;font-size:13px;">'+_he2(it.name)+'</div><div style="color:#888;font-size:11px;">'+_he2(it.dosage||'')+(it.withFood?' | mit Essen':'')+'</div></div><div style="display:flex;gap:4px;flex-shrink:0;"><div style="padding:6px 10px;background:'+(tt?'rgba(40,167,69,0.2)':'rgba(255,255,255,0.08)')+';color:'+(tt?'#28a745':'#888')+';border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;" onclick="markSupTaken('+idx+')">'+(tt?'OK':'Nehmen')+'</div><div style="padding:6px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;" onclick="deleteSup('+idx+')">X</div></div></div>');}
+      h.push('</div>');}}
+  h.push('</div>');
+
+  // KI Berater
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.06),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.15);"><h3 style="margin:0 0 12px;color:#17a2b8;font-size:16px;">KI Supplement-Berater</h3>');
+  if(state.healthItems&&state.healthItems.length>0){h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="getSupKiPlan()">KI-Analyse starten</div>');}
+  else{h.push('<div style="color:#666;font-size:12px;text-align:center;">Erst Supplements eintragen.</div>');}
+  h.push('<div id="supKiRes" style="margin-top:10px;"></div></div>');
+
+  h.push('<div style="padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:14px;text-align:center;cursor:pointer;font-weight:bold;" onclick="document.getElementById(\'healthOv\').style.display=\'none\'">Schliessen</div></div>');
+  healthOv2.innerHTML=h.join('');calcPerm();
+}
+
+window.calcPerm=function(){var w=parseFloat(document.getElementById('permWater').value)||0;var t=parseFloat(document.getElementById('permTarget').value)||0.5;var el=document.getElementById('permResult');if(!el)return;if(w<=0){el.innerHTML='<div style="color:#888;font-size:13px;">Wassermenge eingeben.</div>';return;}var ml=(t/20)*w;var g=ml*0.94;el.innerHTML='<div style="font-size:13px;color:#ddd;line-height:2;"><div style="color:#28a745;font-weight:bold;font-size:15px;margin-bottom:8px;">Deine Mischung:</div><div style="display:flex;justify-content:space-between;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:4px;"><span style="color:#888;">Aspermet 200 EC</span><span style="color:#fff;font-weight:bold;">~'+g.toFixed(1)+' g ('+ml.toFixed(2)+' ml)</span></div><div style="display:flex;justify-content:space-between;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:8px;"><span style="color:#888;">Wasser</span><span style="color:#fff;font-weight:bold;">'+w+' ml</span></div><div style="color:#888;font-size:11px;">Formel: ('+t+'%/20%) x '+w+' = '+ml.toFixed(2)+' ml x 0,94 = ~'+g.toFixed(1)+' g</div></div>';};
+
+var permPhotoData2=null;
+window.openPermAdd=function(){permPhotoData2=null;var ov=document.getElementById('permAddOv');if(!ov){ov=document.createElement('div');ov.id='permAddOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';var ih=[];ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');ih.push('<h3 style="margin:0 0 16px;color:#fff;">Artikel einspruechen</h3>');ih.push('<label style="'+ls+'">Name</label><input id="permName" placeholder="z.B. Wanderschuhe" style="'+is+'">');ih.push('<label style="'+ls+'">Datum</label><input type="date" id="permDate" value="'+new Date().toISOString().split('T')[0]+'" style="'+is+'">');ih.push('<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="'+ls+'">Tage</label><input type="number" id="permDays" value="28" style="'+is+'"></div><div style="flex:1;"><label style="'+ls+'">Max Waeschen</label><input type="number" id="permWash" value="4" style="'+is+'"></div></div>');ih.push('<label style="'+ls+'">Foto</label><div id="permPhBox" style="display:none;margin-bottom:8px;"><img id="permPhThumb" style="width:100%;max-height:150px;border-radius:10px;object-fit:cover;"></div><label style="display:block;padding:12px;background:rgba(255,255,255,0.08);color:#ddd;border-radius:10px;text-align:center;cursor:pointer;font-size:13px;border:2px dashed rgba(255,255,255,0.15);margin-bottom:10px;">Foto waehlen<input type="file" accept="image/*" style="display:none;" onchange="handlePermImg2(this.files)"></label>');ih.push('<label style="'+ls+'">Notiz</label><input id="permNote" placeholder="Optional" style="'+is+'">');ih.push('<div style="display:flex;gap:10px;margin-top:12px;"><div style="flex:1;padding:14px;background:linear-gradient(135deg,#28a745,#218838);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="savePerm2()">Speichern</div><div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'permAddOv\').style.display=\'none\'">Abbrechen</div></div></div>');ov.innerHTML=ih.join('');ov.style.display='flex';};
+
+window.handlePermImg2=function(files){if(!files||!files[0])return;var rd=new FileReader();rd.onload=function(e){var img=new Image();img.onload=function(){var c=document.createElement('canvas'),mx=300;var r=Math.min(mx/img.width,mx/img.height,1);c.width=img.width*r;c.height=img.height*r;c.getContext('2d').drawImage(img,0,0,c.width,c.height);permPhotoData2=c.toDataURL('image/jpeg',0.5);var bx=document.getElementById('permPhBox'),th=document.getElementById('permPhThumb');if(bx&&th){th.src=permPhotoData2;bx.style.display='block';}};img.src=e.target.result;};rd.readAsDataURL(files[0]);};
+
+window.savePerm2=function(){var nm=(document.getElementById('permName').value||'').trim();if(!nm){toast('Name eingeben','warn');return;}if(!state.permethrinItems)state.permethrinItems=[];state.permethrinItems.push({id:uid(),name:nm,sprayDate:document.getElementById('permDate').value,durationDays:parseInt(document.getElementById('permDays').value,10)||28,maxWashes:parseInt(document.getElementById('permWash').value,10)||4,washCount:0,photo:permPhotoData2||null,note:(document.getElementById('permNote').value||'').trim()});save();toast('Gespeichert!');document.getElementById('permAddOv').style.display='none';_renderHealth2();};
+
+window.addPermWash=function(i){if(!state.permethrinItems[i])return;state.permethrinItems[i].washCount=(state.permethrinItems[i].washCount||0)+1;save();toast('Waesche +1');_renderHealth2();};
+window.renewPerm=function(i){if(!state.permethrinItems[i])return;state.permethrinItems[i].sprayDate=new Date().toISOString().split('T')[0];state.permethrinItems[i].washCount=0;save();toast('Erneuert!');_renderHealth2();};
+window.deletePerm=function(i){if(!confirm('Loeschen?'))return;state.permethrinItems.splice(i,1);save();_renderHealth2();};
+
+window.openSupAdd=function(){var ov=document.getElementById('supAddOv');if(!ov){ov=document.createElement('div');ov.id='supAddOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100000;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;margin-bottom:10px;';var ls='font-size:12px;color:#888;display:block;margin-bottom:4px;font-weight:600;';var ih=[];ih.push('<div style="background:#1e1e2f;border-radius:16px;padding:24px;width:calc(100% - 40px);max-width:400px;" onclick="event.stopPropagation()">');ih.push('<h3 style="margin:0 0 16px;color:#fff;">Supplement / Medikament</h3>');ih.push('<label style="'+ls+'">Name</label><input id="supName" placeholder="z.B. Vitamin D3" style="'+is+'">');ih.push('<label style="'+ls+'">Dosierung</label><input id="supDose" placeholder="z.B. 2000 IE" style="'+is+'">');ih.push('<label style="'+ls+'">Einnahmezeit</label><select id="supTime" style="'+is+'"><option value="morgens">Morgens</option><option value="mittags">Mittags</option><option value="abends">Abends</option><option value="sonstig">Bei Bedarf</option></select>');ih.push('<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="'+ls+'">Kategorie</label><select id="supCat" style="'+is+'"><option value="vitamin">Vitamin</option><option value="mineral">Mineral</option><option value="omega">Omega</option><option value="protein">Protein</option><option value="herb">Pflanzlich</option><option value="med">Medikament</option><option value="other">Sonstiges</option></select></div><div style="flex:1;"><label style="'+ls+'">Mit Essen?</label><select id="supFood" style="'+is+'"><option value="no">Nein</option><option value="yes">Ja</option></select></div></div>');ih.push('<label style="'+ls+'">Notizen</label><input id="supNotes" placeholder="Optional" style="'+is+'">');ih.push('<div style="display:flex;gap:10px;margin-top:12px;"><div style="flex:1;padding:14px;background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="saveSup2()">Speichern</div><div style="flex:1;padding:14px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;" onclick="document.getElementById(\'supAddOv\').style.display=\'none\'">Abbrechen</div></div></div>');ov.innerHTML=ih.join('');ov.style.display='flex';};
+
+window.saveSup2=function(){var nm=(document.getElementById('supName').value||'').trim();if(!nm){toast('Name eingeben','warn');return;}if(!state.healthItems)state.healthItems=[];state.healthItems.push({id:uid(),name:nm,dosage:(document.getElementById('supDose').value||'').trim(),time:document.getElementById('supTime').value,category:document.getElementById('supCat').value,withFood:document.getElementById('supFood').value==='yes',notes:(document.getElementById('supNotes').value||'').trim(),lastTaken:null});save();toast('Gespeichert!');document.getElementById('supAddOv').style.display='none';_renderHealth2();};
+
+window.markSupTaken=function(i){if(!state.healthItems[i])return;state.healthItems[i].lastTaken=new Date().toISOString().split('T')[0];save();toast('Eingenommen!');_renderHealth2();};
+window.deleteSup=function(i){if(!confirm('Loeschen?'))return;state.healthItems.splice(i,1);save();_renderHealth2();};
+
+window.getSupKiPlan=function(){var el=document.getElementById('supKiRes');if(!el)return;if(!settings.openrouterKey){el.innerHTML='<div style="color:#ffc107;padding:12px;background:rgba(255,193,7,0.08);border-radius:10px;font-size:13px;">API-Key fehlt!</div>';return;}var sl=state.healthItems.map(function(s){return s.name+' ('+s.dosage+', '+s.time+(s.withFood?', mit Essen':'')+')';}).join('\n');var pr='Ernaehrungsberater. NUR gesicherte Fakten.\n\nSupplements:\n'+sl+'\n\nAntworte:\n\nOPTIMALER TAGESPLAN: Wann welches nehmen?\n\nWECHSELWIRKUNGEN: Was nicht zusammen?\n\nEINNAHME-TIPPS: Konkret pro Supplement.\n\nFEHLENDE: Was ergaenzen?\n\nWARNUNGEN: Ueberdosierungen?\n\nDeutsch, max 3 Saetze pro Punkt.';el.innerHTML='<div style="text-align:center;padding:20px;color:#999;">KI analysiert...</div>';fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.0,max_tokens:1500})}).then(function(r){return r.json();}).then(function(d){var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';var safe=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.12);"><div style="color:#17a2b8;font-size:10px;font-weight:bold;margin-bottom:8px;">KI-Analyse</div><div style="color:#ddd;font-size:12px;line-height:1.8;">'+safe+'</div></div>';}).catch(function(e){el.innerHTML='<div style="color:#dc3545;padding:10px;font-size:12px;">Fehler: '+e.message+'</div>';});};
+
+// Dashboard
+setInterval(function(){
+  var has=(state.permethrinItems&&state.permethrinItems.length>0)||(state.healthItems&&state.healthItems.length>0);if(!has)return;
+  var old=document.getElementById('dashHealthW');if(old)old.remove();
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');var tc=null;for(var ci=0;ci<cards.length;ci++){if(cards[ci].textContent&&cards[ci].textContent.indexOf('Hallo!')>=0){tc=cards[ci];break;}}if(!tc)return;
+  var wb=document.createElement('div');wb.id='dashHealthW';wb.style.cssText='background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:16px;cursor:pointer;';wb.addEventListener('click',function(){openHealthHub();});
+  var wh='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:14px;font-weight:bold;color:#fff;">Gesundheit</div><div style="color:#17a2b8;font-size:12px;">Details &gt;</div></div>';
+  if(state.healthItems&&state.healthItems.length>0){var td=new Date().toISOString().split('T')[0];var tk=0,tl=state.healthItems.length;for(var si=0;si<tl;si++){if(state.healthItems[si].lastTaken===td)tk++;}var pc=Math.round((tk/tl)*100);var cl=pc>=100?'#28a745':pc>=50?'#ffc107':'#dc3545';wh+='<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;margin-bottom:6px;"><div style="color:#ddd;font-size:13px;">Supplements</div><div style="color:'+cl+';font-weight:bold;font-size:13px;">'+tk+'/'+tl+'</div></div><div style="background:rgba(255,255,255,0.08);border-radius:4px;height:8px;overflow:hidden;"><div style="background:'+cl+';height:100%;width:'+pc+'%;border-radius:4px;"></div></div><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">';for(var si2=0;si2<tl;si2++){var s2=state.healthItems[si2];var dn=s2.lastTaken===td;wh+='<div style="padding:4px 8px;background:'+(dn?'rgba(40,167,69,0.15)':'rgba(255,255,255,0.06)')+';color:'+(dn?'#28a745':'#888')+';border-radius:6px;font-size:11px;">'+(dn?'v ':'')+s2.name+'</div>';}wh+='</div></div>';}
+  if(state.permethrinItems&&state.permethrinItems.length>0){wh+='<div style="'+(state.healthItems&&state.healthItems.length>0?'border-top:1px solid rgba(255,255,255,0.08);padding-top:10px;margin-top:4px;':'')+'font-size:12px;color:#888;margin-bottom:6px;font-weight:600;">ZECKENSCHUTZ</div>';for(var pi2=0;pi2<state.permethrinItems.length;pi2++){var p2=state.permethrinItems[pi2];var ds2=Math.round((Date.now()-new Date(p2.sprayDate).getTime())/86400000);var dl2=Math.max(0,(p2.durationDays||28)-ds2);var wl2=Math.max(0,(p2.maxWashes||4)-(p2.washCount||0));var nr2=dl2<=3||wl2<=0;var cl2=nr2?'#dc3545':dl2<=7?'#ffc107':'#28a745';wh+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:4px;border-left:3px solid '+cl2+';"><div style="color:#ddd;font-size:12px;">'+p2.name+'</div><div style="display:flex;gap:8px;font-size:11px;"><span style="color:'+cl2+';">'+dl2+'d</span><span style="color:#888;">'+(p2.washCount||0)+'/'+(p2.maxWashes||4)+' W</span></div></div>';}}
+  wb.innerHTML=wh;tc.parentElement.insertBefore(wb,tc);
+},5000);
+
+window.openHealthHub=openHealthHub;
 })();
 </script>
 </body>
