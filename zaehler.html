@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.42';
+const APP_VERSION = '2.43';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -11369,8 +11369,9 @@ var healthOv2=null;
 function _he2(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';}
 
 function openHealthHub(){
-  if(!healthOv2){healthOv2=document.createElement('div');healthOv2.id='healthOv';healthOv2.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99998;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(healthOv2);}
-  _renderHealth2();healthOv2.style.display='block';healthOv2.scrollTop=0;
+  var old=document.getElementById('healthOv');if(old)old.remove();
+  healthOv2=document.createElement('div');healthOv2.id='healthOv';healthOv2.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;z-index:99998;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(healthOv2);
+  _renderHealth2();healthOv2.scrollTop=0;
 }
 
 function _renderHealth2(){
