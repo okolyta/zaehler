@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.49';
+const APP_VERSION = '2.50';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -9395,14 +9395,35 @@ function _injectE2(id){
   }else{
     for(var mi=0;mi<p.medications.length;mi++){
       var med=p.medications[mi];
-      var ft=med.frequency==='daily'?'Täglich':med.frequency==='weekly'?'Wöchentlich':med.frequency==='monthly'?'Monatlich':med.frequency==='asneeded'?'Bei Bedarf':(med.frequency||'');
-      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">');
+      var ft=med.frequency==='daily'?'Täglich':med.frequency==='twice'?'2x täglich':med.frequency==='weekly'?'Wöchentlich':med.frequency==='monthly'?'Monatlich':med.frequency==='asneeded'?'Bei Bedarf':(med.frequency||'');
+      var ivd=med.frequency==='weekly'?7:med.frequency==='monthly'?30:0;
+      var dueCol='#28a745',dueTxt='',nextStr='';
+      if(med.lastTaken&&ivd>0){
+        var nd=new Date(med.lastTaken);nd.setDate(nd.getDate()+ivd);
+        var rem=Math.round((nd-new Date())/86400000);
+        nextStr=nd.toISOString().split('T')[0].split('-').reverse().join('.');
+        if(rem<0){dueCol='#dc3545';dueTxt='⚠️ Überfällig seit '+Math.abs(rem)+' Tagen';}
+        else if(rem===0){dueCol='#ffc107';dueTxt='⏰ Heute fällig';}
+        else if(rem<=3){dueCol='#ffc107';dueTxt='In '+rem+' Tagen';}
+        else{dueTxt='Noch '+rem+' Tage';}
+      }
+      var bl=(med.lastTaken&&ivd>0)?dueCol:'rgba(255,255,255,0.1)';
+      h.push('<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid '+bl+';">');
+      h.push('<div style="display:flex;justify-content:space-between;align-items:flex-start;">');
       h.push('<div style="flex:1;min-width:0;">');
       h.push('<div style="font-weight:bold;color:#fff;font-size:14px;">💊 '+_esc2(med.name)+'</div>');
       h.push('<div style="color:#999;font-size:12px;margin-top:2px;">'+_esc2(med.dosage)+' | '+ft+(med.time?' ('+_esc2(med.time)+')':'')+'</div>');
       if(med.notes)h.push('<div style="color:#666;font-size:11px;margin-top:2px;">'+_esc2(med.notes)+'</div>');
       h.push('</div>');
       h.push('<div style="padding:5px 8px;background:rgba(220,53,69,0.15);color:#dc3545;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;margin-left:8px;" onclick="deleteMed(\''+id+'\',\''+med.id+'\')">🗑️</div>');
+      h.push('</div>');
+      if(med.lastTaken){
+        h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;flex-wrap:wrap;gap:4px;">');
+        h.push('<span style="color:#999;">Zuletzt: '+med.lastTaken.split('-').reverse().join('.')+(nextStr?' | Nächste: '+nextStr:'')+'</span>');
+        if(dueTxt)h.push('<span style="color:'+dueCol+';font-weight:600;">'+dueTxt+'</span>');
+        h.push('</div>');
+      }
+      h.push('<div style="margin-top:8px;padding:8px;background:rgba(40,167,69,0.12);color:#28a745;border-radius:8px;text-align:center;font-size:12px;font-weight:bold;cursor:pointer;" onclick="markMedGiven(\''+id+'\',\''+med.id+'\')">✅ '+((med.frequency==='daily'||med.frequency==='twice')?'Heute gegeben':'Jetzt gegeben')+'</div>');
       h.push('</div>');
     }
   }
@@ -9547,6 +9568,8 @@ window.openMedModal=function(petId){
   ih.push('<div style="flex:1;"><label style="'+ls+'">Uhrzeit</label>');
   ih.push('<input id="medTime" placeholder="z.B. morgens" style="'+is+'"></div>');
   ih.push('</div>');
+  ih.push('<label style="'+ls+'">Zuletzt gegeben (optional)</label>');
+  ih.push('<input type="date" id="medLast" style="'+is+'">');
   ih.push('<label style="'+ls+'">Notizen</label>');
   ih.push('<input id="medNotes" placeholder="z.B. mit Futter geben" style="'+is+'">');
   ih.push('<input type="hidden" id="medPetId" value="'+petId+'">');
@@ -9570,7 +9593,8 @@ window.saveMed=function(){
     dosage:(document.getElementById('medDose').value||'').trim(),
     frequency:document.getElementById('medFreq').value,
     time:(document.getElementById('medTime').value||'').trim(),
-    notes:(document.getElementById('medNotes').value||'').trim()
+    notes:(document.getElementById('medNotes').value||'').trim(),
+    lastTaken:(document.getElementById('medLast').value||'')
   });
   if(typeof saveData==='function')saveData();
   if(typeof toast==='function')toast('Medikament gespeichert!');
@@ -9584,6 +9608,15 @@ window.deleteMed=function(petId,medId){
   p.medications=p.medications.filter(function(x){return x.id!==medId;});
   if(typeof saveData==='function')saveData();
   if(typeof toast==='function')toast('Gelöscht');
+  window.openPetDetail(petId);
+};
+
+window.markMedGiven=function(petId,medId){
+  var p=_fp2(petId);if(!p)return;
+  for(var i=0;i<p.medications.length;i++){if(p.medications[i].id===medId){p.medications[i].lastTaken=new Date().toISOString().split('T')[0];break;}}
+  if(typeof saveData==='function')saveData();
+  if(typeof toast==='function')toast('Als gegeben markiert!');
+  var bn=document.getElementById('petWarnBnr');if(bn)bn.remove();
   window.openPetDetail(petId);
 };
 
@@ -9655,12 +9688,25 @@ setInterval(function(){
   var warns=[];
   for(var i=0;i<state.pets.length;i++){
     var p=state.pets[i];
-    if(!p.protections)continue;
+    if(p.protections){
     for(var j=0;j<p.protections.length;j++){
       var pr=p.protections[j],rem=_protRem(pr);
       if(rem===-999)warns.push({c:'#888',t:'💊 '+p.name+': '+_protLbl(pr.type)+' noch nie angewendet'});
       else if(rem<0)warns.push({c:'#dc3545',t:'🚨 '+p.name+': '+_protLbl(pr.type)+' überfällig seit '+Math.abs(rem)+' Tagen!'});
       else if(rem<7)warns.push({c:'#ffc107',t:'⏰ '+p.name+': '+_protLbl(pr.type)+' in '+rem+' Tagen fällig'});
+    }
+    }
+    if(p.medications){
+      for(var mj=0;mj<p.medications.length;mj++){
+        var md=p.medications[mj];
+        var miv=md.frequency==='weekly'?7:md.frequency==='monthly'?30:0;
+        if(miv>0&&md.lastTaken){
+          var mnd=new Date(md.lastTaken);mnd.setDate(mnd.getDate()+miv);
+          var mrem=Math.round((mnd-new Date())/86400000);
+          if(mrem<0)warns.push({c:'#dc3545',t:'💊 '+p.name+': '+md.name+' überfällig seit '+Math.abs(mrem)+' Tagen!'});
+          else if(mrem<=3)warns.push({c:'#ffc107',t:'💊 '+p.name+': '+md.name+' in '+mrem+' Tagen fällig'});
+        }
+      }
     }
   }
   if(warns.length===0)return;
@@ -9955,13 +10001,18 @@ function _injectE34(id){
   }else{h.push('<div style="color:#666;font-size:13px;text-align:center;padding:16px 0;">Noch keine Kosten erfasst.</div>');}
   h.push('</div>');
 
-  // KI GESUNDHEITSTIPPS
+  // KI GESUNDHEITSTIPPS (ein Button pro Krankheit)
   if(p.diseases){
+    var _disL=p.diseases.split(/[,;]/).map(function(x){return x.trim();}).filter(function(x){return x;});
     h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(23,162,184,0.08),rgba(23,162,184,0.02));border-color:rgba(23,162,184,0.2);">');
-    h.push('<h4 style="margin:0 0 10px;color:#17a2b8;font-size:15px;">🤖 KI-Gesundheitstipps</h4>');
-    h.push('<div style="color:#999;font-size:12px;margin-bottom:12px;">Erkrankung: <strong style="color:#ddd;">'+_e3(p.diseases)+'</strong></div>');
-    h.push('<div style="padding:14px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;" onclick="getPetKiTips(\''+id+'\')">🤖 Tipps für '+_e3(p.name)+' abrufen</div>');
-    h.push('<div id="petKiTips_'+id+'" style="margin-top:12px;"></div>');
+    h.push('<h4 style="margin:0 0 4px;color:#17a2b8;font-size:15px;">🤖 KI-Gesundheitstipps</h4>');
+    h.push('<div style="color:#999;font-size:12px;margin-bottom:14px;">Tippe auf eine Erkrankung für gezielte Tipps:</div>');
+    for(var _di=0;_di<_disL.length;_di++){
+      h.push('<div style="margin-bottom:10px;">');
+      h.push('<div style="padding:13px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="getPetKiTipsFor(\''+id+'\','+_di+')"><span>🤖</span><span>'+_e3(_disL[_di])+'</span></div>');
+      h.push('<div id="petKiTips_'+id+'_'+_di+'" style="margin-top:8px;"></div>');
+      h.push('</div>');
+    }
     h.push('</div>');
   }
 
@@ -10079,6 +10130,32 @@ window.getPetKiTips=function(petId){
     var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
     t=t.replace(/\n/g,'<br>');
     el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.15);"><div style="color:#17a2b8;font-size:11px;font-weight:bold;margin-bottom:8px;">🤖 KI-Empfehlung (kein Ersatz für den Tierarzt!)</div><div style="color:#ddd;font-size:13px;line-height:1.7;">'+t+'</div></div>';
+  }).catch(function(e){el.innerHTML='<div style="color:#dc3545;font-size:13px;padding:12px;background:rgba(220,53,69,0.08);border-radius:10px;">❌ '+e.message+'</div>';});
+};
+
+window.getPetKiTipsFor=function(petId,idx){
+  var p=_fp3(petId);if(!p)return;
+  var disList=(p.diseases||'').split(/[,;]/).map(function(x){return x.trim();}).filter(function(x){return x;});
+  var dis=disList[idx];if(!dis)return;
+  var el=document.getElementById('petKiTips_'+petId+'_'+idx);if(!el)return;
+  if(el.getAttribute('data-loaded')==='1'){el.innerHTML='';el.removeAttribute('data-loaded');return;}
+  if(!settings.openrouterKey){el.innerHTML='<div style="color:#dc3545;font-size:13px;padding:12px;background:rgba(220,53,69,0.08);border-radius:10px;">⚠️ OpenRouter API-Key in Einstellungen hinterlegen!</div>';return;}
+  el.innerHTML='<div style="text-align:center;padding:20px;"><div style="font-size:28px;">🔄</div><div style="color:#999;font-size:13px;">KI analysiert '+_e3(dis)+'...</div></div>';
+  var age='';
+  if(p.birthDate){var bn=new Date(p.birthDate),nn=new Date();age=Math.floor((nn-bn)/31557600000)+' Jahre';}
+  var others=disList.filter(function(x,i){return i!==idx;});
+  var pr='Du bist ein erfahrener Tierarzt-Berater. Gib praktische Tipps fuer diesen Hund zu EINER bestimmten Erkrankung.\n\n';
+  pr+='Name: '+(p.name||'')+'\nRasse: '+(p.breed||'Unbekannt')+'\nGewicht: '+(p.weight||'?')+'kg\nAlter: '+(age||'?')+'\n';
+  pr+='AKTUELLE ERKRANKUNG (NUR diese behandeln): '+dis+'\n';
+  if(others.length>0)pr+='Weitere Erkrankungen (nur fuer Wechselwirkungen beachten): '+others.join(', ')+'\n';
+  if(p.allergies)pr+='Allergien: '+p.allergies+'\n';
+  if(p.medications&&p.medications.length>0)pr+='Medikamente: '+p.medications.map(function(m){return m.name;}).join(', ')+'\n';
+  pr+='\nAntworte AUSSCHLIESSLICH zu "'+dis+'" exakt in diesem Format:\n\nWAS IST DAS: Kurze Erklaerung.\n\nERNAEHRUNG: Was fuettern, was strikt meiden?\n\nALLTAG: Praktische Tipps zur Pflege.\n\nWARNSIGNALE: Wann sofort zum Tierarzt?\n\nAuf Deutsch, mit Emoji, maximal 3 Saetze pro Punkt.';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.3,max_tokens:1200})}).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
+    t=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    el.innerHTML='<div style="padding:14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(23,162,184,0.15);"><div style="color:#17a2b8;font-size:11px;font-weight:bold;margin-bottom:8px;">🤖 '+_e3(dis)+' — kein Ersatz fuer den Tierarzt!</div><div style="color:#ddd;font-size:13px;line-height:1.7;">'+t+'</div></div>';
+    el.setAttribute('data-loaded','1');
   }).catch(function(e){el.innerHTML='<div style="color:#dc3545;font-size:13px;padding:12px;background:rgba(220,53,69,0.08);border-radius:10px;">❌ '+e.message+'</div>';});
 };
 
@@ -10355,54 +10432,7 @@ window.chkSymGA=function(){
   _safeKi(symPr.replace('SYM',sym),el,'Symptome');
 };
 
-// KI-Button bei Krankheiten direkt sichtbar machen
-setInterval(function(){
-  var ov=document.getElementById('petDetailOv');
-  if(!ov||ov.style.display==='none')return;
-  if(ov.querySelector('.kiDI2'))return;
-  var divs=ov.querySelectorAll('div');
-  for(var i=0;i<divs.length;i++){
-    var d=divs[i];
-    if(!d.firstChild)continue;
-    var ft=(d.firstChild.textContent||'').trim();
-    if(ft!=='Krankheiten')continue;
-    var valDiv=d.querySelector('div[style*="word-break"]')||d.querySelector('div[style*="font-weight"]');
-    if(!valDiv)continue;
-    var dis=valDiv.textContent.trim();
-    if(!dis||dis==='\u2014')continue;
-    var petId=null;
-    var ebs=ov.querySelectorAll('[onclick*="openPetEdit"]');
-    for(var e=0;e<ebs.length;e++){
-      var mx=ebs[e].getAttribute('onclick').match(/openPetEdit\('([^']+)'\)/);
-      if(mx){petId=mx[1];break;}
-    }
-    if(!petId)continue;
-    var p=null;
-    for(var x=0;x<state.pets.length;x++){if(state.pets[x].id===petId){p=state.pets[x];break;}}
-    if(!p)continue;
-    var age2='';
-    if(p.birthDate){var bn2=new Date(p.birthDate),nn2=new Date();age2=Math.floor((nn2-bn2)/31557600000)+' Jahre';}
-    var meds2='Keine';
-    if(p.medications&&p.medications.length>0)meds2=p.medications.map(function(m){return m.name;}).join(', ');
-    var wrap2=document.createElement('div');
-    wrap2.className='kiDI2';
-    wrap2.style.cssText='margin-top:10px;';
-    var btn2=document.createElement('div');
-    btn2.style.cssText='padding:12px;background:linear-gradient(135deg,#17a2b8,#117a8b);color:#fff;border-radius:10px;text-align:center;font-weight:bold;cursor:pointer;font-size:13px;';
-    btn2.textContent='KI-Tipps fuer '+dis+' abrufen';
-    var res2=document.createElement('div');
-    res2.style.cssText='margin-top:10px;';
-    var disPr='Du bist ein erfahrener Veterinaer. NUR gesicherte Fakten, keine Vermutungen.\n\nHund: '+p.name+', '+(p.breed||'Unbekannt')+', '+(p.weight||'?')+'kg, '+(age2||'?')+'\nDiagnose: '+dis+'\nAllergien: '+(p.allergies||'Keine')+'\nMedikamente: '+meds2+'\n\nAntworte exakt so:\n\nPROBLEM: Was ist '+dis+'? Was passiert im Koerper?\n\nSYMPTOME: Woran erkennt man eine Verschlechterung?\n\nERNAEHRUNG: Was fuettern? Was strikt meiden?\n\nWAS MAN SELBST TUN KANN: Praktische Alltagstipps.\n\nWANN ZUM TIERARZT: Bei welchen Anzeichen sofort?\n\nWORAUF ACHTEN: Was beobachten?\n\nAuf Deutsch, maximal 3 Saetze pro Punkt.';
-    btn2.addEventListener('click',(function(pr2,rd2,lb2){return function(){
-      if(rd2.getAttribute('data-loaded')==='1'){rd2.innerHTML='';rd2.removeAttribute('data-loaded');return;}
-      _safeKi(pr2,rd2,lb2);
-    };})(disPr,res2,dis));
-    wrap2.appendChild(btn2);
-    wrap2.appendChild(res2);
-    d.parentElement.appendChild(wrap2);
-    break;
-  }
-},1500);
+// KI-Krankheiten-Button entfernt (Doppelung + vertikale Schrift behoben)
 
 })();
 // === AUTO-ERINNERUNGEN, WARTUNGSPLANER & KI-ANALYSE ===
@@ -10772,7 +10802,7 @@ function _injectHealthTab2(){
   var allEls=document.querySelectorAll('a,div,span,button');
   for(var i=0;i<allEls.length;i++){var el=allEls[i];var txt=(el.textContent||'').trim();
     if(txt.indexOf('Tiere')>=0&&txt.length<20&&el.offsetWidth>0&&el.id==='petTabInj'){
-      var clone=el.cloneNode(false);clone.id='healthTabInj';clone.innerHTML='Gesundheit';clone.style.cursor='pointer';clone.removeAttribute('onclick');
+      var clone=el.cloneNode(false);clone.id='healthTabInj';clone.innerHTML='🏥 Gesundheit';clone.style.cursor='pointer';clone.removeAttribute('onclick');
       clone.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openHealthHub();});
       el.parentElement.insertBefore(clone,el.nextSibling);break;}}
 }
