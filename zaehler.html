@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.50';
+const APP_VERSION = '2.51';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -10912,7 +10912,9 @@ function _refreshStreaks(){
   for(var i=0;i<state.habits.length;i++){
     var hb=state.habits[i];
     if(!hb.history)hb.history=[];
-    if(hb.lastDone===t||hb.lastDone===y)continue;
+    var last=hb.lastDone||'';
+    if(hb.lastFail&&hb.lastFail>last)last=hb.lastFail;
+    if(last===t||last===y)continue;
     if(hb.currentStreak>0)hb.currentStreak=0;
   }
 }
@@ -11211,11 +11213,35 @@ function _renderHabitTab(){
       h.push('<span style="font-size:10px;color:#888;background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:6px;">'+typeBadge+'</span>');
       h.push('<span style="font-size:11px;color:#bbb;">Best: '+(hb.bestStreak||0)+(isBest?' 🏆':'')+'</span>');
       h.push('</div>');
-      h.push('<div style="margin-top:8px;"><div style="padding:8px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:13px;cursor:pointer;background:'+(done?'rgba(34,197,94,0.15)':'linear-gradient(135deg,#a855f7,#ec4899)')+';color:'+(done?'#22c55e':'#fff')+';" onclick="habitToggleTab(\''+hb.id+'\')">'+(done?'✓ Heute erledigt':'Jetzt abhaken')+'</div></div>');
+      var _failedToday=(hb.lastFail===_today()&&!done);
+      h.push('<div style="margin-top:8px;">');
+      if(done){
+        h.push('<div style="padding:9px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:13px;cursor:pointer;background:rgba(34,197,94,0.15);color:#22c55e;" onclick="habitToggleTab(\''+hb.id+'\')">✓ Heute erledigt</div>');
+      }else if(_failedToday){
+        h.push('<div style="padding:9px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:12px;background:rgba(220,53,69,0.12);color:#ef4444;cursor:pointer;" onclick="habitFailUndo(\''+hb.id+'\')">✗ Heute nicht geschafft · Rückgängig</div>');
+      }else{
+        h.push('<div style="display:flex;gap:6px;">');
+        h.push('<div style="flex:1;padding:9px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:13px;cursor:pointer;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;" onclick="habitToggleTab(\''+hb.id+'\')">✓ Geschafft</div>');
+        h.push('<div style="flex:1;padding:9px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:13px;cursor:pointer;background:rgba(255,255,255,0.06);color:#aaa;border:1px solid rgba(220,53,69,0.25);" onclick="habitFail(\''+hb.id+'\')">✗ Nicht geschafft</div>');
+        h.push('</div>');
+      }
+      h.push('</div>');
       h.push('</div>');
       h.push('<div style="cursor:pointer;font-size:18px;color:#888;padding:4px;align-self:flex-start;" onclick="openHabitEdit(\''+hb.id+'\')">✏️</div>');
       h.push('</div>');
       h.push(_week7(hb));
+      if(hb.setbacks&&hb.setbacks.length>0){
+        var _sb=hb.setbacks.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+        h.push('<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">');
+        h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:11px;color:#888;font-weight:600;">📔 Rückschläge ('+hb.setbacks.length+')</div>');
+        if(hb.setbacks.length>=3)h.push('<div style="font-size:11px;color:#c084fc;cursor:pointer;font-weight:600;" onclick="habitSetbackAnalysis(\''+hb.id+'\')">🧠 KI-Auswertung</div>');
+        h.push('</div>');
+        for(var _si=0;_si<Math.min(_sb.length,3);_si++){
+          h.push('<div style="font-size:11px;color:#999;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:4px;border-left:2px solid rgba(220,53,69,0.4);">'+_sb[_si].date.split('-').reverse().join('.')+' — '+_heg(_sb[_si].reason)+'</div>');
+        }
+        h.push('<div id="habitSbA_'+hb.id+'" style="margin-top:8px;"></div>');
+        h.push('</div>');
+      }
       h.push('</div>');
     }
   }
@@ -11625,6 +11651,95 @@ var _waitState=setInterval(function(){
 
 window.openAchievements=window.openAchievements;
 window.checkAchievements=window.checkAchievements;
+})();
+
+// === HABIT-TRACKER Teil E (Reflexion & Rückschläge) ===
+(function(){
+function _t(){return new Date().toISOString().split('T')[0];}
+function _heg(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
+function _fh(id){for(var i=0;i<state.habits.length;i++){if(state.habits[i].id===id)return state.habits[i];}return null;}
+var WINDOW_DAYS=14, MAX_HONEST=2;
+
+window.habitFail=function(id){
+  var hb=_fh(id);if(!hb)return;
+  var ov=document.getElementById('habitFailOv');
+  if(!ov){ov=document.createElement('div');ov.id='habitFailOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100002;display:none;justify-content:center;align-items:center;overflow-y:auto;padding:16px;box-sizing:border-box;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}
+  var h=[];
+  h.push('<div style="background:linear-gradient(180deg,#1e1a2e,#16131f);border-radius:20px;padding:26px;width:100%;max-width:420px;border:1px solid rgba(220,53,69,0.25);" onclick="event.stopPropagation()">');
+  h.push('<div style="text-align:center;margin-bottom:18px;"><div style="font-size:40px;margin-bottom:8px;">'+hb.emoji+'</div><h3 style="margin:0;color:#fff;font-size:18px;">'+_heg(hb.name)+'</h3><div style="color:#999;font-size:13px;margin-top:6px;line-height:1.5;">Heute nicht geschafft? Kein Drama.<br>Schreib ehrlich auf, was dich abgehalten hat.</div></div>');
+  h.push('<textarea id="habitFailTxt" oninput="habitFailCount()" placeholder="z.B. Stress im Büro, hatte keine Zeit, war unterwegs und konnte nicht..." style="width:100%;padding:13px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:14px;box-sizing:border-box;min-height:90px;resize:vertical;margin-bottom:6px;"></textarea>');
+  h.push('<div id="habitFailCnt" style="text-align:right;font-size:11px;color:#888;margin-bottom:14px;">0 / 30 Zeichen</div>');
+  h.push('<input type="hidden" id="habitFailId" value="'+id+'">');
+  h.push('<div id="habitFailBtn" style="padding:15px;background:rgba(255,255,255,0.1);color:#666;border-radius:14px;text-align:center;font-weight:bold;font-size:15px;cursor:not-allowed;" onclick="habitFailSave()">Mindestens 30 Zeichen</div>');
+  h.push('<div style="padding:12px;text-align:center;color:#888;font-size:13px;cursor:pointer;margin-top:4px;" onclick="document.getElementById(\'habitFailOv\').style.display=\'none\'">Abbrechen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='flex';
+};
+
+window.habitFailCount=function(){
+  var txt=document.getElementById('habitFailTxt'),cnt=document.getElementById('habitFailCnt'),btn=document.getElementById('habitFailBtn');
+  if(!txt)return;
+  var l=txt.value.trim().length;
+  cnt.textContent=l+' / 30 Zeichen';
+  if(l>=30){cnt.style.color='#22c55e';btn.style.background='linear-gradient(135deg,#a855f7,#ec4899)';btn.style.color='#fff';btn.style.cursor='pointer';btn.textContent='💾 Speichern & ehrlich bleiben';}
+  else{cnt.style.color='#888';btn.style.background='rgba(255,255,255,0.1)';btn.style.color='#666';btn.style.cursor='not-allowed';btn.textContent='Mindestens 30 Zeichen';}
+};
+
+window.habitFailSave=function(){
+  var id=document.getElementById('habitFailId').value;
+  var hb=_fh(id);if(!hb)return;
+  var reason=(document.getElementById('habitFailTxt').value||'').trim();
+  if(reason.length<30)return;
+  if(!hb.setbacks)hb.setbacks=[];
+  var t=_t(),oldStreak=hb.currentStreak||0;
+  var cut=new Date();cut.setDate(cut.getDate()-WINDOW_DAYS);var cutS=cut.toISOString().split('T')[0];
+  var recent=1;for(var i=0;i<hb.setbacks.length;i++){if(hb.setbacks[i].date>=cutS)recent++;}
+  var newStreak,msg;
+  if(recent<=MAX_HONEST){
+    newStreak=Math.floor(oldStreak/2);
+    msg='🤝 Ehrlich dokumentiert!\n\nDein Streak wurde nur halbiert ('+oldStreak+' → '+newStreak+') statt gelöscht. Das ist deine Belohnung fürs Dranbleiben. Weiter geht\'s!';
+  }else{
+    newStreak=0;
+    msg='⚠️ '+recent+'x in '+WINDOW_DAYS+' Tagen nicht geschafft.\n\nDer Ehrlichkeits-Bonus entfällt diesmal – dein Streak wird auf 0 gesetzt. Schau dir die KI-Auswertung an, um die Auslöser zu durchbrechen.';
+  }
+  hb.setbacks.push({date:t,reason:reason,prevStreak:oldStreak});
+  hb.currentStreak=newStreak;
+  hb.lastFail=t;
+  save();
+  document.getElementById('habitFailOv').style.display='none';
+  setTimeout(function(){alert(msg);},120);
+  if(typeof window.openHabitTab==='function')window.openHabitTab();
+};
+
+window.habitFailUndo=function(id){
+  var hb=_fh(id);if(!hb||!hb.setbacks)return;
+  var t=_t(),entry=null;
+  for(var i=hb.setbacks.length-1;i>=0;i--){if(hb.setbacks[i].date===t){entry=hb.setbacks[i];hb.setbacks.splice(i,1);break;}}
+  if(entry&&typeof entry.prevStreak==='number')hb.currentStreak=entry.prevStreak;
+  hb.lastFail='';
+  save();
+  if(typeof toast==='function')toast('Rückgängig gemacht – Streak wiederhergestellt');
+  if(typeof window.openHabitTab==='function')window.openHabitTab();
+};
+
+window.habitSetbackAnalysis=function(id){
+  var hb=_fh(id);if(!hb||!hb.setbacks||hb.setbacks.length<3)return;
+  var el=document.getElementById('habitSbA_'+id);if(!el)return;
+  if(el.getAttribute('data-loaded')==='1'){el.innerHTML='';el.removeAttribute('data-loaded');return;}
+  if(!settings.openrouterKey){el.innerHTML='<div style="color:#ffc107;font-size:12px;padding:10px;background:rgba(255,193,7,0.08);border-radius:8px;">⚠️ Für die KI-Auswertung einen OpenRouter API-Key in den Einstellungen hinterlegen.</div>';return;}
+  el.innerHTML='<div style="text-align:center;padding:16px;color:#999;font-size:12px;">🧠 KI analysiert deine Muster...</div>';
+  var typeTxt=hb.type==='avoid'?'vermeiden':'regelmäßig tun';
+  var reasons=hb.setbacks.slice(-10).map(function(s){return '- '+s.date+': '+s.reason;}).join('\n');
+  var pr='Du bist ein einfühlsamer Gewohnheits-Coach. Ein Nutzer will diese Gewohnheit '+typeTxt+': "'+hb.name+'".\n\nHier seine dokumentierten Rückschläge mit Begründungen:\n'+reasons+'\n\nAnalysiere die Muster und antworte exakt so:\n\nMUSTER: Was sind die häufigsten Auslöser? (1-2 Sätze)\n\nKERNPROBLEM: Was steckt wahrscheinlich dahinter? (1-2 Sätze)\n\n3 STRATEGIEN: Drei konkrete, umsetzbare Tipps gegen genau diese Auslöser.\n\nMUTMACHER: Ein ehrlicher, motivierender Schlusssatz.\n\nAuf Deutsch, warmherzig, mit Du, mit Emoji.';
+  fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.5,max_tokens:900})}).then(function(r){return r.json();}).then(function(d){
+    var tx=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'Keine Antwort.';
+    tx=tx.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    el.innerHTML='<div style="padding:14px;background:linear-gradient(135deg,rgba(168,85,247,0.1),rgba(236,72,153,0.06));border:1px solid rgba(168,85,247,0.2);border-radius:12px;"><div style="color:#c084fc;font-size:10px;font-weight:bold;margin-bottom:8px;">🧠 DEINE MUSTER-ANALYSE</div><div style="color:#ddd;font-size:12px;line-height:1.7;">'+tx+'</div></div>';
+    el.setAttribute('data-loaded','1');
+  }).catch(function(e){el.innerHTML='<div style="color:#dc3545;font-size:12px;padding:10px;">❌ '+e.message+'</div>';});
+};
+
 })();
 
 // === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
