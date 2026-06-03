@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.46';
+const APP_VERSION = '2.47';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -11071,6 +11071,221 @@ document.head.appendChild(_hstyle);
 setInterval(function(){_injectDashHabits(false);},2500);
 
 window.openHabitCreate=window.openHabitCreate;
+})();
+
+// === HABIT-TRACKER Teil B (Voller Reiter) ===
+(function(){
+
+var MILESTONES=[3,7,14,30,60,100,200,365];
+var HABIT_EMOJIS=['🍫','🚭','🍔','🍺','🥤','☕','📱','🧹','💧','🚶','🏃','🏋️','📚','🧘','🥗','😴','💊','🪥','🌅','✍️','🎯','🌱'];
+var WD=['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+function _today(){return new Date().toISOString().split('T')[0];}
+function _heg(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
+function _findHabit(id){for(var i=0;i<state.habits.length;i++){if(state.habits[i].id===id)return state.habits[i];}return null;}
+function _isDoneToday(hb){return hb.lastDone===_today();}
+function _nextMs(s){for(var i=0;i<MILESTONES.length;i++){if(MILESTONES[i]>s)return MILESTONES[i];}return MILESTONES[MILESTONES.length-1];}
+function _prevMs(s){var p=0;for(var i=0;i<MILESTONES.length;i++){if(MILESTONES[i]<=s)p=MILESTONES[i];else break;}return p;}
+
+function _ringB(streak,done,size){
+  var r=(size/2)-7,cx=size/2,cy=size/2,circ=2*Math.PI*r;
+  var next=_nextMs(streak),prev=_prevMs(streak);
+  var pct=next>prev?Math.min(1,(streak-prev)/(next-prev)):1;
+  if(streak===0)pct=0.03;
+  var offset=circ*(1-pct);
+  var gid='hgb'+Math.random().toString(36).slice(2,8);
+  var c1=done?'#22c55e':'#a855f7',c2=done?'#16a34a':'#ec4899';
+  var glow=done?'filter:drop-shadow(0 0 6px rgba(34,197,94,0.7));':(streak>=7?'filter:drop-shadow(0 0 6px rgba(236,72,153,0.6));':'');
+  var center;
+  if(done){center='<div style="font-size:34px;color:#22c55e;font-weight:bold;line-height:1;">✓</div>';}
+  else{center='<div style="font-size:22px;line-height:1;">🔥</div><div style="font-size:27px;font-weight:800;color:#fff;line-height:1.1;">'+streak+'</div>';}
+  var svg='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="transform:rotate(-90deg);display:block;"><defs><linearGradient id="'+gid+'" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="'+c1+'"/><stop offset="100%" stop-color="'+c2+'"/></linearGradient></defs><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"/><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="url(#'+gid+')" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+circ+'" stroke-dashoffset="'+offset+'" style="transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1);'+glow+'"/></svg>';
+  return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0;">'+svg+'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">'+center+'</div></div>';
+}
+
+function _week7(hb){
+  var hist=hb.history||[];
+  var out='<div style="display:flex;gap:6px;margin-top:8px;">';
+  for(var i=6;i>=0;i--){
+    var d=new Date();d.setDate(d.getDate()-i);
+    var ds=d.toISOString().split('T')[0];
+    var dn=hist.indexOf(ds)>=0;
+    var wd=WD[(d.getDay()+6)%7];
+    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;"><div style="width:100%;height:24px;border-radius:6px;background:'+(dn?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)')+';display:flex;align-items:center;justify-content:center;font-size:11px;color:'+(dn?'#fff':'#666')+';">'+(dn?'✓':'')+'</div><div style="font-size:9px;color:#888;">'+wd+'</div></div>';
+  }
+  out+='</div>';
+  return out;
+}
+
+window.habitToggleTab=function(id){
+  if(typeof window.habitToggle==='function')window.habitToggle(id);
+  _renderHabitTab();
+};
+
+var _habitTabOv=null;
+window.openHabitTab=function(){
+  if(!_habitTabOv){
+    _habitTabOv=document.createElement('div');
+    _habitTabOv.id='habitTabOv';
+    _habitTabOv.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0a14;z-index:99998;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+    document.body.appendChild(_habitTabOv);
+  }
+  _renderHabitTab();
+  _habitTabOv.style.display='block';
+  _habitTabOv.scrollTop=0;
+};
+
+function _renderHabitTab(){
+  if(!_habitTabOv)return;
+  var habits=state.habits||[];
+  var doneCount=0;for(var i=0;i<habits.length;i++){if(_isDoneToday(habits[i]))doneCount++;}
+  var pendingChests=(state.gamification&&state.gamification.chests)?state.gamification.chests.filter(function(c){return !c.opened;}).length:0;
+  var achCount=(state.gamification&&state.gamification.achievements)?state.gamification.achievements.length:0;
+  var cs='background:rgba(255,255,255,0.05);border:1px solid rgba(168,85,247,0.12);border-radius:16px;padding:18px;margin-bottom:14px;';
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:0 12px 80px;">');
+
+  h.push('<div style="background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:0 0 24px 24px;padding:24px 20px 22px;margin-bottom:18px;position:relative;">');
+  h.push('<div style="position:absolute;top:16px;right:16px;width:36px;height:36px;background:rgba(0,0,0,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'habitTabOv\').style.display=\'none\'">✕</div>');
+  h.push('<div style="font-size:34px;margin-bottom:6px;">🎯</div>');
+  h.push('<h2 style="margin:0;color:#fff;font-size:23px;">Gewohnheiten</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:4px;">Bau dir ein besseres Ich – Tag für Tag</div>');
+  if(habits.length>0){
+    var pct=Math.round((doneCount/habits.length)*100);
+    h.push('<div style="margin-top:16px;background:rgba(0,0,0,0.2);border-radius:12px;padding:12px 14px;">');
+    h.push('<div style="display:flex;justify-content:space-between;font-size:12px;color:#fff;margin-bottom:6px;"><span>Heute erledigt</span><span style="font-weight:bold;">'+doneCount+' / '+habits.length+'</span></div>');
+    h.push('<div style="background:rgba(255,255,255,0.2);border-radius:5px;height:8px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:#fff;border-radius:5px;transition:width 0.6s;"></div></div>');
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  if(habits.length===0){
+    h.push('<div style="'+cs+'text-align:center;padding:40px 20px;">');
+    h.push('<div style="font-size:60px;margin-bottom:14px;">🎯</div>');
+    h.push('<div style="color:#aaa;font-size:15px;margin-bottom:8px;">Noch keine Gewohnheiten</div>');
+    h.push('<div style="color:#777;font-size:13px;margin-bottom:20px;">Starte mit einer kleinen Gewohnheit.<br>Ein Tag nach dem anderen.</div>');
+    h.push('<div style="display:inline-block;padding:14px 26px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:14px;font-weight:bold;font-size:15px;cursor:pointer;box-shadow:0 6px 20px rgba(168,85,247,0.35);" onclick="openHabitCreate()">+ Erste Gewohnheit</div>');
+    h.push('</div>');
+  }else{
+    h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;"><div style="color:#fff;font-size:15px;font-weight:bold;">Heute</div><div style="padding:8px 14px;background:rgba(168,85,247,0.15);color:#c084fc;border-radius:10px;font-size:13px;font-weight:bold;cursor:pointer;" onclick="openHabitCreate()">+ Neu</div></div>');
+    for(var j=0;j<habits.length;j++){
+      var hb=habits[j],done=_isDoneToday(hb);
+      var isBest=(hb.currentStreak||0)>0&&(hb.currentStreak||0)>=(hb.bestStreak||0);
+      var typeBadge=hb.type==='avoid'?'🚫 Ohne':'✅ Tun';
+      h.push('<div style="'+cs+'">');
+      h.push('<div style="display:flex;gap:16px;align-items:center;">');
+      h.push('<div style="cursor:pointer;" onclick="habitToggleTab(\''+hb.id+'\')">'+_ringB(hb.currentStreak||0,done,92)+'</div>');
+      h.push('<div style="flex:1;min-width:0;">');
+      h.push('<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="font-size:20px;">'+hb.emoji+'</span><span style="color:#fff;font-weight:bold;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+_heg(hb.name)+'</span></div>');
+      h.push('<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">');
+      h.push('<span style="font-size:10px;color:#888;background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:6px;">'+typeBadge+'</span>');
+      h.push('<span style="font-size:11px;color:#bbb;">Best: '+(hb.bestStreak||0)+(isBest?' 🏆':'')+'</span>');
+      h.push('</div>');
+      h.push('<div style="margin-top:8px;"><div style="padding:8px 0;border-radius:10px;text-align:center;font-weight:bold;font-size:13px;cursor:pointer;background:'+(done?'rgba(34,197,94,0.15)':'linear-gradient(135deg,#a855f7,#ec4899)')+';color:'+(done?'#22c55e':'#fff')+';" onclick="habitToggleTab(\''+hb.id+'\')">'+(done?'✓ Heute erledigt':'Jetzt abhaken')+'</div></div>');
+      h.push('</div>');
+      h.push('<div style="cursor:pointer;font-size:18px;color:#888;padding:4px;align-self:flex-start;" onclick="openHabitEdit(\''+hb.id+'\')">✏️</div>');
+      h.push('</div>');
+      h.push(_week7(hb));
+      h.push('</div>');
+    }
+  }
+
+  h.push('<div style="'+cs+'background:linear-gradient(135deg,rgba(251,191,36,0.08),rgba(245,158,11,0.04));border-color:rgba(251,191,36,0.2);">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;">');
+  h.push('<span style="font-size:30px;'+(pendingChests>0?'':'opacity:0.4;')+'">🎁</span>');
+  h.push('<div style="flex:1;"><div style="color:'+(pendingChests>0?'#fbbf24':'#888')+';font-weight:bold;font-size:14px;">Belohnungen</div>');
+  if(pendingChests>0){h.push('<div style="color:#ddd;font-size:12px;">'+pendingChests+' Truhe'+(pendingChests>1?'n':'')+' wartet'+(pendingChests>1?'en':'')+' auf dich!</div>');}
+  else{h.push('<div style="color:#888;font-size:12px;">Erreiche Meilensteine (🔥3, 7, 14, 30...) für Boni.</div>');}
+  h.push('</div></div>');
+  if(pendingChests>0){h.push('<div style="margin-top:12px;padding:12px;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#000;border-radius:12px;text-align:center;font-weight:bold;cursor:pointer;font-size:14px;" onclick="if(typeof openChests===\'function\')openChests();else toast(\'Truhen-Öffnen kommt in Teil C 🎁\')">🎁 Belohnungen öffnen</div>');}
+  h.push('</div>');
+
+  h.push('<div style="'+cs+'cursor:pointer;" onclick="if(typeof openAchievements===\'function\')openAchievements();else toast(\'Erfolge kommen in Teil D 🏆\')">');
+  h.push('<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:28px;">🏆</span><div style="flex:1;"><div style="color:#fff;font-weight:bold;font-size:14px;">Erfolge</div><div style="color:#888;font-size:12px;">'+achCount+' freigeschaltet</div></div><span style="color:#888;font-size:20px;">›</span></div>');
+  h.push('</div>');
+
+  h.push('</div>');
+  _habitTabOv.innerHTML=h.join('');
+}
+
+var _eEmoji='🎯',_eType='do',_eId=null;
+window.openHabitEdit=function(id){
+  var hb=_findHabit(id);if(!hb)return;
+  _eId=id;_eEmoji=hb.emoji;_eType=hb.type;
+  var ov=document.getElementById('habitEditOv');
+  if(!ov){ov=document.createElement('div');ov.id='habitEditOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100001;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:14px;';
+  var ls='font-size:12px;color:#999;display:block;margin-bottom:6px;font-weight:600;';
+  var h=[];
+  h.push('<div style="background:linear-gradient(180deg,#1e1a2e,#16131f);border-radius:20px;padding:26px;width:calc(100% - 36px);max-width:420px;max-height:88vh;overflow-y:auto;border:1px solid rgba(168,85,247,0.25);" onclick="event.stopPropagation()">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;"><h3 style="margin:0;color:#fff;font-size:19px;">✏️ Bearbeiten</h3><div style="width:34px;height:34px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:#fff;" onclick="document.getElementById(\'habitEditOv\').style.display=\'none\'">✕</div></div>');
+  h.push('<label style="'+ls+'">Art</label>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:18px;">');
+  h.push('<div id="heDo" onclick="habitEditType(\'do\')" style="flex:1;padding:14px;border-radius:12px;text-align:center;cursor:pointer;font-weight:bold;font-size:13px;background:'+(_eType==='do'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)')+';color:'+(_eType==='do'?'#fff':'#aaa')+';">✅ Tun</div>');
+  h.push('<div id="heAvoid" onclick="habitEditType(\'avoid\')" style="flex:1;padding:14px;border-radius:12px;text-align:center;cursor:pointer;font-weight:bold;font-size:13px;background:'+(_eType==='avoid'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)')+';color:'+(_eType==='avoid'?'#fff':'#aaa')+';">🚫 Vermeiden</div>');
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Name</label>');
+  h.push('<input id="habitEditName" value="'+_heg(hb.name)+'" style="'+is+'">');
+  h.push('<label style="'+ls+'">Symbol</label>');
+  h.push('<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">');
+  for(var i=0;i<HABIT_EMOJIS.length;i++){var em=HABIT_EMOJIS[i];h.push('<div class="hEmoE" data-em="'+em+'" onclick="habitEditEmoji(\''+em+'\')" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;border:2px solid '+(em===_eEmoji?'#a855f7':'transparent')+';">'+em+'</div>');}
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Wochenziel</label>');
+  h.push('<select id="habitEditGoal" style="'+is+'">');
+  for(var g=7;g>=3;g--){h.push('<option value="'+g+'"'+((hb.weeklyGoal||7)===g?' selected':'')+'>'+(g===7?'Jeden Tag (7/Woche)':g+' von 7 Tagen')+'</option>');}
+  h.push('</select>');
+  h.push('<div style="padding:16px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:14px;text-align:center;font-weight:bold;font-size:16px;cursor:pointer;margin-bottom:12px;box-shadow:0 6px 20px rgba(168,85,247,0.35);" onclick="habitEditSave()">💾 Speichern</div>');
+  h.push('<div style="padding:13px;background:rgba(220,53,69,0.12);border:1px solid rgba(220,53,69,0.25);color:#ef4444;border-radius:14px;text-align:center;font-weight:bold;font-size:14px;cursor:pointer;" onclick="habitDelete(\''+id+'\')">🗑️ Gewohnheit löschen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='flex';
+};
+window.habitEditType=function(t){
+  _eType=t;
+  var d=document.getElementById('heDo'),a=document.getElementById('heAvoid');
+  d.style.background=t==='do'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)';d.style.color=t==='do'?'#fff':'#aaa';
+  a.style.background=t==='avoid'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)';a.style.color=t==='avoid'?'#fff':'#aaa';
+};
+window.habitEditEmoji=function(em){_eEmoji=em;var all=document.querySelectorAll('.hEmoE');for(var i=0;i<all.length;i++){all[i].style.borderColor=all[i].getAttribute('data-em')===em?'#a855f7':'transparent';}};
+window.habitEditSave=function(){
+  var hb=_findHabit(_eId);if(!hb)return;
+  var nm=(document.getElementById('habitEditName').value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Name darf nicht leer sein','warn');return;}
+  hb.name=nm;hb.emoji=_eEmoji;hb.type=_eType;hb.weeklyGoal=parseInt(document.getElementById('habitEditGoal').value,10)||7;
+  save();
+  if(typeof toast==='function')toast('Gespeichert!');
+  document.getElementById('habitEditOv').style.display='none';
+  _renderHabitTab();
+};
+window.habitDelete=function(id){
+  if(!confirm('Diese Gewohnheit wirklich löschen? Streak geht verloren.'))return;
+  state.habits=state.habits.filter(function(x){return x.id!==id;});
+  save();
+  if(typeof toast==='function')toast('Gewohnheit gelöscht');
+  var eo=document.getElementById('habitEditOv');if(eo)eo.style.display='none';
+  _renderHabitTab();
+};
+
+function _injectHabitTab(){
+  if(document.getElementById('habitTabInj'))return;
+  var all=document.querySelectorAll('a,div,span,button');
+  for(var i=0;i<all.length;i++){
+    var el=all[i],txt=(el.textContent||'').trim();
+    if(txt.indexOf('Gesundheit')>=0&&txt.length<20&&el.offsetWidth>0&&el.id==='healthTabInj'){
+      var clone=el.cloneNode(false);
+      clone.id='habitTabInj';
+      clone.innerHTML='🎯 Habits';
+      clone.style.cursor='pointer';
+      clone.removeAttribute('onclick');
+      clone.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openHabitTab();});
+      el.parentElement.insertBefore(clone,el.nextSibling);
+      break;
+    }
+  }
+}
+var _hti=setInterval(function(){if(typeof state==='undefined')return;_injectHabitTab();if(document.getElementById('habitTabInj'))clearInterval(_hti);},3000);
+
+window.openHabitTab=window.openHabitTab;
 })();
 
 // === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
