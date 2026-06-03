@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.47';
+const APP_VERSION = '2.48';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -11286,6 +11286,145 @@ function _injectHabitTab(){
 var _hti=setInterval(function(){if(typeof state==='undefined')return;_injectHabitTab();if(document.getElementById('habitTabInj'))clearInterval(_hti);},3000);
 
 window.openHabitTab=window.openHabitTab;
+})();
+
+// === HABIT-TRACKER Teil C (Truhen + KI-Belohnungen) ===
+(function(){
+
+function _heg(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
+
+// Fallback-Tipps wenn keine KI verfuegbar (nach Stichwort im Habit-Namen)
+var FALLBACK={
+  'süß':['Dein Geschmackssinn wird empfindlicher – Obst schmeckt jetzt intensiver süß!','Probier zur Belohnung einen Bananen-Beeren-Smoothie: 1 Banane, 100g TK-Beeren, 150ml Milch, 1 TL Honig mixen.'],
+  'sdetox':['Dein Körper dankt es dir.','Trinke ein Glas Wasser mit frischer Zitrone als Belohnung.'],
+  'rauch':['Dein Geruchs- und Geschmackssinn erholt sich bereits.','Atemübung: 4 Sekunden ein, 7 halten, 8 aus. Beruhigt das Verlangen.'],
+  'zucker':['Deine Energie wird stabiler – keine Zucker-Achterbahn mehr.','Snack-Tipp: Eine Handvoll Nüsse hält länger satt als Süßes.'],
+  'fast':['Dein Körper verarbeitet wieder echte Nährstoffe.','Koch-Tipp: Selbstgemachte Bowl mit Reis, Gemüse und Ei – schnell & gesund.'],
+  'alkohol':['Besserer Schlaf und klarerer Kopf warten auf dich.','Probier eine Schorle aus Sprudel + Saft als festliches Getränk.'],
+  'aufgeräum':['Ordnung senkt nachweislich den Stresspegel.','Die 5-Dinge-Regel: Leg jeden Abend nur 5 Dinge an ihren Platz.'],
+  'wasser':['Gute Hydration verbessert Konzentration und Haut.','Tipp: Stell dir eine 1L-Flasche sichtbar hin – Sichtkontakt erinnert.'],
+  'sport':['Dein Körper baut gerade Kraft und Ausdauer auf.','Belohn dich mit Dehnübungen – sie beschleunigen die Regeneration.'],
+  'spazier':['Bewegung an frischer Luft hebt nachweislich die Stimmung.','Variiere morgen die Route – neue Eindrücke halten es spannend.'],
+  'lesen':['Lesen vor dem Schlaf verbessert die Schlafqualität.','Setz dir ein kleines Tagesziel: nur 10 Seiten reichen schon.'],
+  'meditat':['Regelmäßiges Innehalten senkt Stresshormone.','Probier morgen 1 Minute länger – steigere dich sanft.'],
+  'default':['Du baust gerade eine echte Gewohnheit auf – jeder Tag zählt!','Bleib dran: Nach 21 Tagen wird es zur Routine, nach 66 zur Selbstverständlichkeit.']
+};
+
+function _fallbackMsg(name){
+  var n=(name||'').toLowerCase();
+  for(var k in FALLBACK){if(k!=='default'&&n.indexOf(k)>=0)return FALLBACK[k];}
+  return FALLBACK['default'];
+}
+
+window.openChests=function(){
+  var chests=(state.gamification&&state.gamification.chests)?state.gamification.chests.filter(function(c){return !c.opened;}):[];
+  if(chests.length===0){if(typeof toast==='function')toast('Keine Belohnungen offen');return;}
+  _showChest(chests[0]);
+};
+
+function _showChest(chest){
+  var ov=document.getElementById('chestOv');
+  if(!ov){ov=document.createElement('div');ov.id='chestOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:100002;display:none;justify-content:center;align-items:center;padding:20px;box-sizing:border-box;';document.body.appendChild(ov);}
+  var h=[];
+  h.push('<div style="background:linear-gradient(180deg,#1e1a2e,#16131f);border-radius:24px;padding:32px 26px;width:100%;max-width:400px;text-align:center;border:1px solid rgba(251,191,36,0.3);box-shadow:0 0 50px rgba(251,191,36,0.2);">');
+  h.push('<div id="chestStage" style="min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;">');
+  h.push('<div id="chestBox" style="font-size:90px;cursor:pointer;animation:chestShake 1.2s ease-in-out infinite;filter:drop-shadow(0 0 20px rgba(251,191,36,0.6));" onclick="chestOpen()">🎁</div>');
+  h.push('<div style="color:#fbbf24;font-weight:bold;font-size:17px;margin-top:16px;">'+chest.emoji+' '+_heg(chest.habitName)+'</div>');
+  h.push('<div style="color:#ddd;font-size:14px;margin-top:4px;">🔥 '+chest.milestone+' Tage geschafft!</div>');
+  h.push('<div style="color:#888;font-size:12px;margin-top:14px;">Tippe auf die Truhe zum Öffnen</div>');
+  h.push('</div></div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='flex';
+  ov._chest=chest;
+  _ensureChestStyle();
+}
+
+function _ensureChestStyle(){
+  if(document.getElementById('chestStyle'))return;
+  var st=document.createElement('style');
+  st.id='chestStyle';
+  st.textContent='@keyframes chestShake{0%,100%{transform:rotate(0) scale(1);}25%{transform:rotate(-6deg) scale(1.05);}75%{transform:rotate(6deg) scale(1.05);}}@keyframes chestBurst{0%{transform:scale(0.3);opacity:0;}50%{transform:scale(1.3);opacity:1;}100%{transform:scale(1);opacity:1;}}@keyframes sparkFloat{0%{transform:translateY(0) scale(1);opacity:1;}100%{transform:translateY(-60px) scale(0);opacity:0;}}@keyframes rewardIn{0%{transform:translateY(20px);opacity:0;}100%{transform:translateY(0);opacity:1;}}';
+  document.head.appendChild(st);
+}
+
+window.chestOpen=function(){
+  var ov=document.getElementById('chestOv');
+  if(!ov||!ov._chest)return;
+  var chest=ov._chest;
+  var stage=document.getElementById('chestStage');
+  // Burst-Animation
+  var sparks='';
+  for(var i=0;i<8;i++){var ang=(i/8)*360;var dx=Math.cos(ang*Math.PI/180)*40;sparks+='<div style="position:absolute;font-size:20px;left:50%;top:50%;animation:sparkFloat 0.8s ease-out forwards;animation-delay:'+(i*0.04)+'s;transform:translateX('+dx+'px);">✨</div>';}
+  stage.innerHTML='<div style="position:relative;font-size:90px;animation:chestBurst 0.6s ease-out;filter:drop-shadow(0 0 30px rgba(251,191,36,0.9));">🎉'+sparks+'</div>';
+
+  // Mark als geoeffnet
+  for(var c=0;c<state.gamification.chests.length;c++){if(state.gamification.chests[c].id===chest.id){state.gamification.chests[c].opened=true;break;}}
+  save();
+
+  setTimeout(function(){_loadReward(chest,stage);},700);
+};
+
+function _renderReward(stage,chest,spruch,tipp,fromKI){
+  var h=[];
+  h.push('<div style="animation:rewardIn 0.5s ease-out;width:100%;">');
+  h.push('<div style="font-size:54px;margin-bottom:10px;">'+chest.emoji+'</div>');
+  h.push('<div style="color:#fbbf24;font-weight:800;font-size:20px;margin-bottom:4px;">'+chest.milestone+' Tage '+_heg(chest.habitName)+'!</div>');
+  h.push('<div style="width:50px;height:3px;background:linear-gradient(90deg,#a855f7,#ec4899);margin:14px auto;border-radius:3px;"></div>');
+  h.push('<div style="color:#eee;font-size:15px;line-height:1.6;margin-bottom:18px;">'+_heg(spruch)+'</div>');
+  if(tipp){
+    h.push('<div style="background:linear-gradient(135deg,rgba(168,85,247,0.12),rgba(236,72,153,0.08));border:1px solid rgba(168,85,247,0.2);border-radius:14px;padding:16px;text-align:left;margin-bottom:18px;">');
+    h.push('<div style="color:#c084fc;font-size:11px;font-weight:bold;margin-bottom:8px;">💡 DEIN BONUS-TIPP</div>');
+    h.push('<div style="color:#ddd;font-size:14px;line-height:1.6;">'+_heg(tipp)+'</div>');
+    h.push('</div>');
+  }
+  if(fromKI){h.push('<div style="color:#666;font-size:10px;margin-bottom:14px;">🤖 KI-generiert für dich</div>');}
+  h.push('<div style="padding:15px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:14px;font-weight:bold;font-size:16px;cursor:pointer;box-shadow:0 6px 20px rgba(168,85,247,0.35);" onclick="chestClose()">Stark! Weiter 🔥</div>');
+  h.push('</div>');
+  stage.innerHTML=h.join('');
+}
+
+function _loadReward(chest,stage){
+  stage.innerHTML='<div style="padding:30px 0;"><div style="font-size:30px;margin-bottom:10px;">✨</div><div style="color:#999;font-size:13px;">Deine Belohnung wird vorbereitet...</div></div>';
+
+  if(!settings.openrouterKey){
+    var fb=_fallbackMsg(chest.habitName);
+    setTimeout(function(){_renderReward(stage,chest,fb[0],fb[1],false);},500);
+    return;
+  }
+
+  var typeTxt=chest.type==='avoid'?'vermeidet erfolgreich':'macht erfolgreich regelmäßig';
+  var pr='Du bist ein motivierender, herzlicher Coach. Ein Nutzer '+typeTxt+' diese Gewohnheit: "'+chest.habitName+'" und hat gerade '+chest.milestone+' Tage am Stück geschafft.\n\nGib eine kurze, persönliche Belohnung in EXAKT diesem JSON-Format (nur JSON, nichts davor/danach):\n{"spruch":"Ein motivierender, warmer Glückwunsch-Satz der erklärt was im Körper/Leben gerade Positives passiert (max 2 Sätze)","tipp":"Ein konkreter, umsetzbarer Tipp oder bei Ernährung ein einfaches Rezept mit Zutaten als Belohnung/Hilfe zum Weitermachen (max 2-3 Sätze)"}\n\nAuf Deutsch, persönlich mit Du. Bei Verzicht-Gewohnheiten (ohne Süßes etc.) gib eine gesunde Alternative.';
+
+  fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openrouterKey},
+    body:JSON.stringify({model:settings.ocrModel||'google/gemini-flash-1.5-8b',messages:[{role:'user',content:pr}],temperature:0.7,max_tokens:400})
+  }).then(function(r){return r.json();}).then(function(d){
+    var t=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
+    var spruch='',tipp='';
+    try{var m=t.match(/\{[\s\S]*\}/);if(m){var o=JSON.parse(m[0]);spruch=o.spruch||'';tipp=o.tipp||'';}}catch(e){}
+    if(!spruch){var fb2=_fallbackMsg(chest.habitName);spruch=fb2[0];tipp=fb2[1];_renderReward(stage,chest,spruch,tipp,false);}
+    else{_renderReward(stage,chest,spruch,tipp,true);}
+  }).catch(function(){
+    var fb3=_fallbackMsg(chest.habitName);
+    _renderReward(stage,chest,fb3[0],fb3[1],false);
+  });
+}
+
+window.chestClose=function(){
+  var ov=document.getElementById('chestOv');
+  if(ov)ov.style.display='none';
+  // Naechste offene Truhe?
+  var rest=(state.gamification&&state.gamification.chests)?state.gamification.chests.filter(function(c){return !c.opened;}):[];
+  if(rest.length>0){setTimeout(function(){_showChest(rest[0]);},300);}
+  else{
+    if(typeof _renderHabitTab==='function'){}
+    var tabOv=document.getElementById('habitTabOv');
+    if(tabOv&&tabOv.style.display==='block'&&typeof window.openHabitTab==='function'){window.openHabitTab();}
+  }
+};
+
+window.openChests=window.openChests;
 })();
 
 // === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
