@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.48';
+const APP_VERSION = '2.49';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -11425,6 +11425,176 @@ window.chestClose=function(){
 };
 
 window.openChests=window.openChests;
+})();
+
+// === HABIT-TRACKER Teil D (Achievements / Erfolge) ===
+(function(){
+
+function _today(){return new Date().toISOString().split('T')[0];}
+
+// 15 Achievements. secret=true -> erst nach Freischaltung sichtbar
+var ACHIEVEMENTS=[
+  {id:'first_spark',  icon:'✨',name:'Erster Funke',     desc:'Lege deine erste Gewohnheit an',          secret:false},
+  {id:'first_check',  icon:'✅',name:'Los geht\'s',       desc:'Hake zum ersten Mal eine Gewohnheit ab', secret:false},
+  {id:'streak_3',     icon:'🔥',name:'Dranbleiber',      desc:'Erreiche eine 3-Tage-Serie',             secret:false},
+  {id:'streak_7',     icon:'⚡',name:'Wochen-Krieger',    desc:'Erreiche eine 7-Tage-Serie',             secret:false},
+  {id:'streak_14',    icon:'💪',name:'Eiserner Wille',   desc:'Erreiche eine 14-Tage-Serie',            secret:false},
+  {id:'streak_30',    icon:'🏅',name:'Monats-Meister',   desc:'Erreiche eine 30-Tage-Serie',            secret:false},
+  {id:'streak_100',   icon:'👑',name:'Unaufhaltsam',     desc:'Erreiche eine 100-Tage-Serie',           secret:true},
+  {id:'multi_3',      icon:'🎯',name:'Vielseitig',       desc:'Pflege 3 Gewohnheiten gleichzeitig',     secret:false},
+  {id:'multi_5',      icon:'🌟',name:'Allrounder',       desc:'Pflege 5 Gewohnheiten gleichzeitig',     secret:true},
+  {id:'perfect_day',  icon:'🎊',name:'Perfekter Tag',    desc:'Hake an einem Tag ALLE Gewohnheiten ab', secret:false},
+  {id:'checkins_10',  icon:'📈',name:'Im Flow',          desc:'Sammle 10 Erledigungen insgesamt',       secret:false},
+  {id:'checkins_50',  icon:'🚀',name:'Durchstarter',     desc:'Sammle 50 Erledigungen insgesamt',       secret:true},
+  {id:'checkins_100', icon:'💎',name:'Diamant-Disziplin',desc:'Sammle 100 Erledigungen insgesamt',      secret:true},
+  {id:'first_chest',  icon:'🎁',name:'Schatzsucher',     desc:'Öffne deine erste Belohnungs-Truhe',     secret:false},
+  {id:'comeback',     icon:'🔄',name:'Comeback',         desc:'Baue nach einem Rückschlag wieder 3 Tage auf', secret:true}
+];
+
+function _has(id){return state.gamification&&state.gamification.achievements&&state.gamification.achievements.indexOf(id)>=0;}
+function _grant(id){
+  if(!state.gamification)state.gamification={achievements:[],chests:[],totalCheckins:0,lastOpenDate:''};
+  if(!state.gamification.achievements)state.gamification.achievements=[];
+  if(_has(id))return false;
+  state.gamification.achievements.push(id);
+  var a=null;for(var i=0;i<ACHIEVEMENTS.length;i++){if(ACHIEVEMENTS[i].id===ACHIEVEMENTS[i].id&&ACHIEVEMENTS[i].id===id){a=ACHIEVEMENTS[i];break;}}
+  if(a)_celebrate(a);
+  return true;
+}
+
+window.checkAchievements=function(){
+  if(typeof state==='undefined'||!state)return;
+  var habits=state.habits||[];
+  var g=state.gamification||{};
+  var maxStreak=0,bestEver=0;
+  for(var i=0;i<habits.length;i++){
+    if((habits[i].currentStreak||0)>maxStreak)maxStreak=habits[i].currentStreak||0;
+    if((habits[i].bestStreak||0)>bestEver)bestEver=habits[i].bestStreak||0;
+  }
+  var topStreak=Math.max(maxStreak,bestEver);
+  var total=g.totalCheckins||0;
+
+  if(habits.length>=1)_grant('first_spark');
+  if(total>=1)_grant('first_check');
+  if(topStreak>=3)_grant('streak_3');
+  if(topStreak>=7)_grant('streak_7');
+  if(topStreak>=14)_grant('streak_14');
+  if(topStreak>=30)_grant('streak_30');
+  if(topStreak>=100)_grant('streak_100');
+  if(habits.length>=3)_grant('multi_3');
+  if(habits.length>=5)_grant('multi_5');
+  if(total>=10)_grant('checkins_10');
+  if(total>=50)_grant('checkins_50');
+  if(total>=100)_grant('checkins_100');
+
+  // Perfekter Tag: alle Habits heute erledigt (min 1 Habit)
+  if(habits.length>=1){
+    var allDone=true;
+    for(var j=0;j<habits.length;j++){if(habits[j].lastDone!==_today()){allDone=false;break;}}
+    if(allDone)_grant('perfect_day');
+  }
+
+  // Erste Truhe geoeffnet
+  if(g.chests){for(var c=0;c<g.chests.length;c++){if(g.chests[c].opened){_grant('first_chest');break;}}}
+
+  // Comeback: ein Habit hatte mal hoeheren bestStreak, war auf 0, jetzt wieder >=3
+  for(var k=0;k<habits.length;k++){
+    var hb=habits[k];
+    if((hb.bestStreak||0)>(hb.currentStreak||0)&&(hb.currentStreak||0)>=3){_grant('comeback');break;}
+  }
+};
+
+function _celebrate(a){
+  var ov=document.getElementById('achPopOv');
+  if(!ov){ov=document.createElement('div');ov.id='achPopOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;z-index:100003;display:none;justify-content:center;align-items:center;pointer-events:none;';document.body.appendChild(ov);}
+  _ensureAchStyle();
+  ov.innerHTML='<div style="background:linear-gradient(135deg,#1e1a2e,#16131f);border:2px solid #fbbf24;border-radius:20px;padding:24px 28px;text-align:center;box-shadow:0 0 40px rgba(251,191,36,0.4);animation:achPop 0.5s cubic-bezier(0.34,1.56,0.64,1);max-width:320px;"><div style="font-size:11px;color:#fbbf24;font-weight:bold;letter-spacing:1px;margin-bottom:8px;">🏆 ERFOLG FREIGESCHALTET</div><div style="font-size:52px;margin:8px 0;animation:achSpin 0.8s ease-out;">'+a.icon+'</div><div style="color:#fff;font-weight:800;font-size:18px;">'+a.name+'</div><div style="color:#bbb;font-size:13px;margin-top:4px;">'+a.desc+'</div></div>';
+  ov.style.display='flex';
+  if(typeof toast==='function')toast('🏆 Erfolg: '+a.name+'!');
+  setTimeout(function(){if(ov)ov.style.display='none';},2600);
+}
+
+function _ensureAchStyle(){
+  if(document.getElementById('achStyle'))return;
+  var st=document.createElement('style');
+  st.id='achStyle';
+  st.textContent='@keyframes achPop{0%{transform:scale(0.5);opacity:0;}100%{transform:scale(1);opacity:1;}}@keyframes achSpin{0%{transform:rotate(-180deg) scale(0);}100%{transform:rotate(0) scale(1);}}';
+  document.head.appendChild(st);
+}
+
+window.openAchievements=function(){
+  var ov=document.getElementById('achOv');
+  if(!ov){ov=document.createElement('div');ov.id='achOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0a14;z-index:100000;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch;';document.body.appendChild(ov);}
+  var unlocked=(state.gamification&&state.gamification.achievements)?state.gamification.achievements:[];
+  var h=[];
+  h.push('<div style="max-width:440px;margin:0 auto;padding:0 12px 80px;">');
+  h.push('<div style="background:linear-gradient(135deg,#fbbf24,#f59e0b);border-radius:0 0 24px 24px;padding:24px 20px 22px;margin-bottom:18px;position:relative;">');
+  h.push('<div style="position:absolute;top:16px;right:16px;width:36px;height:36px;background:rgba(0,0,0,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:#fff;" onclick="document.getElementById(\'achOv\').style.display=\'none\'">✕</div>');
+  h.push('<div style="font-size:34px;margin-bottom:6px;">🏆</div>');
+  h.push('<h2 style="margin:0;color:#fff;font-size:23px;">Erfolge</h2>');
+  h.push('<div style="color:rgba(255,255,255,0.9);font-size:13px;margin-top:4px;">'+unlocked.length+' von '+ACHIEVEMENTS.length+' freigeschaltet</div>');
+  var pct=Math.round((unlocked.length/ACHIEVEMENTS.length)*100);
+  h.push('<div style="margin-top:14px;background:rgba(0,0,0,0.2);border-radius:6px;height:8px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:#fff;border-radius:6px;transition:width 0.6s;"></div></div>');
+  h.push('</div>');
+
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">');
+  for(var i=0;i<ACHIEVEMENTS.length;i++){
+    var a=ACHIEVEMENTS[i];
+    var got=unlocked.indexOf(a.id)>=0;
+    var showSecret=a.secret&&!got;
+    var icon=showSecret?'❓':a.icon;
+    var name=showSecret?'Geheim':a.name;
+    var desc=showSecret?'Spiele weiter, um es freizuschalten':a.desc;
+    var bg=got?'linear-gradient(135deg,rgba(251,191,36,0.15),rgba(245,158,11,0.08))':'rgba(255,255,255,0.04)';
+    var bd=got?'rgba(251,191,36,0.35)':'rgba(255,255,255,0.07)';
+    var iconStyle=got?'filter:drop-shadow(0 0 8px rgba(251,191,36,0.5));':'filter:grayscale(1);opacity:0.4;';
+    h.push('<div style="background:'+bg+';border:1px solid '+bd+';border-radius:16px;padding:18px 14px;text-align:center;position:relative;">');
+    if(got)h.push('<div style="position:absolute;top:8px;right:8px;font-size:14px;">✓</div>');
+    h.push('<div style="font-size:40px;margin-bottom:8px;'+iconStyle+'">'+icon+'</div>');
+    h.push('<div style="color:'+(got?'#fff':'#888')+';font-weight:bold;font-size:13px;margin-bottom:4px;">'+name+'</div>');
+    h.push('<div style="color:#888;font-size:10px;line-height:1.4;">'+desc+'</div>');
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  h.push('<div style="margin-top:18px;padding:14px;background:rgba(255,255,255,0.05);border-radius:14px;text-align:center;cursor:pointer;color:#fff;font-weight:bold;" onclick="document.getElementById(\'achOv\').style.display=\'none\'">Zurück</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='block';
+  ov.scrollTop=0;
+};
+
+// habitToggle wrappen -> nach jedem Abhaken Achievements pruefen
+var _waitToggle=setInterval(function(){
+  if(typeof window.habitToggle!=='function')return;
+  clearInterval(_waitToggle);
+  var _origToggle=window.habitToggle;
+  window.habitToggle=function(id,ev){
+    _origToggle(id,ev);
+    setTimeout(function(){if(typeof window.checkAchievements==='function')window.checkAchievements();},50);
+  };
+},300);
+
+// chestOpen wrappen -> Schatzsucher-Achievement
+var _waitChest=setInterval(function(){
+  if(typeof window.chestOpen!=='function')return;
+  clearInterval(_waitChest);
+  var _origChest=window.chestOpen;
+  window.chestOpen=function(){
+    _origChest();
+    setTimeout(function(){if(typeof window.checkAchievements==='function')window.checkAchievements();},100);
+  };
+},300);
+
+// Beim Start einmal pruefen (fuer bestehende Daten)
+var _waitState=setInterval(function(){
+  if(typeof state==='undefined'||!state)return;
+  clearInterval(_waitState);
+  setTimeout(function(){if(typeof window.checkAchievements==='function')window.checkAchievements();},2000);
+},500);
+
+window.openAchievements=window.openAchievements;
+window.checkAchievements=window.checkAchievements;
 })();
 
 // === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
