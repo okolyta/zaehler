@@ -1483,7 +1483,7 @@ button, .btn, input[type="button"], input[type="submit"]{
 const STORE_KEY = 'zaehler_v1';
 const SETTINGS_KEY = 'zaehler_settings_v1';
 const BACKUP_KEY = 'zaehler_backup_v1';
-const APP_VERSION = '2.45';
+const APP_VERSION = '2.46';
 
 const METER_TYPES = {
   strom:      {label:'Strom',         unit:'kWh',  icon:'⚡', color:'#ffd60a'},
@@ -1635,7 +1635,7 @@ const REMINDER_PRESETS = [
   {days:7, label:'1 Woche'}, {days:14, label:'2 Wochen'}, {days:30, label:'1 Monat'}
 ];
 
-let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [], pets: [], emergencyInfo: {}, parking: {}, healthItems: [], permethrinItems: [] };
+let state = { properties: [], readings: [], appointments: [], documents: [], costs: [], wasteSchedule: [], vehicles: [], vehicleLogs: [], pets: [], emergencyInfo: {}, parking: {}, healthItems: [], permethrinItems: [], habits: [], gamification: {} };
 let settings = {
   leadDays: 7, theme: 'dark', gClientId: '', lastSync: 0,
   themeStyle: 'apple', themeMode: 'dark',
@@ -1722,6 +1722,8 @@ function load(){
   if(!state.parking) state.parking={};
   if(!state.healthItems) state.healthItems=[];
   if(!state.permethrinItems) state.permethrinItems=[];
+  if(!state.habits) state.habits=[];
+  if(!state.gamification) state.gamification={achievements:[],chests:[],totalCheckins:0,lastOpenDate:''};
   if(!settings.docCategories || !settings.docCategories.length){
     settings.docCategories=[
       {id:'rechnung',    label:'Rechnung',             icon:'📋'},
@@ -1764,6 +1766,8 @@ save = function(){
     if(state.pets&&state.pets.length>0)localStorage.setItem('zp_pets_bak',JSON.stringify(state.pets));
     if(state.emergencyInfo&&Object.keys(state.emergencyInfo).length>0)localStorage.setItem('zp_emerg_bak',JSON.stringify(state.emergencyInfo));
     if(state.parking&&state.parking.active)localStorage.setItem('zp_park_bak',JSON.stringify(state.parking));
+    if(state.habits&&state.habits.length>0)localStorage.setItem('zp_habits_bak',JSON.stringify(state.habits));
+    if(state.gamification&&state.gamification.totalCheckins>0)localStorage.setItem('zp_gami_bak',JSON.stringify(state.gamification));
   }catch(e){}
 };
 var saveData = save;
@@ -7387,6 +7391,8 @@ function mergeState(local, remote){
     pets: mergeArr(local.pets||[], remote.pets||[]),
     healthItems: mergeArr(local.healthItems||[], remote.healthItems||[]),
     permethrinItems: mergeArr(local.permethrinItems||[], remote.permethrinItems||[]),
+    habits: mergeArr(local.habits||[], remote.habits||[]),
+    gamification: (local.gamification && (local.gamification.totalCheckins||0) >= (remote.gamification ? (remote.gamification.totalCheckins||0) : 0)) ? local.gamification : (remote.gamification || local.gamification || {achievements:[],chests:[],totalCheckins:0,lastOpenDate:''}),
     emergencyInfo: (local.emergencyInfo && Object.keys(local.emergencyInfo).length > 0)
       ? local.emergencyInfo
       : (remote.emergencyInfo || {}),
@@ -10857,6 +10863,216 @@ setInterval(function(){
 
 window.openHealthHub=openHealthHub;
 })();
+// === HABIT-TRACKER & GAMIFICATION (Teil A: Basis + Dashboard-Ringe) ===
+(function(){
+
+var MILESTONES=[3,7,14,30,60,100,200,365];
+var HABIT_EMOJIS=['🍫','🚭','🍔','🍺','🥤','☕','📱','🧹','💧','🚶','🏃','🏋️','📚','🧘','🥗','😴','💊','🪥','🌅','✍️','🎯','🌱'];
+
+function _today(){return new Date().toISOString().split('T')[0];}
+function _yest(){var d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];}
+function _heg(s){return s?(s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
+function _findHabit(id){for(var i=0;i<state.habits.length;i++){if(state.habits[i].id===id)return state.habits[i];}return null;}
+function _nextMs(streak){for(var i=0;i<MILESTONES.length;i++){if(MILESTONES[i]>streak)return MILESTONES[i];}return MILESTONES[MILESTONES.length-1];}
+function _prevMs(streak){var p=0;for(var i=0;i<MILESTONES.length;i++){if(MILESTONES[i]<=streak)p=MILESTONES[i];else break;}return p;}
+
+function _refreshStreaks(){
+  if(!state.habits)return;
+  var t=_today(),y=_yest();
+  for(var i=0;i<state.habits.length;i++){
+    var hb=state.habits[i];
+    if(!hb.history)hb.history=[];
+    if(hb.lastDone===t||hb.lastDone===y)continue;
+    if(hb.currentStreak>0)hb.currentStreak=0;
+  }
+}
+function _isDoneToday(hb){return hb.lastDone===_today();}
+
+function _ring(streak,done,size){
+  var r=(size/2)-6,cx=size/2,cy=size/2,circ=2*Math.PI*r;
+  var next=_nextMs(streak),prev=_prevMs(streak);
+  var pct=next>prev?Math.min(1,(streak-prev)/(next-prev)):1;
+  if(streak===0)pct=0.03;
+  var offset=circ*(1-pct);
+  var gid='hg'+Math.random().toString(36).slice(2,8);
+  var c1=done?'#22c55e':'#a855f7',c2=done?'#16a34a':'#ec4899';
+  var glow=done?'filter:drop-shadow(0 0 5px rgba(34,197,94,0.7));':(streak>=7?'filter:drop-shadow(0 0 5px rgba(236,72,153,0.6));':'');
+  var center;
+  if(done){
+    center='<div style="font-size:'+(size>80?'34px':'21px')+';color:#22c55e;font-weight:bold;line-height:1;">✓</div>';
+  }else{
+    center='<div style="font-size:'+(size>80?'22px':'14px')+';line-height:1;">🔥</div><div style="font-size:'+(size>80?'26px':'16px')+';font-weight:800;color:#fff;line-height:1.1;">'+streak+'</div>';
+  }
+  var svg='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="transform:rotate(-90deg);display:block;"><defs><linearGradient id="'+gid+'" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="'+c1+'"/><stop offset="100%" stop-color="'+c2+'"/></linearGradient></defs><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="url(#'+gid+')" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+circ+'" stroke-dashoffset="'+offset+'" style="transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1);'+glow+'"/></svg>';
+  return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0;">'+svg+'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">'+center+'</div></div>';
+}
+
+window.habitToggle=function(id,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var hb=_findHabit(id);if(!hb)return;
+  if(!hb.history)hb.history=[];
+  var t=_today();
+  if(hb.lastDone===t){
+    hb.history=hb.history.filter(function(d){return d!==t;});
+    hb.currentStreak=Math.max(0,hb.currentStreak-1);
+    hb.lastDone=hb.history.length?hb.history[hb.history.length-1]:'';
+  }else{
+    hb.history.push(t);
+    hb.currentStreak=(hb.currentStreak||0)+1;
+    hb.lastDone=t;
+    if(hb.currentStreak>(hb.bestStreak||0))hb.bestStreak=hb.currentStreak;
+    if(!state.gamification.totalCheckins)state.gamification.totalCheckins=0;
+    state.gamification.totalCheckins++;
+    if(!hb.milestonesShown)hb.milestonesShown=[];
+    if(MILESTONES.indexOf(hb.currentStreak)>=0&&hb.milestonesShown.indexOf(hb.currentStreak)<0){
+      hb.milestonesShown.push(hb.currentStreak);
+      if(!state.gamification.chests)state.gamification.chests=[];
+      state.gamification.chests.push({id:uid(),habitId:hb.id,habitName:hb.name,emoji:hb.emoji,milestone:hb.currentStreak,type:hb.type,opened:false,createdAt:Date.now()});
+      if(typeof toast==='function')toast('🎁 Belohnung freigeschaltet: '+hb.currentStreak+' Tage '+hb.name+'!');
+    }else{
+      if(typeof toast==='function')toast('🔥 '+hb.name+': '+hb.currentStreak+' Tage!');
+    }
+  }
+  save();
+  _injectDashHabits(true);
+};
+
+var _selEmoji='🎯',_selType='do';
+window.openHabitCreate=function(){
+  _selEmoji='🎯';_selType='do';
+  var ov=document.getElementById('habitCreateOv');
+  if(!ov){ov=document.createElement('div');ov.id='habitCreateOv';ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:100001;display:none;justify-content:center;align-items:center;overflow-y:auto;';ov.addEventListener('click',function(e){if(e.target===ov)ov.style.display='none';});document.body.appendChild(ov);}
+  var is='width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:14px;';
+  var ls='font-size:12px;color:#999;display:block;margin-bottom:6px;font-weight:600;';
+  var h=[];
+  h.push('<div style="background:linear-gradient(180deg,#1e1a2e,#16131f);border-radius:20px;padding:26px;width:calc(100% - 36px);max-width:420px;max-height:88vh;overflow-y:auto;border:1px solid rgba(168,85,247,0.25);" onclick="event.stopPropagation()">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;"><h3 style="margin:0;color:#fff;font-size:19px;">🎯 Neue Gewohnheit</h3><div style="width:34px;height:34px;background:rgba(255,255,255,0.08);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:#fff;" onclick="document.getElementById(\'habitCreateOv\').style.display=\'none\'">✕</div></div>');
+  h.push('<label style="'+ls+'">Art der Gewohnheit</label>');
+  h.push('<div style="display:flex;gap:10px;margin-bottom:18px;">');
+  h.push('<div id="htDo" onclick="habitSelType(\'do\')" style="flex:1;padding:14px;border-radius:12px;text-align:center;cursor:pointer;font-weight:bold;font-size:13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;">✅ Tun<div style="font-size:10px;font-weight:normal;opacity:0.85;margin-top:2px;">Tage mit...</div></div>');
+  h.push('<div id="htAvoid" onclick="habitSelType(\'avoid\')" style="flex:1;padding:14px;border-radius:12px;text-align:center;cursor:pointer;font-weight:bold;font-size:13px;background:rgba(255,255,255,0.06);color:#aaa;">🚫 Vermeiden<div style="font-size:10px;font-weight:normal;opacity:0.85;margin-top:2px;">Tage ohne...</div></div>');
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Name</label>');
+  h.push('<input id="habitName" placeholder="z.B. Ohne Süßes, Aufgeräumt, Spazieren" style="'+is+'">');
+  h.push('<label style="'+ls+'">Symbol wählen</label>');
+  h.push('<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">');
+  for(var i=0;i<HABIT_EMOJIS.length;i++){var em=HABIT_EMOJIS[i];h.push('<div class="hEmo" data-em="'+em+'" onclick="habitSelEmoji(\''+em+'\')" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;border:2px solid '+(em==='🎯'?'#a855f7':'transparent')+';">'+em+'</div>');}
+  h.push('</div>');
+  h.push('<label style="'+ls+'">Wochenziel (optional)</label>');
+  h.push('<select id="habitGoal" style="'+is+'"><option value="7">Jeden Tag (7/Woche)</option><option value="6">6 von 7 Tagen</option><option value="5">5 von 7 Tagen</option><option value="4">4 von 7 Tagen</option><option value="3">3 von 7 Tagen</option></select>');
+  h.push('<div style="padding:16px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:14px;text-align:center;font-weight:bold;font-size:16px;cursor:pointer;box-shadow:0 6px 20px rgba(168,85,247,0.35);" onclick="habitSave()">✨ Gewohnheit erstellen</div>');
+  h.push('</div>');
+  ov.innerHTML=h.join('');
+  ov.style.display='flex';
+};
+window.habitSelType=function(t){
+  _selType=t;
+  var d=document.getElementById('htDo'),a=document.getElementById('htAvoid');
+  d.style.background=t==='do'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)';
+  d.style.color=t==='do'?'#fff':'#aaa';
+  a.style.background=t==='avoid'?'linear-gradient(135deg,#a855f7,#ec4899)':'rgba(255,255,255,0.06)';
+  a.style.color=t==='avoid'?'#fff':'#aaa';
+};
+window.habitSelEmoji=function(em){
+  _selEmoji=em;
+  var all=document.querySelectorAll('.hEmo');
+  for(var i=0;i<all.length;i++){all[i].style.borderColor=all[i].getAttribute('data-em')===em?'#a855f7':'transparent';}
+};
+window.habitSave=function(){
+  var nm=(document.getElementById('habitName').value||'').trim();
+  if(!nm){if(typeof toast==='function')toast('Bitte einen Namen eingeben','warn');return;}
+  if(!state.habits)state.habits=[];
+  state.habits.push({id:uid(),name:nm,emoji:_selEmoji,type:_selType,weeklyGoal:parseInt(document.getElementById('habitGoal').value,10)||7,currentStreak:0,bestStreak:0,lastDone:'',history:[],milestonesShown:[],createdAt:Date.now()});
+  save();
+  if(typeof toast==='function')toast('Gewohnheit erstellt! 🎯');
+  document.getElementById('habitCreateOv').style.display='none';
+  _injectDashHabits(true);
+};
+
+window.openHabitTab=function(){
+  if(typeof toast==='function')toast('Voller Habits-Reiter kommt in Teil B 🎯');
+};
+
+function _buildDashWidget(){
+  _refreshStreaks();
+  var habits=state.habits||[];
+  var doneCount=0;
+  for(var i=0;i<habits.length;i++){if(_isDoneToday(habits[i]))doneCount++;}
+  var pendingChests=(state.gamification&&state.gamification.chests)?state.gamification.chests.filter(function(c){return !c.opened;}).length:0;
+  var h=[];
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:'+(habits.length?'16px':'2px')+';">');
+  h.push('<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🎯</span><span style="color:#fff;font-weight:bold;font-size:15px;">Meine Gewohnheiten</span></div>');
+  h.push('<div style="color:#c084fc;font-size:12px;font-weight:600;cursor:pointer;" onclick="openHabitTab()">Alle ›</div>');
+  h.push('</div>');
+  if(habits.length===0){
+    h.push('<div style="text-align:center;padding:14px 0;"><div style="color:#999;font-size:13px;margin-bottom:12px;">Bau dir gute Gewohnheiten auf – ein Tag nach dem anderen.</div><div style="display:inline-block;padding:12px 22px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:12px;font-weight:bold;font-size:14px;cursor:pointer;box-shadow:0 4px 14px rgba(168,85,247,0.3);" onclick="openHabitCreate()">+ Erste Gewohnheit</div></div>');
+  }else{
+    h.push('<div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scrollbar-width:none;">');
+    var show=habits.slice(0,5);
+    for(var j=0;j<show.length;j++){
+      var hb=show[j],done=_isDoneToday(hb);
+      h.push('<div style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;min-width:64px;" onclick="habitToggle(\''+hb.id+'\',event)">');
+      h.push(_ring(hb.currentStreak||0,done,60));
+      h.push('<div style="font-size:18px;line-height:1;">'+hb.emoji+'</div>');
+      h.push('<div style="font-size:10px;color:#bbb;text-align:center;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+_heg(hb.name)+'</div>');
+      h.push('</div>');
+    }
+    h.push('<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;flex-shrink:0;min-width:64px;" onclick="openHabitCreate()">');
+    h.push('<div style="width:60px;height:60px;border-radius:50%;border:2px dashed rgba(168,85,247,0.4);display:flex;align-items:center;justify-content:center;font-size:26px;color:#c084fc;">+</div>');
+    h.push('<div style="font-size:10px;color:#bbb;height:14px;"></div>');
+    h.push('<div style="font-size:10px;color:#bbb;">Neu</div>');
+    h.push('</div>');
+    h.push('</div>');
+    var pct=habits.length?Math.round((doneCount/habits.length)*100):0;
+    var barCol=pct>=100?'#22c55e':'linear-gradient(90deg,#a855f7,#ec4899)';
+    h.push('<div style="margin-top:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;"><span style="color:#bbb;">Heute erledigt</span><span style="color:'+(pct>=100?'#22c55e':'#c084fc')+';font-weight:bold;">'+doneCount+' von '+habits.length+'</span></div><div style="background:rgba(255,255,255,0.08);border-radius:5px;height:8px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+barCol+';border-radius:5px;transition:width 0.6s ease;"></div></div></div>');
+  }
+  if(pendingChests>0){
+    h.push('<div style="margin-top:14px;padding:12px 14px;background:linear-gradient(135deg,rgba(251,191,36,0.15),rgba(245,158,11,0.08));border:1px solid rgba(251,191,36,0.3);border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;animation:habitGlow 2s ease-in-out infinite;" onclick="openHabitTab()"><span style="font-size:24px;">🎁</span><div style="flex:1;"><div style="color:#fbbf24;font-weight:bold;font-size:13px;">'+pendingChests+' Belohnung'+(pendingChests>1?'en':'')+' wartet'+(pendingChests>1?'en':'')+'!</div><div style="color:#bbb;font-size:11px;">Tippe zum Öffnen</div></div><span style="color:#fbbf24;font-size:18px;">›</span></div>');
+  }
+  return h.join('');
+}
+
+function _injectDashHabits(force){
+  if(typeof state==='undefined'||!state)return;
+  var onDash=document.querySelector('.tab.active');
+  if(onDash&&onDash.getAttribute('data-tab')!=='dashboard'){var ex0=document.getElementById('habitDashW');if(ex0)ex0.remove();return;}
+  var existing=document.getElementById('habitDashW');
+  var newHtml=_buildDashWidget();
+  if(existing){
+    if(!force&&existing.getAttribute('data-sig')===_dashSig())return;
+    existing.innerHTML=newHtml;
+    existing.setAttribute('data-sig',_dashSig());
+    return;
+  }
+  var cards=document.querySelectorAll('.card,div.card,[class*="card"]');
+  var tc=null;
+  for(var ci=0;ci<cards.length;ci++){if(cards[ci].textContent&&cards[ci].textContent.indexOf('Hallo!')>=0){tc=cards[ci];break;}}
+  if(!tc)return;
+  var w=document.createElement('div');
+  w.id='habitDashW';
+  w.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,0.1),rgba(236,72,153,0.06));border:1px solid rgba(168,85,247,0.2);border-radius:18px;padding:18px;margin-bottom:16px;';
+  w.innerHTML=newHtml;
+  w.setAttribute('data-sig',_dashSig());
+  tc.parentElement.insertBefore(w,tc.nextSibling);
+}
+function _dashSig(){
+  var s='';
+  var hs=state.habits||[];
+  for(var i=0;i<hs.length;i++){s+=hs[i].id+':'+hs[i].currentStreak+':'+hs[i].lastDone+';';}
+  var pc=(state.gamification&&state.gamification.chests)?state.gamification.chests.filter(function(c){return !c.opened;}).length:0;
+  return s+'|c'+pc;
+}
+
+var _hstyle=document.createElement('style');
+_hstyle.textContent='@keyframes habitGlow{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0.4);}50%{box-shadow:0 0 14px 2px rgba(251,191,36,0.25);}}';
+document.head.appendChild(_hstyle);
+
+setInterval(function(){_injectDashHabits(false);},2500);
+
+window.openHabitCreate=window.openHabitCreate;
+})();
+
 // === SYNC-SCHUTZ: Stellt Daten wieder her die Drive ueberschrieben hat ===
 (function(){
   function _restoreIfWiped(){
@@ -10867,6 +11083,8 @@ window.openHealthHub=openHealthHub;
       if((!state.pets||state.pets.length===0)){var pe=localStorage.getItem('zp_pets_bak');if(pe){var a3=JSON.parse(pe);if(a3&&a3.length>0)state.pets=a3;}}
       if((!state.emergencyInfo||Object.keys(state.emergencyInfo).length===0)){var e=localStorage.getItem('zp_emerg_bak');if(e){state.emergencyInfo=JSON.parse(e);}}
       if((!state.parking||!state.parking.active)){var pk=localStorage.getItem('zp_park_bak');if(pk){var o=JSON.parse(pk);if(o&&o.active)state.parking=o;}}
+      if((!state.habits||state.habits.length===0)){var hb=localStorage.getItem('zp_habits_bak');if(hb){var a4=JSON.parse(hb);if(a4&&a4.length>0)state.habits=a4;}}
+      if((!state.gamification||!state.gamification.totalCheckins)){var ga=localStorage.getItem('zp_gami_bak');if(ga){var go=JSON.parse(ga);if(go&&go.totalCheckins)state.gamification=go;}}
     }catch(x){}
   }
   setInterval(_restoreIfWiped,2000);
